@@ -1,0 +1,163 @@
+{
+  "state": {
+    "runtime": {
+      "active": true,
+      "outputs": [
+        "output-main"
+      ]
+    },
+    "world": {
+      "id": "com.hyprune.observatory",
+      "spawnId": "arrival"
+    },
+    "surfaces": [
+      {
+        "id": "surface-terminal",
+        "kind": "window",
+        "title": "Terminal · sdk",
+        "logicalSize": [
+          1000,
+          700
+        ],
+        "focused": true
+      },
+      {
+        "id": "surface-browser",
+        "kind": "window",
+        "title": "Hyprune documentation",
+        "logicalSize": [
+          1280,
+          900
+        ],
+        "focused": false
+      },
+      {
+        "id": "surface-music",
+        "kind": "window",
+        "title": "Music · ambient",
+        "logicalSize": [
+          600,
+          400
+        ],
+        "focused": false
+      }
+    ],
+    "movement": {
+      "modeId": "com.hyprune.fly",
+      "position": [
+        0,
+        1.7,
+        0
+      ],
+      "orientation": [
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "shell": {
+      "leases": []
+    }
+  },
+  "path": [
+    [
+      0,
+      1.7,
+      0
+    ],
+    [
+      3,
+      1.7,
+      -2
+    ],
+    [
+      2,
+      2,
+      -5
+    ],
+    [
+      -3,
+      1.7,
+      -3
+    ],
+    [
+      0,
+      1.7,
+      0
+    ]
+  ],
+  "worlds": [
+    {
+      "id": "com.hyprune.observatory",
+      "spawns": [
+        "arrival",
+        "desk"
+      ]
+    },
+    {
+      "id": "com.hyprune.garden",
+      "spawns": [
+        "arrival"
+      ]
+    }
+  ],
+  "zones": [
+    {
+      "id": "work",
+      "name": "Work nook",
+      "bounds": {
+        "min": [
+          -4,
+          0,
+          -6
+        ],
+        "max": [
+          4,
+          4,
+          1
+        ]
+      }
+    },
+    {
+      "id": "gallery",
+      "name": "Gallery",
+      "bounds": {
+        "min": [
+          4,
+          0,
+          -6
+        ],
+        "max": [
+          12,
+          4,
+          2
+        ]
+      }
+    }
+  ],
+  "waypoint": {
+    "id": "desk",
+    "position": [
+      2,
+      1.7,
+      -4
+    ],
+    "label": "Work desk"
+  },
+  "notices": [
+    {
+      "atMs": 500,
+      "level": "info",
+      "code": "mock.ready",
+      "message": "Observatory ready. Follow the path to the work nook."
+    },
+    {
+      "atMs": 5000,
+      "level": "warning",
+      "code": "mock.demo",
+      "message": "This is a synthetic development session."
+    }
+  ],
+  "tickMs": 100
+}

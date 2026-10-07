@@ -1,0 +1,34 @@
+{
+  "formatVersion": "0.1",
+  "id": "org.example.minimal",
+  "version": "0.1.0",
+  "name": "Minimal authoring fixture",
+  "license": "CC0-1.0",
+  "scene": "scene.gltf",
+  "defaultSpawn": "arrival",
+  "spawns": [
+    {
+      "id": "arrival",
+      "pose": {
+        "position": [
+          0,
+          1.7,
+          0
+        ],
+        "rotation": [
+          0,
+          0,
+          0,
+          1
+        ]
+      }
+    }
+  ],
+  "attribution": [
+    {
+      "path": ".",
+      "author": "Hyprune contributors",
+      "license": "CC0-1.0"
+    }
+  ]
+}

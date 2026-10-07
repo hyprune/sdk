@@ -1,0 +1,19 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "Hyprune SDK original fixture"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Origin"
+    }
+  ]
+}
