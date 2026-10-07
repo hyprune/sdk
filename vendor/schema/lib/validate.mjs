@@ -11,17 +11,18 @@ for (const name of names) {
 for (const name of ['common','world','ipc']) {
   ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.2/${name}.schema.json`, import.meta.url))));
 }
+for (const name of ['common','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.3/${name}.schema.json`, import.meta.url))));
 const validators = new Map();
 
 // The optional method binds a response to the caller's outstanding request.
 // An envelope alone cannot know whether a valid result belongs to that method.
 export function validate(kind, value, method, version = '0.1') {
   if (!names.includes(kind) || kind === 'common') throw new Error(`Unknown schema: ${kind}`);
-  if (!['0.1','0.2'].includes(version)) throw new Error(`Unknown contract: ${version}`);
+  if (!['0.1','0.2','0.3'].includes(version)) throw new Error(`Unknown contract: ${version}`);
   const key = `${version}:${kind}:${method || ''}`;
   if (method && kind !== 'ipc') throw new Error('Method context is only valid for IPC');
   if (!validators.has(key)) {
-    let schema = `${version === '0.2' && ['world','ipc'].includes(kind) ? base.replace('/v0/','/v0.2/') : base}${kind}.schema.json`;
+    let schema = `${version === '0.2' && ['world','ipc'].includes(kind) ? base.replace('/v0/','/v0.2/') : version === '0.3' && kind === 'ipc' ? base.replace('/v0/','/v0.3/') : base}${kind}.schema.json`;
     if (method) {
       if (!ajv.getSchema(`${schema}#/$defs/${method}.result`)) throw new Error(`Unknown method: ${method}`);
       schema += `#/$defs/${method}.response`;

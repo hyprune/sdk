@@ -1,10 +1,20 @@
-# Hyprune SDK · IPC 0.2
+# Hyprune SDK · IPC 0.3
 
-TypeScript/JavaScript client, `hyprune-mock` development daemon, and `hyprune` author/debug CLI. MIT. **SDK `0.2.0`, default IPC `0.2`, explicit IPC `0.1` compatibility.** World formats `0.1`/`0.2` are supported; extension and screen manifests remain `0.1`.
+TypeScript/JavaScript client, `hyprune-mock` development daemon, and `hyprune` author/debug CLI. MIT. **SDK `0.3.0`, default IPC `0.2`, explicit IPC `0.1` compatibility.** World formats `0.1`/`0.2` are supported; extension and screen manifests remain `0.1`.
 
 RFC-0007 chooses JavaScript as the first reference client. TypeScript supplies generated types and compiles to JavaScript for **Node >=22.12 and Bun**; Python is used only by the core test harness. Quickshell needs its own native socket bridge; Node modules cannot be imported directly into QML.
 
-Schemas and their Node validator are vendored unchanged from [hyprune/schema at c07a923](https://github.com/hyprune/schema/tree/c07a923f1f44f48c00daad1662fb19b05047b735), with SHA-256 verification. Builds neither follow sibling repositories nor fetch schemas. `npm run generate` derives method, result, event, state and manifest types for both protocols. The former `0.1-mock.1` contract has been removed.
+Schemas and their Node validator are vendored unchanged from [hyprune/schema at 4facaa1](https://github.com/hyprune/schema/tree/4facaa1a66d01986e0d469762e9f93ac48858892), with SHA-256 verification. Builds neither follow sibling repositories nor fetch schemas. `npm run generate` derives method, result, event, state and manifest types for all three protocols. The former `0.1-mock.1` contract has been removed.
+
+## First real session
+
+SDK 0.3.0 adds explicit IPC `0.3` clients and generated spatial/workspace/binding
+types. Existing default clients and the mock remain IPC 0.2. Use
+`new HypruneClient({protocol:'0.3', ...})` for core's first-session contract.
+`../core/dev/hyprune-dev up|smoke|record` starts the locked nested real session.
+The core launcher consumes the built Switchyard package, starts core and shell
+with one-use FD tokens, and supplies terminal/btop/browser apps. It never uses
+the SDK mock. See core/docs/FIRST-SESSION.md for reproduction and evidence.
 
 ## Run the mock
 

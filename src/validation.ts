@@ -1,6 +1,6 @@
 import {validate as upstream} from '../vendor/schema/lib/validate.mjs';
 export {upstream as validateManifest};
-export type Protocol = '0.1' | '0.2';
+export type Protocol = '0.1' | '0.2' | '0.3';
 export function validateWire(value: unknown, protocol:Protocol='0.2', method?:string):void {
   const result=upstream('ipc',value,method,protocol);
   if(!result.valid) throw new Error('Invalid IPC: '+result.errors.join('; '));

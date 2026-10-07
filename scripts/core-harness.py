@@ -2,13 +2,13 @@
 """Compile a plugin stand-in against built core Control; launch real hypruned.
 No Hyprland, Wayland, GL, or owner's session is accessed.
 """
-import json, pathlib, signal, subprocess, sys
+import json, pathlib, signal, subprocess, sys, shlex
 config=json.load(sys.stdin)
 binary=pathlib.Path(config['binary']).resolve()
 core=pathlib.Path(config.get('coreDirectory',binary.parent.parent))
 runtime=pathlib.Path(config['runtime'])
 host=runtime/'core-host'
-subprocess.run(['c++','-std=c++23','-O1','-I',str(core/'src'),'-I',str(core/'third_party'),str(pathlib.Path(__file__).with_name('core-host.cpp')),str(binary.parent/'libhyprune_runtime.a'),'-pthread','-o',str(host)],check=True,stdout=sys.stderr)
+subprocess.run(['c++','-std=c++23','-O1','-I',str(core/'src'),'-I',str(core/'third_party'),str(pathlib.Path(__file__).with_name('core-host.cpp')),str(binary.parent/'libhyprune_runtime.a'),'-pthread',*shlex.split(subprocess.check_output(['pkg-config','--libs','libxml-2.0','openssl'],text=True)),'-o',str(host)],check=True,stdout=sys.stderr)
 process=subprocess.Popen([str(host),str(binary),str(runtime),str(core/'tests/fixtures/atrium')],stdin=subprocess.PIPE)
 process.stdin.write(json.dumps({'grants':config['grants']}).encode());process.stdin.close()
 def stop(*_):

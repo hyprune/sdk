@@ -58,7 +58,7 @@ int main(int argc,char**argv) {
     char bytes[196609];auto count=recv(bridge[0],bytes,sizeof bytes,0);if(count<=0)break;auto message=Json::parse(bytes,bytes+count);
     if(message.at("type")=="cancel")cancelled=true;
     if(message.at("type")=="command"){
-     const auto id=message.at("id"),method=message.at("method");auto params=message.at("params");const auto actor=params.value("_actor","host"),client=params.value("_client","org.example.host");params.erase("_actor");params.erase("_client");
+     const auto id=message.at("id"),method=message.at("method");auto params=message.at("params");const auto actor=params.value("_actor","host"),client=params.value("_client","org.example.host");params.erase("_actor");params.erase("_client");params.erase("_pid");params.erase("_protocol");
      try {
       if(method=="_connection.closed"){control.disconnect(actor);publish();reply(id,Json::object());}
       else if(method=="world.load"){control.beginLoad(params,"output-main");publish();pending=message;cancelled=false;ready=Clock::now()+std::chrono::milliseconds(100);}
