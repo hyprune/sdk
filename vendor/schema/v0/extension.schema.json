@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hyprune.com/schema/v0/extension.schema.json",
+  "title": "Hyprune v0 extension",
+  "type": "object",
+  "properties": {
+    "manifestVersion": {
+      "const": "0.1"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "version": {
+      "$ref": "common.schema.json#/$defs/version"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "description": {
+      "type": "string",
+      "minLength": 0,
+      "maxLength": 4096
+    },
+    "license": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "apiVersion": {
+      "const": "0.1"
+    },
+    "runtime": {
+      "const": "process"
+    },
+    "entrypoint": {
+      "$ref": "common.schema.json#/$defs/path"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/capability"
+      },
+      "minItems": 0,
+      "uniqueItems": true
+    },
+    "contributes": {
+      "type": "object",
+      "properties": {
+        "screenTypes": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/path"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "widgets": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "movementModes": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "integrations": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/id"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "sandbox": {
+      "type": "object",
+      "properties": {
+        "required": {
+          "const": true
+        },
+        "network": {
+          "const": false
+        }
+      },
+      "required": [
+        "required",
+        "network"
+      ],
+      "additionalProperties": false
+    },
+    "extensions": {
+      "$ref": "common.schema.json#/$defs/extensions"
+    }
+  },
+  "required": [
+    "manifestVersion",
+    "id",
+    "version",
+    "name",
+    "license",
+    "apiVersion",
+    "runtime",
+    "entrypoint",
+    "capabilities",
+    "contributes",
+    "sandbox"
+  ],
+  "additionalProperties": false
+}

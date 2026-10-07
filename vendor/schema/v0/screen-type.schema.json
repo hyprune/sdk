@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hyprune.com/schema/v0/screen-type.schema.json",
+  "title": "Hyprune v0 screen-type",
+  "type": "object",
+  "properties": {
+    "descriptorVersion": {
+      "const": "0.1"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "provider": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "source": {
+      "enum": [
+        "window",
+        "workspace",
+        "layer",
+        "web",
+        "custom"
+      ]
+    },
+    "geometry": {
+      "const": "plane"
+    },
+    "defaultSize": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "exclusiveMinimum": 0
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "resolution": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8192
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8192
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "additionalProperties": false
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "pointer": {
+          "type": "boolean"
+        },
+        "keyboard": {
+          "type": "boolean"
+        },
+        "touch": {
+          "const": false
+        }
+      },
+      "required": [
+        "pointer",
+        "keyboard",
+        "touch"
+      ],
+      "additionalProperties": false
+    },
+    "alphaMode": {
+      "enum": [
+        "opaque",
+        "blend"
+      ]
+    },
+    "colorSpace": {
+      "const": "srgb"
+    },
+    "maxFps": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 120
+    },
+    "extensions": {
+      "$ref": "common.schema.json#/$defs/extensions"
+    }
+  },
+  "required": [
+    "descriptorVersion",
+    "id",
+    "name",
+    "provider",
+    "source",
+    "geometry",
+    "defaultSize",
+    "resolution",
+    "input",
+    "alphaMode",
+    "colorSpace",
+    "maxFps"
+  ],
+  "additionalProperties": false
+}
