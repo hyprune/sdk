@@ -346,7 +346,8 @@
               "runtime.notice",
               "session.revoked",
               "world.metadata",
-              "data.updated"
+              "data.updated",
+              "ui.opened"
             ]
           },
           "minItems": 0,
@@ -1754,6 +1755,9 @@
         },
         {
           "$ref": "#/$defs/data.updated.notification"
+        },
+        {
+          "$ref": "#/$defs/ui.opened.notification"
         }
       ]
     },
@@ -2264,6 +2268,49 @@
           "required": [
             "sourceId",
             "values"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "ui.opened.notification": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "ui.opened"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "leaseId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "outputId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "panel": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "required": [
+            "leaseId",
+            "outputId",
+            "panel"
           ],
           "additionalProperties": false
         }

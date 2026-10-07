@@ -5,7 +5,7 @@ import {FrameDecoder,encodeFrame} from './codec.js';
 import {StateStore,type Snapshot} from './state.js';
 import {socketPath} from './paths.js';
 import {validateWire,type Protocol} from './validation.js';
-import type {MethodMap,MockMethodMap} from './generated.js';
+import type {MethodMap,MockMethodMap,Mock_Notification} from './generated.js';
 export class RpcError extends Error { constructor(public code:number,message:string,public data?:{retryable:boolean}) { super(message); } }
 export interface ClientOptions {
   socket?:string; protocol?:Protocol; client?:{id:string;name:string};
@@ -14,6 +14,11 @@ export interface ClientOptions {
   tokenProvider?:()=>Promise<string|undefined>|string|undefined;
   reconnect?:boolean; callTimeoutMs?:number;
 }
+export type Notification=Mock_Notification;
+type EventMap={ [N in Notification as N['method']]:N['params'] } & {
+  state:Snapshot; notification:Notification; ready:NonNullable<HypruneClient['hello']>;
+  fault:Error; disconnect:undefined; reconnecting:number;
+};
 type Pending={method:string;resolve:(v:any)=>void;reject:(e:Error)=>void;timer:NodeJS.Timeout;apply?:(v:any)=>void};
 export class HypruneClient extends EventEmitter {
   readonly store=new StateStore();
@@ -23,6 +28,7 @@ export class HypruneClient extends EventEmitter {
   private connecting?:Promise<void>; private retry?:NodeJS.Timeout; private heartbeat?:NodeJS.Timeout;
   private attempts=0; private resyncing=false;
   constructor(readonly options:ClientOptions={}) { super(); }
+  override on<E extends keyof EventMap>(event:E,listener:(value:EventMap[E])=>void):this { return super.on(event,listener); }
   get snapshot():Snapshot|undefined { return this.store.snapshot; }
   get protocol():Protocol { return this.options.protocol || '0.1'; }
   async connect():Promise<void> {
@@ -58,7 +64,7 @@ export class HypruneClient extends EventEmitter {
   }
   private scheduleReconnect():void {
     if(this.stopped || this.options.reconnect===false || this.retry) return;
-    const delay=Math.min(10_000,250*2**Math.min(this.attempts++,6))*(0.75+Math.random()*0.5);
+    const delay=Math.min(10_000,250*2**Math.min(this.attempts++,6)*(0.75+Math.random()*0.5));
     this.retry=setTimeout(()=>{ this.retry=undefined; this.connect().catch(e=>{this.emit('fault',e); this.scheduleReconnect();}); },delay);
     this.emit('reconnecting',delay);
   }
@@ -117,10 +123,13 @@ export class HypruneClient extends EventEmitter {
     return result.snapshot;
   }
   async resync():Promise<Snapshot> {
-    const result=await this.request('state.snapshot',{subscriptionId:this.store.subscriptionId},r=>{
+    this.resyncing=true;
+    let result;
+    try { result=await this.request('state.snapshot',{subscriptionId:this.store.subscriptionId},r=>{
       if(r.snapshot.sessionId!==this.hello?.sessionId) throw new Error('Snapshot session mismatch');
       this.store.install(r.snapshot,this.store.subscriptionId!); this.resyncing=false; this.emit('state',this.snapshot);
-    }); return result.snapshot;
+    }); } catch(e) { this.socket?.destroy(); throw e; }
+    return result.snapshot;
   }
   async unsubscribe():Promise<void> {
     await this.call('state.unsubscribe',{subscriptionId:this.store.subscriptionId!}); this.subscribed=false; this.store.reset();

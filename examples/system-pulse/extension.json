@@ -1,0 +1,22 @@
+{
+  "manifestVersion": "0.1",
+  "id": "org.example.systempulse",
+  "version": "0.1.0",
+  "name": "System pulse",
+  "license": "MIT",
+  "apiVersion": "0.1",
+  "runtime": "process",
+  "entrypoint": "main.mjs",
+  "capabilities": [
+    "state.read"
+  ],
+  "contributes": {
+    "integrations": [
+      "org.example.systempulse.data"
+    ]
+  },
+  "sandbox": {
+    "required": true,
+    "network": false
+  }
+}

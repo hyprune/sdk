@@ -52,6 +52,11 @@ export class MockDaemon {
   if(!Array.isArray(this.scenario.path) || this.scenario.path.some(p=>p.length!==3 || p.some(n=>!Number.isFinite(n)))) throw new Error('Scenario path requires finite vec3 points');
   if(this.scenario.tickMs!==undefined && (!Number.isFinite(this.scenario.tickMs) || this.scenario.tickMs<34)) throw new Error('tickMs must be >=34');
   validateWire({jsonrpc:'2.0',method:'world.metadata',params:this.metadata()},'0.1-mock.1');
+  for(const world of this.scenario.worlds) {
+    if(!world.spawns.length || new Set(world.spawns).size!==world.spawns.length) throw new Error('Scenario world requires unique spawns');
+    for(const spawnId of world.spawns) validateState({...this.snapshot(),state:{...this.state,world:{id:world.id,spawnId}}});
+  }
+  if(this.scenario.zones.some(z=>z.bounds.min.some((n,i)=>n>=z.bounds.max[i]))) throw new Error('Scenario zone bounds must be ordered');
   for(const t of this.scenario.transactions || []) {
     if(!Number.isFinite(t.atMs) || t.atMs<0) throw new Error('Invalid scenario time');
     validateState({...this.snapshot(),state:{...this.state,...t.changes}});
@@ -113,7 +118,7 @@ export class MockDaemon {
  }
  private error(p:Peer,id:string|null,code:number,message:string):void { this.send(p,{jsonrpc:'2.0',id,error:{code,message}}); }
  private handle(p:Peer,message:unknown):void {
-  const m:any=message; let id:string|null=null;
+  const m:any=message; let id:string|null=m && typeof m.id==='string' && m.id.length>0 && m.id.length<=128?m.id:null;
   try {
     if(!m || Array.isArray(m) || typeof m!=='object' || m.jsonrpc!=='2.0' || typeof m.id!=='string' || !m.id.length || m.id.length>128 || typeof m.method!=='string' || !Object.hasOwn(m,'params') || Object.keys(m).some(k=>!['jsonrpc','id','method','params'].includes(k))) throw new RpcError(-32600,'Invalid request profile');
     id=m.id;
@@ -135,7 +140,7 @@ export class MockDaemon {
       }
       p.methods=Object.keys(requirements).filter(k=>(!requirements[k] || p.grants.includes(requirements[k]!)) && (this.protocol==='0.1-mock.1' || !['camera.set','waypoint.set','ui.open','data.publish'].includes(k)));
       p.hello=true;clearTimeout(p.timer);
-      this.send(p,{jsonrpc:'2.0',id,result:{protocol:this.protocol,sessionId:this.sessionId,capabilities:p.grants,methods:p.methods,events:p.grants.includes('state.read')?['state.delta','runtime.notice','session.revoked',...(this.protocol==='0.1-mock.1'?['world.metadata','data.updated']:[])]:['session.revoked']}});
+      this.send(p,{jsonrpc:'2.0',id,result:{protocol:this.protocol,sessionId:this.sessionId,capabilities:p.grants,methods:p.methods,events:p.grants.includes('state.read')?['state.delta','runtime.notice','session.revoked',...(this.protocol==='0.1-mock.1'?['world.metadata','data.updated','ui.opened']:[])]:['session.revoked']}});
       return;
     }
     const params=m.params; let result:any;
@@ -176,7 +181,8 @@ export class MockDaemon {
       default: throw new RpcError(-32601,'Unimplemented');
     }
     this.send(p,{jsonrpc:'2.0',id,result});
-    if(['state.subscribe','state.snapshot'].includes(m.method) && this.protocol==='0.1-mock.1') {this.send(p,{jsonrpc:'2.0',method:'world.metadata',params:this.metadata()});for(const values of this.data.values()) this.send(p,{jsonrpc:'2.0',method:'data.updated',params:values});}
+    if(m.method==='ui.open') this.broadcast('ui.opened',params);
+    if(['state.subscribe','state.snapshot','world.load'].includes(m.method) && this.protocol==='0.1-mock.1') {this.send(p,{jsonrpc:'2.0',method:'world.metadata',params:this.metadata()});for(const values of this.data.values()) this.send(p,{jsonrpc:'2.0',method:'data.updated',params:values});}
   } catch(e) {
     const error=e instanceof RpcError?e:new RpcError(-32603,'Internal error');this.error(p,id,error.code,error.message);
     if(!p.hello || id===null || error.code===-32008) {p.closing=true;p.socket.end();}
@@ -187,8 +193,9 @@ export class MockDaemon {
  private metadata() {return {worldId:this.state.world?.id || this.scenario.worlds[0].id,zones:this.scenario.zones,waypoint:this.scenario.waypoint};}
  commit(changes:Partial<State>):void {
   const next={...this.state,...structuredClone(changes)};
+  if(this.revision>=Number.MAX_SAFE_INTEGER) throw new RpcError(-32008,'Session revision exhausted');
   const snapshot={sessionId:this.sessionId,revision:this.revision+1,state:next};validateState(snapshot);
-  if(encodeFrame({jsonrpc:'2.0',id:'x',result:{subscriptionId:randomUUID(),snapshot}}).length>MAX_FRAME) throw new RpcError(-32008,'State exceeds frame budget');
+  if(encodeFrame({jsonrpc:'2.0',id:'x',result:{subscriptionId:randomUUID(),snapshot}}).length>MAX_FRAME-4096) throw new RpcError(-32008,'State exceeds frame budget');
   this.state=next;this.revision++;
  }
  private flushDeltas():void {

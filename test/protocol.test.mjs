@@ -101,3 +101,19 @@ test('revocation stops reconnecting',async t=>{
 test('live sockets are not replaced',async t=>{
  const {daemon}=await fixture(t);const other=new MockDaemon({socket:daemon.path});await assert.rejects(other.start(),/live listener/);
 });
+test('daemon restart replaces the session and takes a fresh snapshot',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'hyprune-restart-')),socket=join(root,'control.sock');let daemon=new MockDaemon({socket});await daemon.start();
+ const client=new HypruneClient({socket,client:{id:'org.example.restart',name:'restart'},capabilities:['state.read'],tokenProvider:()=>daemon.issueToken('org.example.restart',['state.read'])});
+ t.after(async()=>{client.close();await daemon.stop();await rm(root,{recursive:true,force:true});});await client.connect();await client.subscribe();const session=client.snapshot.sessionId;
+ const ready=once(client,'ready');await daemon.stop();daemon=new MockDaemon({socket});await daemon.start();await ready;
+ assert.notEqual(client.snapshot.sessionId,session);assert.equal(client.snapshot.sessionId,daemon.sessionId);
+});
+test('lost mutation replies are rejected and never retried on reconnect',async t=>{
+ const {daemon,client}=await fixture(t);client.options.reconnect=true;await client.subscribe();
+ const ready=once(client,'ready'),mutation=client.call('world.load',{worldId:'com.hyprune.garden'});daemon.disconnectClients();
+ await assert.rejects(mutation,/Connection lost/);await ready;assert.equal(client.snapshot.state.world.id,'com.hyprune.observatory');
+});
+test('response validation uses method context and rejects extra fields',()=>{
+ assert.throws(()=>validateWire({jsonrpc:'2.0',id:'a',result:{revision:1}},'0.1','session.ping'));
+ assert.throws(()=>validateWire({jsonrpc:'2.0',id:'a',method:'session.ping',params:{unexpected:1}}));
+});

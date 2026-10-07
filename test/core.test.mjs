@@ -1,0 +1,23 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join,resolve} from 'node:path';
+import {spawn} from 'node:child_process';
+import {randomBytes} from 'node:crypto';
+import {once} from 'node:events';
+import {HypruneClient} from '../dist/src/index.js';
+import {DEFAULT_SCENARIO} from '../dist/src/mock.js';
+test('SDK speaks IPC 0.1 to independently built core hypruned',{skip:!process.env.HYPRUNE_CORE_BINARY,timeout:10000},async t=>{
+ const runtime=await mkdtemp(join(tmpdir(),'hyprune-core-sdk-')),token=randomBytes(32).toString('hex');
+ const harness=spawn('python3',['scripts/core-harness.py'],{stdio:['pipe','pipe','pipe']});let stderr='';harness.stderr.on('data',b=>stderr+=b);
+ t.after(async()=>{const done=once(harness,'close');harness.kill('SIGTERM');await done;await rm(runtime,{recursive:true,force:true});});
+ const ready=new Promise((resolve,reject)=>{harness.stdout.once('data',b=>resolve(b.toString().trim()));harness.once('exit',code=>reject(new Error(`harness exited ${code}: ${stderr}`)));});
+ harness.stdin.end(JSON.stringify({binary:resolve(process.env.HYPRUNE_CORE_BINARY),runtime,grants:[{token,client:'org.example.sdkconformance',capabilities:['state.read','runtime.control']}],state:DEFAULT_SCENARIO.state}));
+ const socket=await ready,client=new HypruneClient({socket,client:{id:'org.example.sdkconformance',name:'SDK conformance'},capabilities:['state.read','runtime.control'],tokenProvider:()=>token,reconnect:false});t.after(()=>client.close());
+ await client.connect();assert.equal(client.hello.protocol,'0.1');assert.ok((await client.call('session.ping',{})).monotonicMs>0);
+ const snapshot=await client.subscribe();assert.equal(snapshot.state.world.id,'com.hyprune.observatory');assert.equal(snapshot.revision,1);
+ await assert.rejects(client.call('world.load',{worldId:'com.hyprune.garden'}),e=>e.code===-32601);
+ const result=await client.call('runtime.exit',{});assert.equal(result.revision,2);await client.resync();assert.equal(client.snapshot.state.runtime.active,false);
+ await client.unsubscribe();assert.equal(client.snapshot,undefined);client.close();
+});

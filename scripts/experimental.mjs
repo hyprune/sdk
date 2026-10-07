@@ -23,7 +23,8 @@ for(const [method,params] of Object.entries(additions)) {
 }
 const events={
  'world.metadata':obj({worldId:str,zones:{type:'array',items:obj({id:str,name:str,bounds:obj({min:vec(3),max:vec(3)})})},waypoint:{$ref:'#/$defs/waypoint.set.params'}}),
- 'data.updated':s.$defs['data.publish.params']
+ 'data.updated':s.$defs['data.publish.params'],
+ 'ui.opened':s.$defs['ui.open.params']
 };
 for(const [method,params] of Object.entries(events)) {
  s.$defs[method+'.notification']=obj({jsonrpc:{const:'2.0'},method:{const:method},params});

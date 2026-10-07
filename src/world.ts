@@ -26,7 +26,7 @@ export function inventory(root:string):Array<{path:string;size:number}> {
  function walk(dir:string,depth:number) {
   if(depth>64) throw new Error('Package directory depth exceeds 64');
   for(const entry of readdirSync(dir).sort()) {
-   const full=join(dir,entry),s=lstatSync(full),path=relative(root,full).split('\u005c').join('/');
+   const full=join(dir,entry),s=lstatSync(full),path=relative(root,full);
    if(s.isSymbolicLink() || (!s.isDirectory() && !s.isFile())) throw new Error('Links/devices are forbidden: '+path);
    if(s.isDirectory()) walk(full,depth+1);
    else {
@@ -56,6 +56,7 @@ export async function validateWorld(directory:string):Promise<{manifest:World_Do
  for(const f of files) if(!manifest.attribution.some(a=>a.path==='.' || a.path===f.path || f.path.startsWith(a.path+'/'))) throw new Error('Missing attribution coverage: '+f.path);
  for(const required of ['LICENSE','ATTRIBUTION.md']) if(!files.some(f=>f.path===required)) throw new Error('Missing '+required);
  const bytes=readAsset(root,manifest.scene),gltf=gltfDocument(bytes,manifest.scene);
+ if((gltf.extensionsRequired || []).some((id:string)=>id!=='KHR_materials_unlit')) throw new Error('Unsupported required glTF extension; M0 profile supports KHR_materials_unlit only');
  const sceneDir=relative(root,dirname(join(root,manifest.scene)));
  const resource=(uri:string)=>{
   // Do not decode percent escapes: forbidden even if they encode benign text.
@@ -63,7 +64,7 @@ export async function validateWorld(directory:string):Promise<{manifest:World_Do
   return sceneDir?sceneDir+'/'+uri:uri;
  };
  for(const ref of [...(gltf.buffers || []),...(gltf.images || [])]) if(ref.uri!==undefined) readAsset(root,resource(ref.uri));
- const report=await validateBytes(bytes,{uri:manifest.scene,maxIssues:1000,writeTimestamp:false,externalResourceFunction:async uri=>readAsset(root,resource(uri))});
+ const report=await validateBytes(new Uint8Array(bytes),{uri:manifest.scene,maxIssues:1000,writeTimestamp:false,externalResourceFunction:async uri=>new Uint8Array(readAsset(root,resource(uri)))});
  if(report.issues.numErrors) throw new Error('glTF validation failed: '+report.issues.messages.filter(m=>m.severity===0).map(m=>`${m.code} ${m.pointer || ''}: ${m.message}`).join('; '));
  const nodes=gltf.nodes || [];
  const node=(index:number,label:string)=>{if(!Number.isInteger(index) || index<0 || index>=nodes.length) throw new Error(label+': unknown node '+index);};
@@ -86,7 +87,7 @@ export async function validateWorld(directory:string):Promise<{manifest:World_Do
   const b=readAsset(root,audio.path);
   if(audio.path.endsWith('.wav')?!(b.subarray(0,4).toString()==='RIFF' && b.subarray(8,12).toString()==='WAVE'):!(b.subarray(0,4).toString()==='OggS' && b.includes(Buffer.from('vorbis')))) throw new Error('Invalid WAV/Ogg Vorbis audio: '+audio.path);
  }
- // Upper bound includes compressed files plus declared uncompressed buffer bytes.
+ // Preliminary on-disk and buffer budget; decoded image/driver costs stay core-owned.
  const gpu=files.reduce((n,f)=>n+(/\.(png|jpg|jpeg|ktx2|bin|glb)$/i.test(f.path)?f.size:0),0)+(gltf.buffers || []).reduce((n:number,b:any)=>n+b.byteLength,0);
  if(gpu>LIMITS.gpu) throw new Error('World exceeds preliminary 512 MiB resource budget');
  const digest=createHash('sha256');for(const f of files) {digest.update(f.path+'\0'+f.size+'\0');digest.update(readAsset(root,f.path));}
@@ -99,7 +100,7 @@ export async function packWorld(directory:string,output?:string):Promise<{path:s
  const root=resolve(directory),checked=await validateWorld(root),destination=resolve(output || `${checked.manifest.id}-${checked.manifest.version}.tar.zst`);
  if(destination===root || destination.startsWith(root+'/')) throw new Error('Archive output must be outside the package');
  if(existsSync(destination)) throw new Error('Refusing to overwrite archive');
- const staging=mkdtempSync(join(tmpdir(),'hyprune-pack-')),temp=join(dirname(destination),`.hyprune-${process.pid}-${Date.now()}.tar.zst`);
+ const staging=mkdtempSync(join(tmpdir(),'hyprune-pack-')),archiveDirectory=mkdtempSync(join(dirname(destination),'.hyprune-pack-')),temp=join(archiveDirectory,'world.tar.zst');
  try {
   const stageRoot=join(staging,checked.manifest.id);mkdirSync(stageRoot);
   for(const file of checked.files) {const path=join(stageRoot,file.path);mkdirSync(dirname(path),{recursive:true});writeFileSync(path,readAsset(root,file.path),{mode:0o644});}
@@ -107,5 +108,5 @@ export async function packWorld(directory:string,output?:string):Promise<{path:s
   execFileSync('tar',['--sort=name','--mtime=@0','--owner=0','--group=0','--numeric-owner','--format=ustar','--zstd','-cf',temp,'-C',staging,'--',checked.manifest.id],{stdio:'pipe'});
   const sha256=createHash('sha256').update(readFileSync(temp)).digest('hex');linkSync(temp,destination);unlinkSync(temp);
   return {path:destination,sha256,packageDigest:checked.digest};
- } finally {rmSync(staging,{recursive:true,force:true});rmSync(temp,{force:true});}
+ } finally {rmSync(staging,{recursive:true,force:true});rmSync(archiveDirectory,{recursive:true,force:true});}
 }

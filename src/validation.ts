@@ -15,8 +15,8 @@ export function validateWire(value: unknown, protocol: Protocol='0.1', method?: 
     const check=ajv.getSchema(id); if(!check || !check(value)) throw new Error('Invalid mock IPC: '+ajv.errorsText(check?.errors));
     // Apply upstream semantics after mapping the mock-only hello/notifications.
     const v:any=structuredClone(value);
-    if(v.result?.protocol) { v.result.protocol='0.1'; v.result.methods=v.result.methods.filter((x:string)=>!['camera.set','waypoint.set','ui.open','data.publish'].includes(x)); v.result.events=v.result.events.filter((x:string)=>!['world.metadata','data.updated'].includes(x)); }
-    if(!['world.metadata','data.updated','camera.set','waypoint.set','ui.open','data.publish'].includes(v.method) && (!method || !['camera.set','waypoint.set','ui.open','data.publish'].includes(method))) {
+    if(v.result?.protocol) { v.result.protocol='0.1'; v.result.methods=v.result.methods.filter((x:string)=>!['camera.set','waypoint.set','ui.open','data.publish'].includes(x)); v.result.events=v.result.events.filter((x:string)=>!['world.metadata','data.updated','ui.opened'].includes(x)); }
+    if(!['world.metadata','data.updated','ui.opened','camera.set','waypoint.set','ui.open','data.publish'].includes(v.method) && (!method || !['camera.set','waypoint.set','ui.open','data.publish'].includes(method))) {
       const r=upstream('ipc',v,method); if(!r.valid) throw new Error(r.errors.join('; '));
     }
     if(v.method==='camera.set' && Math.abs(Math.hypot(...v.params.orientation)-1)>.001) throw new Error('Camera quaternion must be normalized');

@@ -18,7 +18,7 @@ function type(s, file) {
   if (s.type === 'object') {
     const props = Object.entries(s.properties || {}).map(([k,v]) => `${JSON.stringify(k)}${s.required?.includes(k)?'':'?'}: ${type(v,file)}`).join('; ');
     if (s.additionalProperties && typeof s.additionalProperties === 'object') return `Record<string, ${type(s.additionalProperties,file)}>`;
-    return `{ ${props} }`;
+    return props ? `{ ${props} }` : s.additionalProperties===false?'Record<string, never>':'Record<string, unknown>';
   }
   if (s.type === 'array') {
     if (s.minItems === s.maxItems && Number.isInteger(s.minItems)) return '['+Array(s.minItems).fill(type(s.items,file)).join(', ')+']';

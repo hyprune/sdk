@@ -1,0 +1,22 @@
+{
+  "manifestVersion": "0.1",
+  "id": "org.example.pulsewidget",
+  "version": "0.1.0",
+  "name": "Pulse widget",
+  "license": "MIT",
+  "apiVersion": "0.1",
+  "runtime": "process",
+  "entrypoint": "main.mjs",
+  "capabilities": [
+    "state.read"
+  ],
+  "contributes": {
+    "widgets": [
+      "org.example.pulsewidget.widget"
+    ]
+  },
+  "sandbox": {
+    "required": true,
+    "network": false
+  }
+}
