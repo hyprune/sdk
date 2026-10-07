@@ -1,59 +1,76 @@
-# RFC and schema gaps found during SDK M0
+# RFC/schema gaps · IPC 0.2 update
 
-Read against docs RFC-0001/0003/0004/0005/0006/0007 (proposed 2026-10-07) and schema commit **96dad32178b14d0c50f64413430d054133d40425**. No upstream contracts or core files were changed. Proposals below require owner review and matching schema/changelog/negative fixtures before implementation in core.
+Reviewed amended RFC-0003 and RFC-0001/0005/0006/0007 at docs commit `114387dbd13a1a779ffda9e81293814adc94fc85`, schema `c07a923f1f44f48c00daad1662fb19b05047b735`, and built core `4d53c2d679619e63104aaaa3ca807547288582e2`. Upstream repositories were pulled; no upstream contract/core files were modified. The SDK vendors unchanged schema bytes and uses the real versioned contract.
 
-## Missing control methods and world metadata
+## Closed by IPC 0.2
 
-Tonight's requested mock includes camera, waypoint, `ui.open`, zones and notifications. IPC `0.1` permits exactly five state keys and twelve methods; zones, waypoint and camera commands are absent. `runtime.notice` supplies transient notifications but has no persisted notification center. RFC-0006 explicitly keeps movement proposal APIs out of `0.1`.
+| M0 observation | Ratified resolution / SDK behavior |
+| --- | --- |
+| Missing camera and world/location metadata. | `camera.get/set`; revisioned `location` contains zones, waypoint, routes, autodrive, transition. SDK and mock use exact schema. |
+| No waypoint/navigation control. | Waypoint/route set/clear, travel start/cancel, autodrive start/stop with documented targets, grants, bounds and authoritative pose. |
+| No warp/loading contract for shell overlays. | Stable transition IDs, output, phases/progress, destinations, monotonic timestamps; subscribed hints plus recoverable revisioned state. Loading precedes reply, failed loads preserve the old world. Warp scenario and core interop cover it. |
+| Missing owned UI open/close and hold timing. | `ui.open/close`, lease-bound requests, `ui.opened/closed`; core owns 350 ms hold, release retention, Escape dismissal and F12 exit. Exclusive association is still pending below. |
+| No integration publish/grant/lifetime. | Separate `data.publish` grant, `data.publish/remove`, namespace/ownership, increasing sequence, bounded scalar values/rate/TTL; authoritative `integrations.sources`, nonreplayed hints. Pulse now uses this API. |
+| Unspecified client bootstrap labels/FD payload. | `HYPRUNE_SOCKET`, `HYPRUNE_CLIENT_ID`, `HYPRUNE_PROTOCOL`, `HYPRUNE_TOKEN_FD` with raw 64-hex token + newline are ratified. Daemon `HYPRUNE_LAUNCH_FD` remains separate JSON bootstrap. Renewal channel remains pending. |
+| Required glTF extension profile too narrow. | World 0.2 / core M1 ratify `KHR_texture_transform` alongside `KHR_materials_unlit`; SDK accepts both world versions and tests the new profile. |
+| Core hello-name ASCII limit 128 versus schema 256. | Core now checks 256 bytes. ASCII boundary is aligned; Unicode length units still need clarification below. |
 
-SDK default: exact `0.1`; pose in `movement`, notifications through `runtime.notice`. Zones and waypoint live in the scenario file. Opt-in **`0.1-mock.1`** adds `camera.set`, `waypoint.set`, `ui.open`, `world.metadata`, and `ui.opened`. It has a distinct generated JSON Schema; these messages are never accepted/advertised as core `0.1`. `ui.open` requires an owned shell lease and creates a visible, nonexclusive overlay, then emits the selected panel. It does not load a shell module. Metadata events replay on subscribe/resync; they are outside revisioned core state. `waypoint.set` returns the current core-state revision, not a fictitious waypoint transaction revision.
+`0.1-mock.1`, its sidecar metadata events, mock-only publishing and generated experimental schema have been removed. Explicit 0.1 clients still receive the frozen contract. Presentation events are not authoritative caches and never substitute for snapshot/delta recovery.
 
-Proposed fix: a new protocol identifier with revisioned world metadata/waypoint state, explicit user-intent camera/navigation commands with distinct grants and bounds, and an approved shell panel registry. Specify whether notifications are transient or persisted. Keep motion intents separate from direct authoritative pose assignment; `camera.set` is a mock testing convenience.
+## Remaining: extension manifest cannot request publishing
 
-## Integration publishing and host metrics
+The IPC 0.2 capability enum includes `data.publish`, but `v0/extension.schema.json` still references `v0/common.schema.json`'s six older grants. There is no versioned 0.2 extension schema; adding `data.publish` to `capabilities` fails the upstream validator. A distributable integration therefore cannot express its newly ratified IPC publishing requirement.
 
-RFC-0007 reserves integration IDs but defines no data-source registration, value schema, publishing/subscription method or grant. RFC-0003's six capabilities do not authorize host process inspection. RFC-0007's required sandbox denies host `/proc`, so an isolated extension cannot implement tonight's `/proc` metrics example as requested.
+SDK workaround is explicit trusted development: pulse's valid legacy `extension.json` is preserved; `launch.json` separately records `data.publish` for the mock supervisor. It is not a new package format, sandbox exemption or automatic approval. Core interop tests grant publishing through the existing private launcher channel.
 
-SDK default: no production publishing API. Mock `data.publish`/`data.updated` are explicit `0.1-mock.1` demonstrations, gated by `state.read` only for local developer testing. This is **not** a proposed production authorization mapping. The system-pulse example runs as trusted local code, outside the distributable sandbox contract; manifests are not automatically launched by core or this SDK.
+Proposed fix: version an extension schema/common capability reference (preserving frozen 0.1), amend RFC-0007's protocol/API compatibility and capability declaration rules, and add valid/invalid publishing-manifest fixtures. Specify how approved contribution IDs map to source namespaces, rather than treating a developer launch file as distributable policy.
 
-Proposed fix: core-owned metrics broker with a narrow `metrics.system.read` grant, source registration tied to approved contribution IDs, typed value schemas, sequence/timestamp/staleness/rate limits and per-source publish/read grants. Sandbox clients consume approved broker data rather than host `/proc`. Define lifetimes, revocation and reconnect replay before enabling installed integrations.
+## Remaining: host metrics and executable extension hosts
 
-## Widget, movement and screen provider hosts
+Publishing grants no host filesystem/process access. Required sandboxing still prevents direct `/proc` metrics, so pulse is trusted unsandboxed tooling. A production integration needs a narrow core-owned metrics broker with a dedicated read grant and bounded, privacy-reviewed fields; sandboxed publishers consume broker results.
 
-RFC-0007 explicitly leaves rendering shell-specific; RFC-0006 leaves third-party motion fast paths unspecified; RFC-0005 stages custom screen capture for M2. The current extension schema can reserve all four contribution types without an executable host contract.
+Widget rendering remains shell-specific; screen capture/provider registration and third-party movement intent/deadline/collision fast paths remain unratified host contracts. SDK scaffolds reserve all four contribution types and run subscribers; pulse specializes one into a publisher and the widget renders in a terminal. Camera/navigation commands do not establish a custom movement-mode host.
 
-SDK supplies valid manifests and runnable state-subscriber scaffolds for all four types. The widget is a terminal presentation. Screen scaffolds supply a validated planar descriptor, not pixels. Movement scaffolds do not submit motion or register a controller. No isolated install/launch functionality is claimed.
+Proposed fix: independently versioned host APIs with lifecycle/error/grant fixtures, an approved widget entrypoint and screen-source registration, plus sandbox install/launch/revocation tests before enabling installed executable contributions.
 
-Proposed fix: host contracts and independent API identifiers, with capability/error/lifecycle fixtures, before the reserved contributions can be enabled. Specify a shell-supported widget entrypoint rather than assuming arbitrary QML injection.
+## Remaining: production supervisor and reconnect renewal
 
-## Launch and reconnect bootstrap
+Bootstrap payload/labels are now fixed, but portable private token reissuance, production policy manager and extension launcher are still absent. Reusing a consumed token would violate the contract. SDK calls a fresh `tokenProvider` on each reconnect and never retries mutations; the one-shot FD helper disables reconnect without a callback.
 
-RFC-0003 requires a new one-use token from the supervisor for reconnect, but specifies no portable bootstrap channel, FD payload or environment names. Implementing transparent reconnect by reusing a token would violate the RFC.
+Proposed fix: specify private renewal/restart binding, expiry/revocation errors and shell restart policy. Do not introduce blanket persistent token files or public token issuance.
 
-SDK uses a `tokenProvider` callback for every connection and never retries mutations. Developer launcher supplies one raw hexadecimal token plus newline on FD 3, advertised only by `HYPRUNE_TOKEN_FD`; socket/client/protocol labels are `HYPRUNE_SOCKET`, `HYPRUNE_CLIENT_ID`, `HYPRUNE_PROTOCOL`. The one-shot FD helper disables reconnect. Library users must provide a real supervisor callback for authenticated reconnect. Core currently takes a JSON grant array via its separate `HYPRUNE_LAUNCH_FD`; that is daemon bootstrap, not the SDK client-token FD.
+## Remaining: shell association and output capabilities
 
-Proposed fix: ratify bounded bootstrap payloads and a private supervisor reissue channel (or a pre-authenticated inherited connection). Define expiry, restart binding, error handling and the shell's restart policy. Never add a persistent blanket token file or public token-issuance method.
+Core M1 supports nonexclusive leases only. Exclusive input returns `-32007` until a trusted Wayland-client association exists. Core hold timing is resolved; full shell conformance, panel registry/approval flow, output mapping/projection descriptors and catalog/workspace/settings contracts remain later host work. A scalar output ID in transition events does not define transforms or rendering geometry.
 
-## Node/Bun and Quickshell transport
+Proposed fix: ratify trusted shell-surface association and bounded output descriptors, then test routing/ownership/revocation in an isolated nested compositor. Keep panel IDs approved data, not code paths or arbitrary module loading.
 
-RFC-0007 picks JavaScript, but does not choose a socket bridge for QML. Node's `net` and filesystem modules are unavailable inside Quickshell's JavaScript engine.
+## Remaining: load/limit error classification
 
-M0 SDK targets TypeScript with generated JavaScript on Node/Bun. Shell may consume fixtures/contracts through its own native AF_UNIX bridge; this package is not directly importable as QML. Proposed fix: specify/implement the Quickshell native socket bridge and expose the same state/call behavior, then run shared conformance fixtures. Python is not added because the RFC already chose the first client language.
+RFC-0003 defines `-32003` for unknown resources and the migration guide says limits return `-32008`. Core's plugin currently maps generic world-loader exceptions to `-32602`; a missing installed directory therefore reports invalid params. The real-loader interop fixture records this behavior while verifying failed transition/old-world preservation. The mock uses `-32003` for unknown fake IDs/spawns and `-32602` for a scripted asset-load failure.
 
-## Schema semantic limits and validation naming
+Core also classifies a value map above 16 KiB as `-32602`, while aggregate/source/rate limits use `-32008`. The mock matches this per-map behavior; neither client retries based on an error code alone. Proposed fix: define missing-package versus invalid-asset errors, distinguish malformed value maps from byte-budget exhaustion, and align core, mock, RFC and negative fixtures.
 
-The schema validator intentionally does not check transport JSON duplicates/depth, files, archives, glTF, collision or GPU resources. RFC-0004 calls the future SDK author tool `world check`; tonight's requested CLI calls it `world validate`.
+## Remaining: Unicode bounds and transient notices
 
-SDK's `world validate` combines the exact upstream validator with path/file/provenance coverage, Khronos glTF checks, graph/index/UV1 and codec-header checks, preliminary resource limits and deterministic digest. A passing result is not an authoritative collision/spawn-clearance, decoded image/GPU allocation, copyright or malicious-content audit. `world pack` snapshots and revalidates files before producing a deterministic `.tar.zst`; archive installation/extraction is not implemented.
+Core's JSON string limits use UTF-8 byte length in several places (for example hello client names and integration value strings), while JSON Schema `maxLength` counts Unicode code points. ASCII limits align, but non-ASCII strings near the boundary may validate in schema and reject in core. SDK/mock use upstream schema limits and do not silently redefine the wire schema.
 
-Proposed fix: standardize the command name and publish separate authoring/runtime validation levels. Extend world/schema conformance with references and asset fixtures as appropriate; collision clearance and renderer allocation stay core-owned. Explicitly label schema-only validation wherever presented.
+Proposed fix: choose and document units per bounded field, align core and schema validation, and add multibyte boundary fixtures. Byte budgets for whole frames/maps remain distinct from character limits.
 
-## Mock authorization boundary
+`runtime.notice` remains a transient RFC/schema event; no persisted notification-center state or replay is ratified. Core M1 discovery currently advertises delta and new location/UI/data hints, without `runtime.notice`; the mock advertises notices for development. SDK accepts events only when advertised. If a persisted notification center is wanted, version its state/lifetime/dismissal contract separately.
 
-RFC-0003 mandates SO_PEERCRED. Node's portable `net.Socket` API does not expose it. The SDK mock enforces private socket directories, mode 0600, one-use token/client/subset/expiry matching and refuses unsafe/live socket replacement, but cannot claim the production peer-credential boundary or sandbox isolation. Same-UID processes are already trusted developer code here.
+## Remaining: Quickshell transport and mock boundary
 
-Proposed fix: keep the mock scoped to development, or add a reviewed Linux transport adapter exposing SO_PEERCRED before production use. Production authorization remains in core.
+RFC-0007 chooses JavaScript, but Node's socket/filesystem modules cannot run in QML. The shell needs its native AF_UNIX bridge and shared conformance fixtures; TypeScript/Node/Bun remains the reference SDK, with Python only a test harness.
 
-## Current core interoperability observation
+RFC-0003 mandates SO_PEERCRED; portable Node `net.Socket` does not expose it. The mock enforces private directories, 0600 sockets, one-use identity-bound grants and safe listener replacement, but is not the production credential boundary or extension sandbox. Proposed fix: keep it development-only or use a reviewed Linux credential adapter before any production claim.
 
-SDK conformance exercised independently built `core/build/hypruned` after core commit `ff1e7b5`: hello/token, ping, subscribe/snapshot/delta, advertised runtime exit and unsubscribe succeeded. A test-only private-plugin stand-in supplied schema-valid state; this did not start or modify Hyprland. Core's hello name limit is currently 128 bytes while the pinned schema permits 256 characters; SDK default names fit both. Proposed fix: align implementation bounds with the exact schema and add boundary/Unicode fixtures. Recheck after core changes; this observation is not a release compatibility guarantee.
+## Remaining: authoring/runtime validation and naming
+
+`world validate` includes the upstream validator plus path/file/provenance, Khronos glTF, reference/UV1, preliminary resource and header checks. It cannot certify authoritative capsule clearance, decoded-image/GPU budgets, rights ownership or malicious-content safety. Packing is deterministic on the tested toolchain; safe installation/extraction and the core approval-digest algorithm remain separate work. RFC-0004's `world check` naming still differs from the requested `world validate` CLI.
+
+Proposed fix: standardize command naming, publish schema/authoring/runtime validation levels and extend asset/reference fixtures while keeping final collision and renderer allocation core-owned.
+
+## Interoperability evidence and limits
+
+Both optional SDK tests pass against built `hypruned` with real core `Control`, simulation/collision and world loading behind a private CPU-only plugin stand-in. Core's four CTest suites also pass. This verifies daemon/controller IPC behavior, not full Hyprland input routing, Wayland association, GPU upload or output rendering. No nested or owner compositor session was accessed. See [test reproduction and scope](docs/testing.md).

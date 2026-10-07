@@ -1,33 +1,36 @@
-# Hyprune SDK · M0
+# Hyprune SDK · IPC 0.2
 
-Experimental TypeScript/JavaScript client, `hyprune-mock` development daemon, and `hyprune` author/debug CLI. MIT. **Protocol `0.1`, world/extension formats `0.1`, SDK `0.1.0`.** This repository contains no Hyprland ABI bindings or production daemon.
+TypeScript/JavaScript client, `hyprune-mock` development daemon, and `hyprune` author/debug CLI. MIT. **SDK `0.2.0`, default IPC `0.2`, explicit IPC `0.1` compatibility.** World formats `0.1`/`0.2` are supported; extension and screen manifests remain `0.1`.
 
-RFC-0007 chooses JavaScript as the first reference client. TypeScript supplies generated types and compiles to JavaScript for **Node >=22.12 and Bun**; Python is not a second reference implementation. Quickshell needs a native socket bridge; Node modules cannot be imported directly into QML.
+RFC-0007 chooses JavaScript as the first reference client. TypeScript supplies generated types and compiles to JavaScript for **Node >=22.12 and Bun**; Python is used only by the core test harness. Quickshell needs its own native socket bridge; Node modules cannot be imported directly into QML.
 
-Schemas and their Node validator are vendored unchanged from [`hyprune/schema`](https://github.com/hyprune/schema/tree/96dad32178b14d0c50f64413430d054133d40425), with SHA-256 verification. Builds never track sibling repositories or fetch schemas. `npm run generate` deterministically derives method, result, event, state and manifest types. The separate mock schema is generated from this pin plus explicit demo additions.
+Schemas and their Node validator are vendored unchanged from [hyprune/schema at c07a923](https://github.com/hyprune/schema/tree/c07a923f1f44f48c00daad1662fb19b05047b735), with SHA-256 verification. Builds neither follow sibling repositories nor fetch schemas. `npm run generate` derives method, result, event, state and manifest types for both protocols. The former `0.1-mock.1` contract has been removed.
 
-## Run tonight
+## Run the mock
 
 ```sh
 cd /home/rick/workspace/hyprune/sdk
 npm ci
 npm test
-npm run mock -- --demo
-```
-
-The last command launches a moving observatory, a real `/proc` system-pulse integration and a terminal widget. It uses `$XDG_RUNTIME_DIR/hyprune/$HYPRLAND_INSTANCE_SIGNATURE/control.sock` (instance `mock` when unset). To avoid a running core's socket, select a development socket explicitly:
-
-```sh
 npm run mock -- --socket "$XDG_RUNTIME_DIR/hyprune/sdk-demo/control.sock" --demo
 ```
 
-Ctrl+C stops the supervised examples and daemon. `--duration 5` makes a bounded demo. No socket falls back to `/tmp`; missing/unsafe session environment is an error. Tests use explicitly selected private scratch sockets.
+This launches the moving observatory, a real `/proc` system-pulse publisher and a terminal widget. Use a private development socket. Ctrl+C stops the supervised examples and daemon; `--duration 5` bounds a demo. Socket defaults require a valid session environment; there is no fallback to `/tmp`.
 
-**Default mock protocol is the real `0.1`**: all twelve core methods, grant-filtered advertisement, schema-valid snapshots/deltas and transient `runtime.notice`. The fake scene includes surfaces, outputs and a player moving along a path; world zones/waypoint are in the scenario sidecar. `--demo` / `--experimental` opt into **`0.1-mock.1`** for camera/waypoint/UI commands, world metadata and data publishing. Those APIs do not exist in core `0.1`. The mock and examples are trusted developer tooling, not a sandboxed extension host. See [RFC gaps and proposals](NOTES-rfc-gaps.md).
+For shell warp-overlay development:
+
+```sh
+npm run mock -- --socket "$XDG_RUNTIME_DIR/hyprune/sdk-warp/control.sock" \
+  --scenario scenarios/warp.json --demo --duration 4
+```
+
+The scenario starts a timed warp at 700 ms and a world load at 1700 ms. Both use real `0.2` methods and `location.transition` state/events. Replace `--demo --duration 4` with `--client-id org.example.shell --capabilities state.read,shell.control,movement.control,world.control --launch /path/to/shell-executable` to supervise a shell instead. The child must request the granted capabilities through its own hello.
+
+The mock supports all 26 methods: camera, waypoint/routes, travel/autodrive, owned UI leases, world loading and data publication, plus the original methods. It serves seven revisioned state keys and exact five-key legacy projections. `--protocol 0.1` selects a legacy-only listener. It is trusted developer tooling; simulation does not replace core collision, rendering or authorization.
 
 ## CLI
 
-After `npm ci`, use `npm run hyprune -- …`, or `npm link` to expose both executables locally:
+After `npm ci`, use `npm run hyprune -- …`, or `npm link` to expose both executables:
 
 ```sh
 hyprune world validate examples/world-minimal
@@ -36,13 +39,6 @@ hyprune ext new widget ./my-widget --id org.example.mywidget
 hyprune ext new screen-type ./my-screen
 hyprune ext new movement-mode ./my-movement
 hyprune ext new integration ./my-integration
-```
-
-World validation includes the exact schema validator, file/path/attribution checks, Khronos glTF validation, node/UV1 references and deterministic digest. Packing creates one-root, sorted `.tar.zst` with fixed timestamps/ownership; it requires GNU tar and zstd. Runtime collision/spawn clearance and final GPU allocation remain core checks. `examples/world-minimal` is an original empty scene authoring fixture.
-
-Authenticate debug tools using the mock's one-use FD supervisor:
-
-```sh
 hyprune-mock --socket "$XDG_RUNTIME_DIR/hyprune/sdk-test/control.sock" \
   --launch hyprune ipc subscribe --count 10
 hyprune-mock --socket "$XDG_RUNTIME_DIR/hyprune/sdk-test/control.sock" \
@@ -51,34 +47,38 @@ hyprune-mock --socket "$XDG_RUNTIME_DIR/hyprune/sdk-test/control.sock" \
   --launch hyprune doctor
 ```
 
-Tokens never appear in command arguments or logs. The daemon-side launcher approves `--capabilities` (default `state.read`); CLI independently requests its own `--capabilities`. A standalone `hyprune ipc call session.ping --socket …` needs no grant. Production read/control connections need the core supervisor's token.
+World validation combines the upstream schema/semantic validator with file, provenance and Khronos glTF checks. Packing produces a deterministic single-root `.tar.zst`; GNU tar and zstd are required. Runtime collision/spawn clearance and final GPU allocation remain core checks.
+
+Tokens are passed through a one-use inherited FD, never command arguments or logs. The mock supervisor approves `--capabilities`; the CLI independently requests its `--capabilities`. Debug commands accept `--protocol 0.1` for a legacy daemon; default is `0.2`. An unauthenticated connection may hello/ping only.
 
 ## Library
 
-Run this under an authorized supervisor (`HYPRUNE_TOKEN_FD`, `HYPRUNE_SOCKET`, `HYPRUNE_CLIENT_ID`):
+Run under an authorized supervisor supplying `HYPRUNE_TOKEN_FD`, `HYPRUNE_SOCKET`, `HYPRUNE_CLIENT_ID` and `HYPRUNE_PROTOCOL`:
 
 ```ts
 import { clientFromEnvironment } from '@hyprune/sdk';
-const client = clientFromEnvironment();
-client.on('state', snapshot => console.log(snapshot.state.movement.position));
-client.on('runtime.notice', notice => console.log(notice.code, notice.message));
+const client = clientFromEnvironment({ protocol: '0.2', capabilities: ['state.read'] });
+client.on('state', snapshot => console.log(snapshot.state.location.transition));
+client.on('location.transition', event => console.log(event.phase, event.progress));
 await client.connect();
 await client.subscribe();
-await client.call('session.ping', {});
-// client.close() when finished
+console.log(await client.call('camera.get', {}));
+client.close();
 ```
 
-`HypruneClient` supports a fresh-token `tokenProvider` per connection, bounded calls, method-context result validation, whole-key delta reduction, automatic resync and exponential reconnect with jitter. It takes a fresh subscription/snapshot after reconnect and **never retries mutations**. The one-shot inherited-FD helper disables reconnect; a supervisor callback enables authenticated reconnect. Listen for `fault`, `disconnect` and `ready`.
+`HypruneClient` validates against the negotiated schema, reduces whole-key deltas, resyncs gaps and reconnects with exponential backoff and a fresh-token callback. It takes a fresh snapshot after reconnect and **never retries mutations**. The inherited-FD helper disables reconnect; long-lived callers must supply a supervisor callback and enable reconnect. Presentation events are hints; revisioned state is authoritative.
+
+System-pulse now uses the real `data.publish` grant/method, increasing sequences and TTL. The widget reads `state.integrations.sources`. The extension manifest schema cannot yet declare `data.publish`: the demo uses a separate, explicitly trusted `launch.json`. This is documented in [the remaining RFC gaps](NOTES-rfc-gaps.md), alongside the sandbox metrics broker and production supervisor work.
 
 ## Verification and documentation
 
 ```sh
-npm test                    # independent SDK tests; optional core test skipped
-npm run test:bun            # same protocol/tooling tests under Bun
+npm test                    # 50 SDK tests; two optional core tests skipped
+npm run test:bun            # 50 protocol/tooling/mock tests
 HYPRUNE_CORE_BINARY=/path/to/core/build/hypruned npm test
 ```
 
-The optional core test supplies a private plugin stand-in and does not start/change Hyprland. Local verification passed on Node 26.10.0 and Bun 1.4.2; core `ff1e7b5` passed the SDK round trip. GitHub Actions tests Node 22.12/24 and Bun. GitHub CI has not been run remotely; nothing was pushed.
+Local verification: **52/52 Node tests with built core**, **50/50 Bun tests**, and **4/4 core CTest tests**. The core harness launches real `hypruned` and links actual core `Control`, simulation and world-loading code behind a private plugin stand-in. It starts no compositor and touches no owner session. See [scope and reproduction](docs/testing.md).
 
 - [Client and authentication](docs/ipc-client.md)
 - [Mock, scenarios and shell development](docs/mock.md)

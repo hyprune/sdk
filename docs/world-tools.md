@@ -9,7 +9,7 @@ hyprune world pack ./org.example.room --output ./room-0.1.0.tar.zst
 
 Checks include unique IDs/default spawn, normalized poses, ordered zone AABBs, SPDX syntax, attribution coverage, required features, package containment, symlinks/devices/executable content, external glTF URI safety, Khronos glTF structural/accessor validation, node references/cycles/multiple parents, triangular collision/navigation nodes, lightmap material/texture/PNG/UV1 references and WAV/Ogg header checks.
 
-M0 required glTF extensions are limited to `KHR_materials_unlit`, matching current core. Unknown required Hyprune metadata is rejected. Optional metadata remains subject to the pinned format.
+World formats `0.1` and `0.2` select their exact upstream schemas automatically. The ratified core material profile supports required `KHR_materials_unlit` and `KHR_texture_transform`; other required glTF extensions reject. Unknown required Hyprune metadata is rejected. Optional metadata remains subject to the pinned format.
 
 Package caps: 10,000 files, 128 MiB single file, 1 GiB total, one MiB manifest. Preliminary world buffer/asset budget is 512 MiB. This does not replace decoded-image/GPU resource validation, authoritative collision/nav building or spawn capsule clearance in core. Passing attribution syntax/coverage is not a rights audit. Audio checks are container/header checks, not a complete decode audit.
 

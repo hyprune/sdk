@@ -7,21 +7,31 @@ hyprune ext new movement-mode ./movement --id org.example.movement
 hyprune ext new integration ./integration --id org.example.integration
 ```
 
-Scaffolding refuses existing destinations, validates the extension manifest and reserves namespaced contribution IDs. Screen scaffolds also generate/validate a planar descriptor whose provider matches the extension. Each contains `extension.json`, executable `main.mjs`, dependency metadata, MIT license and build/provenance instructions. The entrypoint is a working IPC state subscriber. Install the local SDK with `npm install /path/to/hyprune/sdk` until packages are published.
+Scaffolding refuses existing destinations, validates manifests and reserves namespaced contributions. Screen scaffolds also generate a planar descriptor with matching provider identity. Each scaffold contains `extension.json`, executable state-subscriber `main.mjs`, SDK 0.2 dependency metadata, MIT license and provenance instructions. Install the local SDK with `npm install /path/to/hyprune/sdk` until published.
 
 ```sh
 hyprune-mock --client-id org.example.widget --launch node /path/to/widget/main.mjs
 ```
 
-Developer launch is trusted local execution. All generated distributable manifests retain `sandbox.required: true` and `network: false`; no isolation claim is made by running them directly. Validation/discovery never executes an extension, and core M0 does not load third-party executable extensions.
+Launch is trusted local execution. Manifests retain `sandbox.required: true`, `network: false`, and format `0.1`, the only ratified extension format. Validation/discovery never executes extensions; the demo does not implement a distributable sandbox or host.
 
-| Type | M0 scaffold | Pending host contract |
+| Type | Runnable scaffold | Remaining host contract |
 | --- | --- | --- |
-| Screen type | Valid planar custom-source descriptor + subscriber. | Approved Wayland capture/provider registration. |
-| Widget | Terminal JSON presentation of state. | Shell rendering/entrypoint API. |
-| Movement mode | Reserved mode ID + subscriber. | Timestamped intent/collision/deadline fast path; no direct pose authority. |
-| Integration/data source | Reserved integration ID + subscriber. | Data registration/publish/read grants and brokered host data. |
+| Screen type | Valid planar descriptor and subscriber. | Approved capture/provider registration. |
+| Widget | Terminal state presentation. | Portable shell rendering/entrypoint API. |
+| Movement mode | Reserved mode ID and subscriber. | Timestamped intent/collision/deadline fast path. |
+| Integration/data source | Reserved integration ID and subscriber; pulse customizes it into a publisher. | Sandboxed host metrics broker and manifest grant declaration. |
 
-`examples/system-pulse` and `examples/pulse-widget` customize the integration/widget scaffolds. Run `hyprune-mock --demo` to connect both to the mock. Pulse publishes CPU percentage over sample deltas, memory bytes and cumulative network counters; widget combines these with authoritative world/pose state. The widget uses terminal presentation because portable widget rendering is explicitly unratified.
+## Real system-pulse publishing
 
-System-pulse's `/proc` access requires trusted unsandboxed developer mode. Mock-only `data.publish` is not a production capability; the gap record proposes a narrow core metrics broker and new grants. Screen/movement scaffolds reserve metadata and do not claim to provide pixels or control motion.
+`examples/system-pulse` samples `/proc/stat`, `/proc/meminfo`, `/proc/net/dev`. It publishes CPU percentage since the preceding sample, RAM bytes and cumulative non-loopback network counters using real `data.publish`. It requests **only** `data.publish`, with source ID `org.example.systempulse.data`, increasing sequence and 5000 ms TTL. Shutdown requests `data.remove`; disconnect cleanup/TTL also removes the source.
+
+`examples/pulse-widget` needs only `state.read`. It reads authoritative `state.integrations.sources` and renders world/pose, metrics and optional warp phase. It clears naturally when a source expires/disconnects; it does not cache/replay `data.updated` hints. Under legacy 0.1 it shows world/pose and waits for metrics.
+
+```sh
+npm run mock -- --socket "$XDG_RUNTIME_DIR/hyprune/sdk-demo/control.sock" --demo
+```
+
+IPC 0.2 ratifies publishing, but **the extension manifest schema still rejects `data.publish`** in `capabilities`. We keep `extension.json` valid against the frozen schema and record the separate trusted developer grant in `examples/system-pulse/launch.json`; `--demo` reads that launch file. It is not an installable authorization format. A production launcher must approve publishing independently until an amended extension schema exists.
+
+Host `/proc` access remains trusted and unsandboxed. IPC publishing grants no filesystem inspection; required extension isolation still needs a narrow metrics broker. Screen/movement scaffolds reserve metadata without supplying pixels or a custom motion controller. See [remaining proposals](../NOTES-rfc-gaps.md).

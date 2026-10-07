@@ -1,61 +1,58 @@
 # Mock daemon and shell development
 
-Build once with `npm ci`; launch with `npm run mock`. The default speaks real IPC `0.1`, serves synthetic state and accepts all twelve core methods subject to grants. It simulates installed worlds and free flight; walking rejects with `-32007`. Pointer focus does not grant keyboard focus. Shell output leases are exclusive, connection-owned and cleaned up on disconnect.
+Build with `npm ci`, then `npm run mock`. The default is real IPC **0.2**, with all 26 methods filtered by grants, seven-key snapshots/deltas and subscribed-reader UI/data/location hints. The same listener accepts 0.1 with frozen method discovery and five-key projections; `--protocol 0.1` makes it legacy-only. `0.1-mock.1` and `--experimental` have been retired.
 
-Select a private development instance to avoid a running core:
-
-```sh
-npm run mock -- --socket "$XDG_RUNTIME_DIR/hyprune/sdk-test/control.sock" \
-  --scenario scenarios/observatory.json
-```
-
-This standalone listener gives no read/control grants without supervisor tokens. To launch a shell or SDK tool with an approved developer identity:
+Use a private development socket:
 
 ```sh
 npm run mock -- --socket "$XDG_RUNTIME_DIR/hyprune/sdk-test/control.sock" \
+  --scenario scenarios/observatory.json \
   --client-id org.example.shell \
-  --capabilities state.read,shell.control,world.control \
+  --capabilities state.read,shell.control,movement.control,world.control \
   --launch /path/to/shell-executable
 ```
 
-The child inherits FD 3 containing a raw token plus newline. `HYPRUNE_TOKEN_FD=3`, `HYPRUNE_CLIENT_ID`, `HYPRUNE_SOCKET` and `HYPRUNE_PROTOCOL` carry labels, not secrets. The mock consumes a token once, checks identity/expiry and grants only the approved requested intersection. Child exit stops a single-launch mock. The programmatic `MockDaemon.issueToken()` is a private harness/supervisor API, never a public IPC call.
+The child receives a one-use raw hexadecimal token plus newline on FD 3. Environment labels are `HYPRUNE_TOKEN_FD=3`, `HYPRUNE_CLIENT_ID`, `HYPRUNE_SOCKET`, `HYPRUNE_PROTOCOL`. Client hello must request the approved capabilities; only the intersection is granted. Child exit stops a single-launch mock. `MockDaemon.issueToken()` is a private supervisor/test API, never an IPC call. Standalone listeners grant nothing without tokens.
 
-The socket directory is 0700, socket is 0600. Unsafe files/symlinks and live listeners are not replaced; owned stale sockets are probed before removal. Node does not supply portable SO_PEERCRED, so this is trusted developer tooling. It does not launch isolated third-party extensions or replace `hypruned`.
+Private directories are 0700 and the socket is 0600. Unsafe files/symlinks and live listeners are never replaced. Node lacks portable SO_PEERCRED, so the mock is trusted developer tooling, not a production authorization boundary or extension sandbox.
 
-## Scenarios
+## Warp/location-transition scenario
 
-`scenarios/observatory.json` includes three surfaces, two installed fake worlds, two zones, an interpolated pose path, a waypoint and timed notices. `scenarios/surface-lifecycle.json` removes/re-adds surfaces without motion.
+```sh
+npm run mock -- --socket "$XDG_RUNTIME_DIR/hyprune/sdk-warp/control.sock" \
+  --scenario scenarios/warp.json --demo --duration 4
+```
 
-A scenario document contains:
+This runs system-pulse and the terminal widget. For wire-level observation, replace `--demo --duration 4` with `--duration 4 --launch node dist/src/cli.js ipc subscribe`.
+
+At 700 ms, `travel.start` warps to the gallery over 550 ms: `departing`, `travelling`, `arrived`, with stable ID, output, destination and monotonic timestamp. At 1700 ms, `world.load` starts the garden's 450 ms simulated load: `loading` with null progress, then atomic world/pose/location activation and `arrived`. State retains the terminal transition. Shell overlays should reconcile hints with `state.location.transition`, hide terminal phases and recover correctly after reconnect/resync; no hint replay is needed.
+
+## Methods and simulation
+
+Camera get/set, waypoint set/clear and route set/clear operate on authoritative state. Zone targets resolve to the zone center at minimum Y + 1.7 m. Camera/navigation commands stop the decorative pose path. Travel start/cancel has the real bounded duration and terminal phases; zero-duration arrival is supported. Autodrive follows route targets and can stop at scenario AABB obstacles. The obstacle model approximates core behavior; it is not the core capsule/triangle solver.
+
+World loads accept installed fake IDs/spawns only. Per-world `loadMs` and `failLoad` exercise loading, atomic success and old-world preservation. Unknown fake IDs/spawns return `-32003`; scripted asset failures return `-32602`. Core's missing-package classification still differs; see [gap notes](../NOTES-rfc-gaps.md). Requester disconnect cancels pending loads; committed timed travel may continue. Walking remains unsupported by the mock; it simulates free flight. Pointer focus does not grant keyboard focus.
+
+UI open/close requires an owned lease/output. Nonexclusive leases match M1; exclusive input rejects with `-32007`. Private `hold()` / `escape()` input simulation implements the core-owned 350 ms threshold; taps do nothing and release retains an opened panel. Motion/load/exit closes UI and emits matching hints. These input helpers are not wire methods.
+
+Data publishing enforces the separate grant, namespace, connection ownership, increasing sequence, scalar/map/aggregate bounds, 10 Hz rate and TTL. Removal, expiry and disconnect replace `integrations` state. Only subscribed 0.2 readers get hints; publishers do not need read access. See [client details](ipc-client.md).
+
+## Scenario files
+
+`observatory.json` provides surfaces, zones, waypoint, a looping pose path and timed notices. `surface-lifecycle.json` removes/re-adds surfaces. `warp.json` demonstrates navigation and world loading using real methods.
 
 | Field | Meaning |
 | --- | --- |
-| `state` | Exact IPC state with runtime/world/surfaces/movement/shell. |
-| `path` | Finite vec3 control points; interpolated across 2.5-second segments and looped. Empty disables automatic motion. |
-| `worlds` | Installed fake IDs with accepted spawn slugs. Unknown loads fail atomically. |
-| `zones`, `waypoint` | Development metadata; not extra `0.1` state fields. |
-| `notices` | `{atMs, level, code, message}` transient `runtime.notice` events. |
-| `transactions` | Optional `{atMs, changes}` whole-key state replacements. |
-| `tickMs` | Optional simulation sample interval >=34 ms; default 100 ms. |
+| `state` | Exact seven-key IPC 0.2 state, including `location` and `integrations`. |
+| `path` | Finite vec3 points; looped interpolation over 2.5-second segments. Empty disables decorative motion. |
+| `worlds` | Installed fake IDs/spawn slugs, optional zones, `loadMs` (0–10000), `failLoad`. |
+| `notices` | `{atMs, level, code, message}` transient `runtime.notice`. |
+| `transactions` | `{atMs, changes}` whole-key replacements. |
+| `actions` | `{atMs, method, params}` real 0.2 commands executed by the private supervisor. |
+| `input` | `{atMs, kind: "hold", pressed}` or `{atMs, kind: "escape"}` native-input simulation. |
+| `obstacles` | Optional ordered AABBs for approximate autodrive/arrival checks. |
+| `tickMs` | Sample interval ≥34 ms, default 100. |
 
-Load-time checks validate the starting state, paths, world IDs/spawns, zones, notices and transaction shapes. Deltas coalesce to at most 30 per second per peer, keep each peer's original baseline and deliver the latest whole-key replacements. Subscribe/snapshot responses precede later deltas. Resource creation that would exceed the frame budget rejects.
+Starting state, targets, transactions, commands and timing are checked before listening. Deltas coalesce to at most 30 Hz, retain each peer's baseline and replace complete keys. Snapshot/subscribe responses precede later deltas. Oversized resource creation rejects before commit.
 
-Programmatic tests can call `commit`, `disconnectClients`, `revokeClients` and `stop`; restarting creates a new session. Real-time timers mean scenarios are scriptable, not deterministic physics replays.
-
-## Explicit experimental demo
-
-```sh
-npm run mock -- --socket "$XDG_RUNTIME_DIR/hyprune/sdk-demo/control.sock" --demo
-```
-
-`--demo` launches trusted `/proc` integration and terminal widget and selects `0.1-mock.1`. `--experimental` selects the same protocol without launching examples. Both sides must opt in; production `0.1` validation rejects these additions.
-
-| Method/event | Behavior |
-| --- | --- |
-| `camera.set` | Replaces pose; normalized quaternion required; pauses path for one second. |
-| `waypoint.set` | Replaces scenario waypoint and emits metadata. |
-| `ui.open` | Requires the caller's lease/output, opens nonexclusive overlay and emits `ui.opened` with panel ID. |
-| `data.publish` / `data.updated` | Fixed system-metrics object, cached by source ID and replayed on subscribe/resync. |
-| `world.metadata` | Zones and waypoint replayed on subscribe/resync/world load. |
-
-Experimental metadata/data events sit outside the five-key revisioned state. Their methods return the current state revision. New production host APIs require a new RFC/schema/grants; see [the gap record](../NOTES-rfc-gaps.md).
+Programmatic harnesses can use `commit`, `runAction`, `hold`, `escape`, `disconnectClients`, `revokeClients`, `stop`. Restart creates a new session. Scenarios use real timers, not deterministic physics replay. No scenario action installs an extension, loads arbitrary code or injects input into the owner's compositor.
