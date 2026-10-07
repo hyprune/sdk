@@ -8,7 +8,7 @@ import {createConnection} from 'node:net';
 import {HypruneClient,FrameDecoder,encodeFrame,parseJson,StateStore,socketPath,validateWire} from '../dist/src/index.js';
 import {MockDaemon,DEFAULT_SCENARIO,GRANTS} from '../dist/src/mock.js';
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
-async function fixture(t,protocol='0.1',caps=GRANTS,scenario=DEFAULT_SCENARIO) {
+async function fixture(t,protocol='0.2',caps=GRANTS,scenario=DEFAULT_SCENARIO) {
  const root=await mkdtemp(join(tmpdir(),'hyprune-sdk-'));
  const daemon=new MockDaemon({socket:join(root,'control.sock'),protocol,scenario});await daemon.start();
  const client=new HypruneClient({socket:daemon.path,protocol,client:{id:'org.example.test',name:'test'},capabilities:caps,tokenProvider:()=>daemon.issueToken('org.example.test',caps),reconnect:false});
@@ -41,8 +41,8 @@ test('subscribe ordering, moving pose, typed mutations, lease cleanup',async t=>
  const snapshot=await client.subscribe();assert.equal(snapshot.sessionId,client.hello.sessionId);
  const state=once(client,'state');await state;assert.ok(client.snapshot.revision>snapshot.revision);
  const claim=await client.call('shell.claim',{outputs:['output-main']});
- await client.call('shell.overlay',{leaseId:claim.leaseId,outputId:'output-main',visible:true,exclusiveInput:true});
- const fresh=await client.resync();assert.equal(fresh.state.shell.leases[0].overlays[0].exclusiveInput,true);
+ await client.call('shell.overlay',{leaseId:claim.leaseId,outputId:'output-main',visible:true,exclusiveInput:false});
+ const fresh=await client.resync();assert.equal(fresh.state.shell.leases[0].overlays[0].exclusiveInput,false);
  await assert.rejects(client.call('shell.claim',{outputs:['output-main']}),e=>e.code===-32004);
  await assert.rejects(client.call('movement.set',{modeId:'com.hyprune.walk'}),e=>e.code===-32007);
  await client.call('world.load',{worldId:'com.hyprune.garden'});await client.resync();assert.equal(client.snapshot.state.world.id,'com.hyprune.garden');
@@ -59,7 +59,7 @@ test('unauthenticated connections cannot read state or invoke unadvertised metho
  const {daemon}=await fixture(t);const c=new HypruneClient({socket:daemon.path,reconnect:false});t.after(()=>c.close());await c.connect();
  assert.deepEqual(c.hello.capabilities,[]);assert.ok((await c.call('session.ping',{})).monotonicMs>=0);
  await assert.rejects(c.call('state.subscribe',{topics:['state']}),e=>e.code===-32601);
- await assert.rejects(c.mockCall('camera.set',{position:[0,0,0],orientation:[0,0,0,1]}));
+ await assert.rejects(c.call('camera.set',{position:[0,0,0],orientation:[0,0,0,1]}));
 });
 test('launch token is consumed once and bound to client identity',async t=>{
  const {daemon}=await fixture(t),token=daemon.issueToken('org.example.one',['state.read']);
@@ -75,13 +75,14 @@ test('gap triggers fresh snapshot and reconnect uses a fresh token/subscription'
  const ready=once(client,'ready');daemon.disconnectClients();await ready;
  assert.notEqual(client.store.subscriptionId,old);assert.equal(client.snapshot.sessionId,daemon.sessionId);
 });
-test('experimental demo methods and events are explicitly schema separated',async t=>{
- const {client}=await fixture(t,'0.1-mock.1');let data;client.on('data.updated',p=>data=p);await client.subscribe();
- await client.mockCall('camera.set',{position:[4,2,3],orientation:[0,0,0,1]});await client.resync();assert.deepEqual(client.snapshot.state.movement.position,[4,2,3]);
- await client.mockCall('waypoint.set',{id:'new',position:[1,2,3],label:'New desk'});
- const lease=await client.call('shell.claim',{outputs:['output-main']});await client.mockCall('ui.open',{leaseId:lease.leaseId,outputId:'output-main',panel:'launcher'});
- await client.mockCall('data.publish',{sourceId:'org.example.pulse.data',values:{cpuPercent:20,ramUsedBytes:1,ramTotalBytes:2,netRxBytes:3,netTxBytes:4}});assert.equal(data.values.cpuPercent,20);
- assert.throws(()=>validateWire({jsonrpc:'2.0',id:'x',method:'camera.set',params:{position:[0,0,0],orientation:[0,0,0,1]}}));
+test('real 0.2 methods, state and events replace experimental protocol',async t=>{
+ const {client}=await fixture(t);let data;client.on('data.updated',p=>data=p);await client.subscribe();
+ await client.call('camera.set',{position:[4,2,3],orientation:[0,0,0,1]});await client.resync();assert.deepEqual(client.snapshot.state.movement.position,[4,2,3]);
+ await client.call('waypoint.set',{id:'new',target:{zoneId:'work'},label:'New desk'});await client.resync();assert.deepEqual(client.snapshot.state.location.waypoint.position,[0,1.7,-2.5]);
+ const lease=await client.call('shell.claim',{outputs:['output-main']});await client.call('ui.open',{leaseId:lease.leaseId,outputId:'output-main',panel:'launcher'});
+ await client.call('data.publish',{sourceId:'org.example.test.metrics',sequence:1,values:{cpuPercent:20,ramUsedBytes:1,ramTotalBytes:2,netRxBytes:3,netTxBytes:4}});assert.equal(data.values.cpuPercent,20);assert.equal(data.sessionId,client.hello.sessionId);
+ assert.throws(()=>validateWire({jsonrpc:'2.0',id:'x',method:'camera.set',params:{position:[0,0,0],orientation:[0,0,0,1]}},'0.1'));
+ assert.throws(()=>new MockDaemon({socket:'/run/user/1000/mock/control.sock',protocol:'0.1-mock.1'}));
 });
 async function raw(socket,messages) {
  const s=createConnection(socket),out=[],d=new FrameDecoder();await once(s,'connect');

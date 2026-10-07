@@ -13,7 +13,7 @@ export function scaffold(type:ExtensionType,directory:string,id='org.example.'+t
  mkdirSync(root,{recursive:true});
  try {
  const json=(name:string,value:unknown)=>writeFileSync(join(root,name),JSON.stringify(value,null,2)+'\n');json('extension.json',manifest);
- json('package.json',{name:id,version:'0.1.0',private:true,type:'module',scripts:{start:'node main.mjs'},dependencies:{'@hyprune/sdk':'0.1.0'}});
+ json('package.json',{name:id,version:'0.1.0',private:true,type:'module',scripts:{start:'node main.mjs'},dependencies:{'@hyprune/sdk':'0.2.0'}});
  const source=`#!/usr/bin/env node\nimport {clientFromEnvironment} from '@hyprune/sdk';\nconst client=clientFromEnvironment();\nclient.on('fault',e=>console.error(e.message));\nclient.on('state',s=>console.log(JSON.stringify({contribution:${JSON.stringify(type)},revision:s.revision,world:s.state.world,position:s.state.movement.position})));\nawait client.connect();\nawait client.subscribe();\nfor(const signal of ['SIGINT','SIGTERM']) process.on(signal,()=>client.close());\n`;
  writeFileSync(join(root,'main.mjs'),source,{mode:0o755});
  if(type==='screen-type') {

@@ -1,0 +1,6 @@
+{
+  "protocol": "0.2",
+  "clientId": "org.example.systempulse",
+  "capabilities": ["data.publish"],
+  "mode": "trusted-developer"
+}

@@ -1,20 +1,21 @@
-import type {Ipc_Snapshot, Ipc_StateDeltaNotification} from './generated.js';
-import {validateState, validateWire} from './validation.js';
-export type Snapshot=Ipc_Snapshot;
-export type State=Snapshot['state'];
-export type Delta=Ipc_StateDeltaNotification['params'];
-export class StateStore {
-  snapshot?: Snapshot;
-  subscriptionId?: string;
-  install(snapshot: Snapshot, subscriptionId: string): void {
-    validateState(snapshot); this.snapshot=structuredClone(snapshot); this.subscriptionId=subscriptionId;
+import type {Ipc_Snapshot,Ipc_StateDeltaNotification,Ipc02_Snapshot,Ipc02_StateDeltaNotification} from './generated.js';
+import {validateState,validateWire,type Protocol} from './validation.js';
+export type Snapshot<P extends Protocol='0.2'>=P extends '0.1'?Ipc_Snapshot:Ipc02_Snapshot;
+export type State<P extends Protocol='0.2'>=Snapshot<P>['state'];
+export type Delta<P extends Protocol='0.2'>=P extends '0.1'?Ipc_StateDeltaNotification['params']:Ipc02_StateDeltaNotification['params'];
+export class StateStore<P extends Protocol='0.2'> {
+  snapshot?:Snapshot<P>;
+  subscriptionId?:string;
+  constructor(readonly protocol:P='0.2' as P) {}
+  install(snapshot:Snapshot<P>,subscriptionId:string):void {
+    validateState(snapshot,this.protocol);this.snapshot=structuredClone(snapshot);this.subscriptionId=subscriptionId;
   }
-  apply(delta: Delta): boolean {
-    validateWire({jsonrpc:'2.0',method:'state.delta',params:delta});
-    const s=this.snapshot;
-    if(!s || delta.subscriptionId!==this.subscriptionId || delta.sessionId!==s.sessionId || delta.baseRevision!==s.revision) return false;
-    const next={sessionId:s.sessionId,revision:delta.revision,state:{...s.state,...structuredClone(delta.changes)}};
-    validateState(next); this.snapshot=next; return true;
+  apply(delta:Delta<P>):boolean {
+    validateWire({jsonrpc:'2.0',method:'state.delta',params:delta},this.protocol);
+    const snapshot=this.snapshot;
+    if(!snapshot || delta.subscriptionId!==this.subscriptionId || delta.sessionId!==snapshot.sessionId || delta.baseRevision!==snapshot.revision) return false;
+    const next={sessionId:snapshot.sessionId,revision:delta.revision,state:{...snapshot.state,...structuredClone(delta.changes)}} as Snapshot<P>;
+    validateState(next,this.protocol);this.snapshot=next;return true;
   }
-  reset(): void { this.snapshot=undefined; this.subscriptionId=undefined; }
+  reset():void {this.snapshot=undefined;this.subscriptionId=undefined;}
 }

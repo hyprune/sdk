@@ -17,7 +17,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y zstd
       - run: npm ci
       - run: npm test
-      - run: git diff --exit-code -- src/generated.ts contracts/mock.schema.json vendor/schema
+      - run: git diff --exit-code -- src/generated.ts vendor/schema
       - run: npm pack --dry-run
   bun:
     runs-on: ubuntu-latest

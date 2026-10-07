@@ -58,6 +58,64 @@
     },
     "shell": {
       "leases": []
+    },
+    "location": {
+      "zones": [
+        {
+          "id": "work",
+          "name": "Work nook",
+          "bounds": {
+            "min": [
+              -4,
+              0,
+              -6
+            ],
+            "max": [
+              4,
+              4,
+              1
+            ]
+          }
+        },
+        {
+          "id": "gallery",
+          "name": "Gallery",
+          "bounds": {
+            "min": [
+              4,
+              0,
+              -6
+            ],
+            "max": [
+              12,
+              4,
+              2
+            ]
+          }
+        }
+      ],
+      "waypoint": {
+        "id": "desk",
+        "label": "Work desk",
+        "target": {
+          "position": [
+            2,
+            1.7,
+            -4
+          ]
+        },
+        "position": [
+          2,
+          1.7,
+          -4
+        ]
+      },
+      "route": [],
+      "autodrive": false,
+      "transition": null
+    },
+    "integrations": {
+      "sources": []
     }
   },
   "path": [],
@@ -67,58 +125,68 @@
       "spawns": [
         "arrival",
         "desk"
+      ],
+      "zones": [
+        {
+          "id": "work",
+          "name": "Work nook",
+          "bounds": {
+            "min": [
+              -4,
+              0,
+              -6
+            ],
+            "max": [
+              4,
+              4,
+              1
+            ]
+          }
+        },
+        {
+          "id": "gallery",
+          "name": "Gallery",
+          "bounds": {
+            "min": [
+              4,
+              0,
+              -6
+            ],
+            "max": [
+              12,
+              4,
+              2
+            ]
+          }
+        }
       ]
     },
     {
       "id": "com.hyprune.garden",
       "spawns": [
         "arrival"
-      ]
+      ],
+      "zones": [
+        {
+          "id": "garden",
+          "name": "Garden",
+          "bounds": {
+            "min": [
+              -6,
+              0,
+              -6
+            ],
+            "max": [
+              6,
+              4,
+              6
+            ]
+          }
+        }
+      ],
+      "loadMs": 250
     }
   ],
-  "zones": [
-    {
-      "id": "work",
-      "name": "Work nook",
-      "bounds": {
-        "min": [
-          -4,
-          0,
-          -6
-        ],
-        "max": [
-          4,
-          4,
-          1
-        ]
-      }
-    },
-    {
-      "id": "gallery",
-      "name": "Gallery",
-      "bounds": {
-        "min": [
-          4,
-          0,
-          -6
-        ],
-        "max": [
-          12,
-          4,
-          2
-        ]
-      }
-    }
-  ],
-  "waypoint": {
-    "id": "desk",
-    "position": [
-      2,
-      1.7,
-      -4
-    ],
-    "label": "Work desk"
-  },
   "notices": [
     {
       "atMs": 100,

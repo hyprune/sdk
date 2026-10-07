@@ -6,7 +6,7 @@ import {execFileSync} from 'node:child_process';
 import {validateBytes} from 'gltf-validator';
 import {parseJson} from './codec.js';
 import {validateManifest} from './validation.js';
-import type {World_Document} from './generated.js';
+import type {World_Document,World02_Document} from './generated.js';
 export const LIMITS={files:10_000,single:128*1024*1024,total:1024*1024*1024,gpu:512*1024*1024};
 export function packagePath(root:string,path:string):string {
  if(!path || path.startsWith('/') || /[\\:%?#\x00-\x1f]/.test(path) || path.split('/').some(p=>!p || p==='.' || p==='..')) throw new Error('Unsafe package path: '+path);
@@ -45,18 +45,18 @@ function gltfDocument(bytes:Buffer,path:string):any {
  const length=bytes.readUInt32LE(12);if(length>bytes.length-20) throw new Error('Invalid GLB chunk length');
  return parseJson(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(20,20+length)));
 }
-export async function validateWorld(directory:string):Promise<{manifest:World_Document;files:Array<{path:string;size:number}>;digest:string;warnings:string[]}> {
+export async function validateWorld(directory:string):Promise<{manifest:World_Document|World02_Document;files:Array<{path:string;size:number}>;digest:string;warnings:string[]}> {
  const root=resolve(directory),files=inventory(root),manifestBytes=readAsset(root,'world.json');
  if(manifestBytes.length>1_048_576) throw new Error('Manifest exceeds 1 MiB');
- const manifest=parseJson(new TextDecoder('utf-8',{fatal:true}).decode(manifestBytes)) as World_Document;
- const result=validateManifest('world',manifest);if(!result.valid) throw new Error(result.errors.join('\n'));
+ const manifest=parseJson(new TextDecoder('utf-8',{fatal:true}).decode(manifestBytes)) as World_Document|World02_Document;
+ const result=validateManifest('world',manifest,undefined,manifest.formatVersion);if(!result.valid) throw new Error(result.errors.join('\n'));
  if(manifest.requiredExtensions?.length) throw new Error('M0 validator supports no required Hyprune world extensions');
  const paths=[manifest.scene,manifest.preview,...(manifest.audio || []).map(a=>a.path),...manifest.attribution.filter(a=>a.path!=='.').map(a=>a.path)].filter((x):x is string=>!!x);
  for(const p of paths) packagePath(root,p);
  for(const f of files) if(!manifest.attribution.some(a=>a.path==='.' || a.path===f.path || f.path.startsWith(a.path+'/'))) throw new Error('Missing attribution coverage: '+f.path);
  for(const required of ['LICENSE','ATTRIBUTION.md']) if(!files.some(f=>f.path===required)) throw new Error('Missing '+required);
  const bytes=readAsset(root,manifest.scene),gltf=gltfDocument(bytes,manifest.scene);
- if((gltf.extensionsRequired || []).some((id:string)=>id!=='KHR_materials_unlit')) throw new Error('Unsupported required glTF extension; M0 profile supports KHR_materials_unlit only');
+ if((gltf.extensionsRequired || []).some((id:string)=>!['KHR_materials_unlit','KHR_texture_transform'].includes(id))) throw new Error('Unsupported required glTF extension; M1 profile supports KHR_materials_unlit and KHR_texture_transform');
  const sceneDir=relative(root,dirname(join(root,manifest.scene)));
  const resource=(uri:string)=>{
   // Do not decode percent escapes: forbidden even if they encode benign text.

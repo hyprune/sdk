@@ -1,0 +1,211 @@
+{
+  "state": {
+    "runtime": {
+      "active": true,
+      "outputs": [
+        "output-main"
+      ]
+    },
+    "world": {
+      "id": "com.hyprune.observatory",
+      "spawnId": "arrival"
+    },
+    "surfaces": [
+      {
+        "id": "surface-terminal",
+        "kind": "window",
+        "title": "Terminal · sdk",
+        "logicalSize": [
+          1000,
+          700
+        ],
+        "focused": true
+      },
+      {
+        "id": "surface-browser",
+        "kind": "window",
+        "title": "Hyprune documentation",
+        "logicalSize": [
+          1280,
+          900
+        ],
+        "focused": false
+      },
+      {
+        "id": "surface-music",
+        "kind": "window",
+        "title": "Music · ambient",
+        "logicalSize": [
+          600,
+          400
+        ],
+        "focused": false
+      }
+    ],
+    "movement": {
+      "modeId": "com.hyprune.fly",
+      "position": [
+        0,
+        1.7,
+        0
+      ],
+      "orientation": [
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "shell": {
+      "leases": []
+    },
+    "location": {
+      "zones": [
+        {
+          "id": "work",
+          "name": "Work nook",
+          "bounds": {
+            "min": [
+              -4,
+              0,
+              -6
+            ],
+            "max": [
+              4,
+              4,
+              1
+            ]
+          }
+        },
+        {
+          "id": "gallery",
+          "name": "Gallery",
+          "bounds": {
+            "min": [
+              4,
+              0,
+              -6
+            ],
+            "max": [
+              12,
+              4,
+              2
+            ]
+          }
+        }
+      ],
+      "waypoint": {
+        "id": "desk",
+        "label": "Work desk",
+        "target": {
+          "position": [
+            2,
+            1.7,
+            -4
+          ]
+        },
+        "position": [
+          2,
+          1.7,
+          -4
+        ]
+      },
+      "route": [],
+      "autodrive": false,
+      "transition": null
+    },
+    "integrations": {
+      "sources": []
+    }
+  },
+  "path": [],
+  "worlds": [
+    {
+      "id": "com.hyprune.observatory",
+      "spawns": [
+        "arrival",
+        "desk"
+      ],
+      "zones": [
+        {
+          "id": "work",
+          "name": "Work nook",
+          "bounds": {
+            "min": [
+              -4,
+              0,
+              -6
+            ],
+            "max": [
+              4,
+              4,
+              1
+            ]
+          }
+        },
+        {
+          "id": "gallery",
+          "name": "Gallery",
+          "bounds": {
+            "min": [
+              4,
+              0,
+              -6
+            ],
+            "max": [
+              12,
+              4,
+              2
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "com.hyprune.garden",
+      "spawns": [
+        "arrival"
+      ],
+      "zones": [
+        {
+          "id": "garden",
+          "name": "Garden",
+          "bounds": {
+            "min": [
+              -6,
+              0,
+              -6
+            ],
+            "max": [
+              6,
+              4,
+              6
+            ]
+          }
+        }
+      ],
+      "loadMs": 450
+    }
+  ],
+  "notices": [],
+  "tickMs": 34,
+  "actions": [
+    {
+      "atMs": 700,
+      "method": "travel.start",
+      "params": {
+        "to": {
+          "zoneId": "gallery"
+        },
+        "durationMs": 550
+      }
+    },
+    {
+      "atMs": 1700,
+      "method": "world.load",
+      "params": {
+        "worldId": "com.hyprune.garden"
+      }
+    }
+  ]
+}

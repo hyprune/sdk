@@ -5,32 +5,34 @@ import {FrameDecoder,encodeFrame} from './codec.js';
 import {StateStore,type Snapshot} from './state.js';
 import {socketPath} from './paths.js';
 import {validateWire,type Protocol} from './validation.js';
-import type {MethodMap,MockMethodMap,Mock_Notification} from './generated.js';
+import type {ProtocolMethods,Ipc_Notification,Ipc02_Notification} from './generated.js';
 export class RpcError extends Error { constructor(public code:number,message:string,public data?:{retryable:boolean}) { super(message); } }
-export interface ClientOptions {
-  socket?:string; protocol?:Protocol; client?:{id:string;name:string};
-  capabilities?:MethodMap['session.hello']['params']['capabilities'];
+export interface ClientOptions<P extends Protocol=Protocol> {
+  socket?:string; protocol?:P; client?:{id:string;name:string};
+  capabilities?:ProtocolMethods[P]['session.hello']['params']['capabilities'];
   /** Called for EVERY connection. Supervisor must return a fresh one-use token. */
   tokenProvider?:()=>Promise<string|undefined>|string|undefined;
   reconnect?:boolean; callTimeoutMs?:number;
 }
-export type Notification=Mock_Notification;
-type EventMap={ [N in Notification as N['method']]:N['params'] } & {
-  state:Snapshot; notification:Notification; ready:NonNullable<HypruneClient['hello']>;
+export type Notification<P extends Protocol='0.2'>=P extends '0.1'?Ipc_Notification:Ipc02_Notification;
+type EventMap<P extends Protocol>={ [N in Notification<P> as N['method']]:N['params'] } & {
+  state:Snapshot<P>; notification:Notification<P>; ready:ProtocolMethods[P]['session.hello']['result'];
   fault:Error; disconnect:undefined; reconnecting:number;
 };
+type MethodsFor<P extends Protocol>=P extends Protocol?keyof ProtocolMethods[P] & string:never;
+type CallFor<P extends Protocol,M extends string>=P extends Protocol?M extends keyof ProtocolMethods[P]?ProtocolMethods[P][M]:never:never;
 type Pending={method:string;resolve:(v:any)=>void;reject:(e:Error)=>void;timer:NodeJS.Timeout;apply?:(v:any)=>void};
-export class HypruneClient extends EventEmitter {
-  readonly store=new StateStore();
-  hello?:MockMethodMap['session.hello']['result'] | MethodMap['session.hello']['result'];
+export class HypruneClient<P extends Protocol='0.2'> extends EventEmitter {
+  readonly store:StateStore<P>;
+  hello?:ProtocolMethods[P]['session.hello']['result'];
   private socket?:Socket; private pending=new Map<string,Pending>();
   private counter=0; private prefix=''; private stopped=false; private subscribed=false;
   private connecting?:Promise<void>; private retry?:NodeJS.Timeout; private heartbeat?:NodeJS.Timeout;
-  private attempts=0; private resyncing=false;
-  constructor(readonly options:ClientOptions={}) { super(); }
-  override on<E extends keyof EventMap>(event:E,listener:(value:EventMap[E])=>void):this { return super.on(event,listener); }
-  get snapshot():Snapshot|undefined { return this.store.snapshot; }
-  get protocol():Protocol { return this.options.protocol || '0.1'; }
+  private attempts=0; private resyncing=false;private hintRevision=0;
+  constructor(readonly options:ClientOptions<P>={} as ClientOptions<P>) { super();this.store=new StateStore(this.protocol); }
+  override on<E extends keyof EventMap<P> & string>(event:E,listener:(value:EventMap<P>[E])=>void):this { return super.on(event,listener); }
+  get snapshot():Snapshot<P>|undefined { return this.store.snapshot; }
+  get protocol():P { return (this.options.protocol || '0.2') as P; }
   async connect():Promise<void> {
     if(this.hello) return;
     if(this.connecting) return this.connecting;
@@ -47,7 +49,7 @@ export class HypruneClient extends EventEmitter {
     socket.on('error',e=>this.emit('fault',e));
     socket.on('close',()=>{
       if(socket!==this.socket) return;
-      clearInterval(this.heartbeat); this.hello=undefined; this.store.reset(); this.resyncing=false;
+      clearInterval(this.heartbeat); this.hello=undefined; this.store.reset(); this.resyncing=false;this.hintRevision=0;
       for(const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new Error('Connection lost; inspect state before retrying a mutation')); }
       this.pending.clear(); this.emit('disconnect'); this.scheduleReconnect();
     });
@@ -58,7 +60,7 @@ export class HypruneClient extends EventEmitter {
       if(this.hello?.protocol!==this.protocol) throw new Error('Protocol mismatch');
       if(this.subscribed) await this.subscribe();
       this.attempts=0; clearTimeout(this.retry);
-      this.heartbeat=setInterval(()=>{ this.call('session.ping',{}).catch(e=>{ this.emit('fault',e); socket.destroy(); }); },10_000); this.heartbeat.unref();
+      this.heartbeat=setInterval(()=>{ this.request('session.ping',{}).catch(e=>{ this.emit('fault',e); socket.destroy(); }); },10_000); this.heartbeat.unref();
       this.emit('ready',this.hello);
     } catch(e) { socket.destroy(); throw e; }
   }
@@ -68,11 +70,7 @@ export class HypruneClient extends EventEmitter {
     this.retry=setTimeout(()=>{ this.retry=undefined; this.connect().catch(e=>{this.emit('fault',e); this.scheduleReconnect();}); },delay);
     this.emit('reconnecting',delay);
   }
-  call<M extends keyof MethodMap>(method:M, params:MethodMap[M]['params']):Promise<MethodMap[M]['result']> {
-    return this.request(method,params);
-  }
-  mockCall<M extends keyof MockMethodMap>(method:M,params:MockMethodMap[M]['params']):Promise<MockMethodMap[M]['result']> {
-    if(this.protocol!=='0.1-mock.1') return Promise.reject(new Error('mockCall requires explicit mock protocol'));
+  call<M extends MethodsFor<P>>(method:M,params:CallFor<P,M> extends {params:infer T}?T:never):Promise<CallFor<P,M> extends {result:infer T}?T:never> {
     return this.request(method,params);
   }
   private request(method:string,params:unknown,apply?:(v:any)=>void):Promise<any> {
@@ -104,6 +102,10 @@ export class HypruneClient extends EventEmitter {
     }
     validateWire(m,this.protocol);
     if(!this.hello || !this.hello.events.includes(m.method as never)) throw new Error('Unadvertised event');
+    if(m.method!=='state.delta' && m.params && Object.hasOwn(m.params,'sessionId')) {
+      if(m.params.sessionId!==this.hello.sessionId || this.resyncing || m.params.revision<Math.max(this.snapshot?.revision || 0,this.hintRevision)) return;
+      this.hintRevision=m.params.revision;
+    }
     if(m.method==='state.delta') {
       if(this.resyncing) return;
       if(!this.store.apply(m.params)) {
@@ -114,25 +116,25 @@ export class HypruneClient extends EventEmitter {
     if(m.method==='session.revoked') { this.stopped=true; this.socket?.destroy(); }
     this.emit('notification',m); this.emit(m.method,m.params);
   }
-  async subscribe():Promise<Snapshot> {
+  async subscribe():Promise<Snapshot<P>> {
     this.subscribed=true;
     const result=await this.request('state.subscribe',{topics:['state']},r=>{
       if(r.snapshot.sessionId!==this.hello?.sessionId) throw new Error('Snapshot session mismatch');
-      this.store.install(r.snapshot,r.subscriptionId); this.emit('state',this.snapshot);
+      this.store.install(r.snapshot,r.subscriptionId);this.hintRevision=r.snapshot.revision; this.emit('state',this.snapshot);
     });
     return result.snapshot;
   }
-  async resync():Promise<Snapshot> {
+  async resync():Promise<Snapshot<P>> {
     this.resyncing=true;
     let result;
     try { result=await this.request('state.snapshot',{subscriptionId:this.store.subscriptionId},r=>{
       if(r.snapshot.sessionId!==this.hello?.sessionId) throw new Error('Snapshot session mismatch');
-      this.store.install(r.snapshot,this.store.subscriptionId!); this.resyncing=false; this.emit('state',this.snapshot);
+      this.store.install(r.snapshot,this.store.subscriptionId!);this.hintRevision=r.snapshot.revision; this.resyncing=false; this.emit('state',this.snapshot);
     }); } catch(e) { this.socket?.destroy(); throw e; }
     return result.snapshot;
   }
   async unsubscribe():Promise<void> {
-    await this.call('state.unsubscribe',{subscriptionId:this.store.subscriptionId!}); this.subscribed=false; this.store.reset();
+    await this.request('state.unsubscribe',{subscriptionId:this.store.subscriptionId!}); this.subscribed=false; this.store.reset();
   }
   close():void { this.stopped=true; clearTimeout(this.retry); this.retry=undefined; clearInterval(this.heartbeat); this.socket?.destroy(); }
 }

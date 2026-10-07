@@ -6,18 +6,30 @@ import type {Writable} from 'node:stream';
 import {fileURLToPath} from 'node:url';
 import {MockDaemon,GRANTS,type Scenario} from './mock.js';
 import {parseJson} from './codec.js';
-const help=`hyprune-mock [--socket path] [--scenario file.json] [--experimental]\nhyprune-mock [options] --launch <command> [args...]\nhyprune-mock --demo [--duration seconds]\n\n--client-id org.example.id   Approved developer client (default com.hyprune.sdk)\n--capabilities state.read,... Developer grants (default state.read)\n--experimental              Opt in to mock-only 0.1-mock.1\n\nDefault socket: $XDG_RUNTIME_DIR/hyprune/$HYPRLAND_INSTANCE_SIGNATURE/control.sock.\n--demo chooses instance mock and launches trusted system-pulse + terminal widget.\nLaunch tokens are one-use, expiring and passed through inherited FD 3.`;
+const help=`hyprune-mock [--socket path] [--scenario file.json] [--protocol 0.2|0.1]\nhyprune-mock [options] --launch <command> [args...]\nhyprune-mock --demo [--duration seconds]\n\n--client-id org.example.id   Approved developer client (default com.hyprune.sdk)\n--capabilities state.read,... Developer grants (default state.read)\n--protocol 0.2|0.1          Default 0.2; 0.1 selects legacy-only listener\n\nDefault socket: $XDG_RUNTIME_DIR/hyprune/$HYPRLAND_INSTANCE_SIGNATURE/control.sock.\n--demo chooses instance mock and launches trusted system-pulse + terminal widget.\nLaunch tokens are one-use, expiring and passed through inherited FD 3.`;
 async function main():Promise<void> {
  const argv=process.argv.slice(2),idx=argv.indexOf('--launch'),launch=idx<0?[]:argv.slice(idx+1);
- const {values:v}=parseArgs({args:idx<0?argv:argv.slice(0,idx),options:{help:{type:'boolean',short:'h'},socket:{type:'string'},scenario:{type:'string'},experimental:{type:'boolean'},demo:{type:'boolean'},duration:{type:'string'},'client-id':{type:'string'},capabilities:{type:'string'}}});
+ const {values:v}=parseArgs({args:idx<0?argv:argv.slice(0,idx),options:{help:{type:'boolean',short:'h'},socket:{type:'string'},scenario:{type:'string'},protocol:{type:'string'},demo:{type:'boolean'},duration:{type:'string'},'client-id':{type:'string'},capabilities:{type:'string'}}});
  if(v.help){console.log(help);return;}if(idx>=0 && !launch.length) throw new Error('--launch needs a command');
+ if(v.demo && v.protocol==='0.1') throw new Error('--demo publishing requires IPC 0.2');
  if(v.demo && launch.length) throw new Error('Choose --demo or --launch');
  if(v.demo && !process.env.HYPRLAND_INSTANCE_SIGNATURE) process.env.HYPRLAND_INSTANCE_SIGNATURE='mock';
  const scenario=v.scenario?parseJson(readFileSync(v.scenario,'utf8')) as Scenario:undefined;
- const daemon=new MockDaemon({socket:v.socket,scenario,protocol:v.experimental || v.demo?'0.1-mock.1':'0.1'});
+ const daemon=new MockDaemon({socket:v.socket,scenario,protocol:(v.protocol || '0.2') as '0.2'|'0.1'});
  await daemon.start();console.error(`hyprune-mock: ${daemon.protocol} listening at ${daemon.path}`);
  const children:ChildProcess[]=[];let stopping=false;
- const stop=async()=>{if(stopping)return;stopping=true;for(const c of children) c.kill('SIGTERM');await daemon.stop();};
+ const stop=async()=>{
+  if(stopping)return;stopping=true;
+  // Keep the socket alive while publishers remove their sources on shutdown.
+  const active=children.filter(c=>c.pid && c.exitCode===null && c.signalCode===null);
+  const exited=Promise.all(active.map(c=>new Promise<void>(resolve=>c.once('exit',()=>resolve()))));
+  for(const c of active)c.kill('SIGTERM');
+  let deadline:NodeJS.Timeout|undefined;
+  await Promise.race([exited,new Promise<void>(resolve=>{deadline=setTimeout(resolve,1000);})]);
+  clearTimeout(deadline);
+  for(const c of active)if(c.exitCode===null && c.signalCode===null)c.kill('SIGKILL');
+  await exited;await daemon.stop();
+ };
  process.once('SIGINT',()=>void stop());process.once('SIGTERM',()=>void stop());
  function start(command:string,args:string[],clientId:string,caps:typeof GRANTS) {
   const token=daemon.issueToken(clientId,caps),child=spawn(command,args,{stdio:['inherit','inherit','inherit','pipe'],env:{...process.env,HYPRUNE_SOCKET:daemon.path,HYPRUNE_PROTOCOL:daemon.protocol,HYPRUNE_CLIENT_ID:clientId,HYPRUNE_TOKEN_FD:'3'}});
@@ -26,7 +38,9 @@ async function main():Promise<void> {
  }
  if(v.demo) {
   const dir=new URL('../../examples/',import.meta.url);
-  start(process.execPath,[fileURLToPath(new URL('system-pulse/main.mjs',dir))],'org.example.systempulse',['state.read']);
+  const pulse=JSON.parse(readFileSync(new URL('system-pulse/launch.json',dir),'utf8'));
+  if(pulse.protocol!==daemon.protocol) {await stop();throw new Error('Demo launch protocol mismatch');}
+  start(process.execPath,[fileURLToPath(new URL('system-pulse/main.mjs',dir))],pulse.clientId,pulse.capabilities);
   start(process.execPath,[fileURLToPath(new URL('pulse-widget/main.mjs',dir))],'org.example.pulsewidget',['state.read']);
  }else if(launch.length) {
   const caps=(v.capabilities || 'state.read').split(',').filter(Boolean);

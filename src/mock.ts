@@ -1,214 +1,252 @@
 import {createServer,createConnection,type Server,type Socket} from 'node:net';
 import {randomBytes,randomUUID,timingSafeEqual} from 'node:crypto';
 import {chmodSync,lstatSync,unlinkSync} from 'node:fs';
-import {dirname} from 'node:path';
+import {dirname,isAbsolute} from 'node:path';
 import {FrameDecoder,FrameError,encodeFrame,MAX_FRAME} from './codec.js';
 import {secureDirectory,socketPath} from './paths.js';
 import {validateWire,validateState,type Protocol} from './validation.js';
 import {RpcError} from './client.js';
 import type {State,Snapshot} from './state.js';
-import type {Common_Capability,Mock_WaypointSetParams,Mock_WorldMetadataNotification} from './generated.js';
-export const GRANTS:Common_Capability[]=['state.read','world.control','surface.control','movement.control','shell.control','runtime.control'];
-const requirements:Record<string,Common_Capability|undefined>={
+import type {Common02_Capability,Ipc02_Target,Ipc02_Transition,MethodMap} from './generated.js';
+export type Capability=Common02_Capability;
+export const GRANTS:Capability[]=['state.read','world.control','surface.control','movement.control','shell.control','runtime.control','data.publish'];
+export const REQUIREMENTS:Record<string,Capability|undefined>={
  'session.hello':undefined,'session.ping':undefined,'state.subscribe':'state.read','state.snapshot':'state.read','state.unsubscribe':'state.read',
- 'world.load':'world.control','surface.focus':'surface.control','movement.set':'movement.control',
- 'shell.claim':'shell.control','shell.release':'shell.control','shell.overlay':'shell.control','runtime.exit':'runtime.control',
- 'camera.set':'movement.control','waypoint.set':'world.control','ui.open':'shell.control','data.publish':'state.read'
+ 'world.load':'world.control','surface.focus':'surface.control','movement.set':'movement.control','shell.claim':'shell.control','shell.release':'shell.control','shell.overlay':'shell.control','runtime.exit':'runtime.control',
+ 'camera.get':'state.read','camera.set':'movement.control','waypoint.set':'world.control','waypoint.clear':'world.control','route.set':'world.control','route.clear':'world.control',
+ 'travel.start':'movement.control','travel.cancel':'movement.control','autodrive.start':'movement.control','autodrive.stop':'movement.control',
+ 'ui.open':'shell.control','ui.close':'shell.control','data.publish':'data.publish','data.remove':'data.publish'
 };
+const LEGACY=new Set(Object.keys(REQUIREMENTS).slice(0,12));
+type Vec3=[number,number,number];
+type Bounds={min:Vec3;max:Vec3};
 export interface Scenario {
- state:State;
- path:Array<[number,number,number]>;
- worlds:Array<{id:string;spawns:string[]}>;
- zones:Mock_WorldMetadataNotification['params']['zones'];
- waypoint:Mock_WaypointSetParams;
+ state:State; path:Vec3[];
+ worlds:Array<{id:string;spawns:string[];zones?:State['location']['zones'];loadMs?:number;failLoad?:boolean}>;
  notices:Array<{atMs:number;level:'info'|'warning'|'error';code:string;message:string}>;
  transactions?:Array<{atMs:number;changes:Partial<State>}>;
- tickMs?:number;
+ /** Trusted supervisor commands, not public protocol additions. */
+ actions?:Array<{atMs:number;method:keyof MethodMap;params:unknown}>;
+ input?:Array<{atMs:number;kind:'hold'|'escape';pressed?:boolean}>;
+ obstacles?:Bounds[]; tickMs?:number;
 }
+const zones:State['location']['zones']=[{id:'work',name:'Work nook',bounds:{min:[-4,0,-6],max:[4,4,1]}},{id:'gallery',name:'Gallery',bounds:{min:[4,0,-6],max:[12,4,2]}}];
 export const DEFAULT_SCENARIO:Scenario={
  state:{runtime:{active:true,outputs:['output-main']},world:{id:'com.hyprune.observatory',spawnId:'arrival'},surfaces:[
  {id:'surface-terminal',kind:'window',title:'Terminal · sdk',logicalSize:[1000,700],focused:true},
  {id:'surface-browser',kind:'window',title:'Hyprune documentation',logicalSize:[1280,900],focused:false},
  {id:'surface-music',kind:'window',title:'Music · ambient',logicalSize:[600,400],focused:false}],
- movement:{modeId:'com.hyprune.fly',position:[0,1.7,0],orientation:[0,0,0,1]},shell:{leases:[]}},
+ movement:{modeId:'com.hyprune.fly',position:[0,1.7,0],orientation:[0,0,0,1]},shell:{leases:[]},
+ location:{zones,waypoint:{id:'desk',label:'Work desk',target:{position:[2,1.7,-4]},position:[2,1.7,-4]},route:[],autodrive:false,transition:null},integrations:{sources:[]}},
  path:[[0,1.7,0],[3,1.7,-2],[2,2,-5],[-3,1.7,-3],[0,1.7,0]],
- worlds:[{id:'com.hyprune.observatory',spawns:['arrival','desk']},{id:'com.hyprune.garden',spawns:['arrival']}],
- zones:[{id:'work',name:'Work nook',bounds:{min:[-4,0,-6],max:[4,4,1]}},{id:'gallery',name:'Gallery',bounds:{min:[4,0,-6],max:[12,4,2]}}],
- waypoint:{id:'desk',position:[2,1.7,-4],label:'Work desk'},
+ worlds:[{id:'com.hyprune.observatory',spawns:['arrival','desk'],zones},{id:'com.hyprune.garden',spawns:['arrival'],zones:[{id:'garden',name:'Garden',bounds:{min:[-6,0,-6],max:[6,4,6]}}],loadMs:250}],
  notices:[{atMs:500,level:'info',code:'mock.ready',message:'Observatory ready. Follow the path to the work nook.'},{atMs:5000,level:'warning',code:'mock.demo',message:'This is a synthetic development session.'}],tickMs:100
 };
-type Grant={token:string;clientId:string;capabilities:Common_Capability[];expires:number};
-type Peer={socket:Socket;decoder:FrameDecoder;hello:boolean;grants:Common_Capability[];methods:string[];ids:Set<string>;subscription?:string;baseline:number;leases:Set<string>;timer:NodeJS.Timeout;closing:boolean};
+type Grant={token:string;clientId:string;capabilities:Capability[];expires:number};
+type Peer={socket?:Socket;decoder:FrameDecoder;hello:boolean;protocol:Protocol;clientId:string;grants:Capability[];methods:string[];ids:Set<string>;subscription?:string;baseline:number;leases:Set<string>;timer?:NodeJS.Timeout;closing:boolean;outstanding:number};
+type Hint={method:string;params:unknown};
 export class MockDaemon {
- readonly sessionId=randomUUID(); revision=0; state:State; readonly scenario:Scenario;
- readonly protocol:Protocol; readonly path:string;
- private server?:Server; private peers=new Set<Peer>(); private tokens:Grant[]=[];
- private tick?:NodeJS.Timeout; private flush?:NodeJS.Timeout; private scripted:NodeJS.Timeout[]=[];
- private started=0; private lastPose=0; private data=new Map<string,unknown>();
+ readonly sessionId=randomUUID(); revision=0; state:State; readonly scenario:Scenario;readonly protocol:Protocol;readonly path:string;
+ private server?:Server;private peers=new Set<Peer>();private tokens:Grant[]=[];
+ private tick?:NodeJS.Timeout;private flush?:NodeJS.Timeout;private scripted:NodeJS.Timeout[]=[];private timers=new Map<NodeJS.Timeout,()=>void>();private stopped=false;
+ private started=0;private lastTick=0;private lastPose=0;private motion?:{from:Vec3;to:Vec3;start:number;duration:number};private driveIndex=0;private speed=3.5;
+ private load?:{peer:Peer;cancel:()=>void};private publications=new Map<string,{owner:Peer;time:number}>();private holding=false;private heldSince=0;private opened=false;
+ private supervisor:Peer={decoder:new FrameDecoder(),hello:true,protocol:'0.2',clientId:'com.hyprune.mock',grants:GRANTS,methods:Object.keys(REQUIREMENTS),ids:new Set(),baseline:0,leases:new Set(),closing:false,outstanding:0};
  constructor(options:{socket?:string;protocol?:Protocol;scenario?:Scenario}={}) {
-  this.path=options.socket || socketPath(); this.protocol=options.protocol || '0.1';
-  this.scenario=structuredClone(options.scenario || DEFAULT_SCENARIO); this.state=structuredClone(this.scenario.state);
-  validateState(this.snapshot());
+  this.path=options.socket || socketPath();if(!isAbsolute(this.path)) throw new Error('Mock socket must be an absolute path in a private directory');this.protocol=options.protocol || '0.2';
+  if(!['0.1','0.2'].includes(this.protocol)) throw new Error('Unsupported protocol');
+  this.scenario=structuredClone(options.scenario || DEFAULT_SCENARIO);this.state=structuredClone(this.scenario.state);validateState(this.snapshot());
   if(!Array.isArray(this.scenario.path) || this.scenario.path.some(p=>p.length!==3 || p.some(n=>!Number.isFinite(n)))) throw new Error('Scenario path requires finite vec3 points');
   if(this.scenario.tickMs!==undefined && (!Number.isFinite(this.scenario.tickMs) || this.scenario.tickMs<34)) throw new Error('tickMs must be >=34');
-  validateWire({jsonrpc:'2.0',method:'world.metadata',params:this.metadata()},'0.1-mock.1');
   for(const world of this.scenario.worlds) {
-    if(!world.spawns.length || new Set(world.spawns).size!==world.spawns.length) throw new Error('Scenario world requires unique spawns');
-    for(const spawnId of world.spawns) validateState({...this.snapshot(),state:{...this.state,world:{id:world.id,spawnId}}});
+   if(!world.spawns.length || new Set(world.spawns).size!==world.spawns.length) throw new Error('Scenario world requires unique spawns');
+   for(const spawnId of world.spawns) validateState({...this.snapshot(),state:{...this.state,world:{id:world.id,spawnId},location:{...this.state.location,zones:world.zones || []}}});
+   if(world.loadMs!==undefined && (!Number.isFinite(world.loadMs) || world.loadMs<0 || world.loadMs>10_000)) throw new Error('loadMs must be 0..10000');
   }
-  if(this.scenario.zones.some(z=>z.bounds.min.some((n,i)=>n>=z.bounds.max[i]))) throw new Error('Scenario zone bounds must be ordered');
-  for(const t of this.scenario.transactions || []) {
-    if(!Number.isFinite(t.atMs) || t.atMs<0) throw new Error('Invalid scenario time');
-    validateState({...this.snapshot(),state:{...this.state,...t.changes}});
-  }
-  for(const n of this.scenario.notices) { const {atMs,...params}=n; if(!Number.isFinite(atMs) || atMs<0) throw new Error('Invalid notice time'); validateWire({jsonrpc:'2.0',method:'runtime.notice',params}); }
+  for(const z of [...this.state.location.zones,...(this.scenario.obstacles || [])].map(z=>'bounds' in z?z.bounds:z)) if(z.min.some((n,i)=>n>=z.max[i])) throw new Error('Scenario bounds must be ordered');
+  for(const t of this.scenario.transactions || []) validateState({...this.snapshot(),state:{...this.state,...t.changes}});
+  for(const n of this.scenario.notices) {const {atMs,...params}=n;validateWire({jsonrpc:'2.0',method:'runtime.notice',params});}
+  for(const a of this.scenario.actions || []) validateWire({jsonrpc:'2.0',id:'scenario',method:a.method,params:a.params});
+  for(const input of this.scenario.input || []) if(!['hold','escape'].includes(input.kind) || (input.kind==='hold' && typeof input.pressed!=='boolean')) throw new Error('Invalid scenario input');
+  for(const entry of [...this.scenario.notices,...(this.scenario.transactions || []),...(this.scenario.actions || []),...(this.scenario.input || [])]) if(!Number.isFinite(entry.atMs) || entry.atMs<0) throw new Error('Invalid scenario time');
  }
- snapshot():Snapshot { return {sessionId:this.sessionId,revision:this.revision,state:structuredClone(this.state)}; }
- /** Test/developer supervisor API. Never exposed on the public wire. */
- issueToken(clientId:string,capabilities:Common_Capability[],ttlMs=60_000):string {
-  validateWire({jsonrpc:'2.0',id:'grant',method:'session.hello',params:{protocols:[this.protocol],client:{id:clientId,name:'supervised'},capabilities}});
-  const token=randomBytes(32).toString('hex'); this.tokens=this.tokens.filter(t=>t.expires>Date.now());
-  this.tokens.push({token,clientId,capabilities:[...capabilities],expires:Date.now()+ttlMs}); return token;
+ snapshot():Snapshot {return {sessionId:this.sessionId,revision:this.revision,state:structuredClone(this.state)};}
+ private view(p:Peer):Snapshot<Protocol> {const snapshot=this.snapshot();if(p.protocol==='0.1') {const {location,integrations,...state}=snapshot.state;return {...snapshot,state};}return snapshot;}
+ issueToken(clientId:string,capabilities:Capability[],ttlMs=60_000):string {
+  validateWire({jsonrpc:'2.0',id:'grant',method:'session.hello',params:{protocols:['0.2'],client:{id:clientId,name:'supervised'},capabilities}});
+  const token=randomBytes(32).toString('hex');this.tokens=this.tokens.filter(t=>t.expires>Date.now());this.tokens.push({token,clientId,capabilities:[...capabilities],expires:Date.now()+ttlMs});return token;
  }
  async start():Promise<void> {
   secureDirectory(dirname(this.path));
   try {
-    const st=lstatSync(this.path);
-    if(!st.isSocket() || st.isSymbolicLink() || st.uid!==process.getuid?.()) throw new Error('Refusing to replace unsafe socket');
-    const alive=await new Promise<boolean>((resolve,reject)=>{const s=createConnection(this.path); s.once('connect',()=>{s.destroy();resolve(true);}); s.once('error',(e:any)=>{s.destroy();if(e.code==='ECONNREFUSED') resolve(false); else reject(e);});});
-    if(alive) throw new Error('Socket already has a live listener'); unlinkSync(this.path);
-  } catch(e:any) { if(e.code!=='ENOENT') throw e; }
-  this.server=createServer(s=>this.accept(s));
-  await new Promise<void>((resolve,reject)=>{this.server!.once('error',reject);this.server!.listen(this.path,resolve);});
-  chmodSync(this.path,0o600); this.started=Date.now();
-  this.flush=setInterval(()=>this.flushDeltas(),34);
-  this.tick=setInterval(()=>this.advance(),this.scenario.tickMs || 100);
-  for(const n of this.scenario.notices) this.scripted.push(setTimeout(()=>{ const {atMs,...params}=n; this.broadcast('runtime.notice',params); },n.atMs));
-  for(const t of this.scenario.transactions || []) this.scripted.push(setTimeout(()=>this.commit(t.changes),t.atMs));
+   const st=lstatSync(this.path);if(!st.isSocket() || st.isSymbolicLink() || st.uid!==process.getuid?.()) throw new Error('Refusing to replace unsafe socket');
+   const alive=await new Promise<boolean>((resolve,reject)=>{const s=createConnection(this.path);s.once('connect',()=>{s.destroy();resolve(true);});s.once('error',(e:any)=>{s.destroy();if(e.code==='ECONNREFUSED') resolve(false);else reject(e);});});
+   if(alive) throw new Error('Socket already has a live listener');unlinkSync(this.path);
+  }catch(e:any){if(e.code!=='ENOENT') throw e;}
+  this.server=createServer(s=>this.accept(s));await new Promise<void>((resolve,reject)=>{this.server!.once('error',reject);this.server!.listen(this.path,resolve);});chmodSync(this.path,0o600);
+  this.started=this.lastTick=Date.now();this.flush=setInterval(()=>this.flushDeltas(),34);this.tick=setInterval(()=>this.advance(),this.scenario.tickMs || 100);
+  const schedule=(atMs:number,fn:()=>void)=>this.scripted.push(setTimeout(fn,atMs));
+  for(const n of this.scenario.notices) schedule(n.atMs,()=>{const {atMs,...params}=n;this.broadcast('runtime.notice',params);});
+  for(const t of this.scenario.transactions || []) schedule(t.atMs,()=>this.commit(t.changes));
+  for(const a of this.scenario.actions || []) schedule(a.atMs,()=>{this.runAction(a.method,a.params).catch(e=>this.broadcast('runtime.notice',{level:'warning',code:'scenario.rejected',message:e.message}));});
+  for(const i of this.scenario.input || []) schedule(i.atMs,()=>i.kind==='hold'?this.hold(i.pressed!):this.escape());
  }
  async stop():Promise<void> {
-  clearInterval(this.tick); clearInterval(this.flush); for(const t of this.scripted) clearTimeout(t);
-  for(const p of this.peers) p.socket.destroy();
-  if(this.server) await new Promise<void>((resolve,reject)=>this.server!.close(e=>e?reject(e):resolve()));
+  this.stopped=true;this.load?.cancel();clearInterval(this.tick);clearInterval(this.flush);for(const t of this.scripted) clearTimeout(t);
+  for(const [timer,cancel] of this.timers) {clearTimeout(timer);cancel();}this.timers.clear();
+  for(const p of this.peers) p.socket?.destroy();if(this.server) await new Promise<void>((resolve,reject)=>this.server!.close(e=>e?reject(e):resolve()));
  }
- /** Fault/revocation hooks for conformance harnesses. */
- disconnectClients():void { for(const p of this.peers) p.socket.destroy(); }
- revokeClients(reason='Mock approval revoked'):void { for(const p of this.peers) { if(p.hello) this.send(p,{jsonrpc:'2.0',method:'session.revoked',params:{reason}}); p.closing=true; p.socket.end(); } }
+ disconnectClients():void {for(const p of this.peers) p.socket?.destroy();}
+ revokeClients(reason='Mock approval revoked'):void {for(const p of this.peers) {if(p.hello) this.send(p,{jsonrpc:'2.0',method:'session.revoked',params:{reason}});p.closing=true;p.socket?.end();}}
+ /** Native input simulation for scenarios; never an IPC method or shell timer. */
+ hold(pressed:boolean):void {if(!pressed){this.holding=false;this.opened=false;}else if(!this.holding && this.state.runtime.active){this.holding=true;this.heldSince=Date.now();}}
+ escape():void {this.load?.cancel();const hints=this.stopMotion();this.commit({location:{...this.state.location,autodrive:false},shell:this.hideUI(hints)},hints);}
+ async runAction(method:keyof MethodMap,params:unknown):Promise<unknown> {validateWire({jsonrpc:'2.0',id:'scenario',method,params});return this.execute(this.supervisor,method,params);}
  private accept(socket:Socket):void {
-  // Node does not expose SO_PEERCRED portably. This mock is trusted local tooling,
-  // not a production authorization boundary; see NOTES-rfc-gaps.md.
-  const p:Peer={socket,decoder:new FrameDecoder(),hello:false,grants:[],methods:[],ids:new Set(),baseline:0,leases:new Set(),timer:setTimeout(()=>socket.destroy(),5000),closing:false};
-  this.peers.add(p);
-  const deadline=setInterval(()=>{try{p.decoder.checkDeadline();}catch{socket.destroy();}},1000);
-  socket.on('error',()=>{});
-  socket.on('data',chunk=>{
-    if(p.closing) return;
-    try { p.decoder.feed(chunk,m=>{if(!p.closing) this.handle(p,m);}); }
-    catch(e) { p.closing=true; if(e instanceof FrameError && e.parseError) {this.error(p,null,-32700,'Parse error');socket.end();} else socket.destroy(); }
-  });
-  socket.on('close',()=>{
-    clearTimeout(p.timer);clearInterval(deadline);this.peers.delete(p);
-    if(p.leases.size) this.commit({shell:{leases:this.state.shell.leases.filter(l=>!p.leases.has(l.id))}});
-  });
+  // Trusted local tooling: Node does not expose portable SO_PEERCRED.
+  const p:Peer={socket,decoder:new FrameDecoder(),hello:false,protocol:this.protocol,clientId:'',grants:[],methods:[],ids:new Set(),baseline:0,leases:new Set(),timer:setTimeout(()=>socket.destroy(),5000),closing:false,outstanding:0};this.peers.add(p);
+  const deadline=setInterval(()=>{try{p.decoder.checkDeadline();}catch{socket.destroy();}},1000);socket.on('error',()=>{});
+  socket.on('data',chunk=>{if(p.closing)return;try{p.decoder.feed(chunk,m=>{if(!p.closing) void this.handle(p,m);});}catch(e){p.closing=true;if(e instanceof FrameError && e.parseError){this.error(p,null,-32700,'Parse error');socket.end();}else socket.destroy();}});
+  socket.on('close',()=>{clearTimeout(p.timer);clearInterval(deadline);p.closing=true;this.peers.delete(p);if(this.load?.peer===p)this.load.cancel();this.cleanup(p);});
  }
- private send(p:Peer,m:unknown):void {
-  validateWire(m,this.protocol); const frame=encodeFrame(m);
-  if(p.socket.writableLength+frame.length>4*1024*1024) {p.socket.destroy();return;}
-  p.socket.write(frame);
+ private send(p:Peer,message:unknown):void {
+  if(!p.socket || p.socket.destroyed) return;validateWire(message,p.protocol);const frame=encodeFrame(message);
+  if(p.socket.writableLength+frame.length>4*1024*1024){p.socket.destroy();return;}p.socket.write(frame);
  }
- private error(p:Peer,id:string|null,code:number,message:string):void { this.send(p,{jsonrpc:'2.0',id,error:{code,message}}); }
- private handle(p:Peer,message:unknown):void {
-  const m:any=message; let id:string|null=m && typeof m.id==='string' && m.id.length>0 && m.id.length<=128?m.id:null;
+ private error(p:Peer,id:string|null,code:number,message:string):void {this.send(p,{jsonrpc:'2.0',id,error:{code,message}});}
+ private async handle(p:Peer,message:unknown):Promise<void> {
+  const m:any=message;const id:string|null=m && typeof m.id==='string' && m.id.length>0 && m.id.length<=128?m.id:null;
   try {
-    if(!m || Array.isArray(m) || typeof m!=='object' || m.jsonrpc!=='2.0' || typeof m.id!=='string' || !m.id.length || m.id.length>128 || typeof m.method!=='string' || !Object.hasOwn(m,'params') || Object.keys(m).some(k=>!['jsonrpc','id','method','params'].includes(k))) throw new RpcError(-32600,'Invalid request profile');
-    id=m.id;
-    if(p.ids.has(m.id)) throw new RpcError(-32600,'Request ID reused');
-    // Bound bookkeeping: close instead of forgetting IDs and allowing reuse.
-    if(p.ids.size>=100_000) throw new RpcError(-32008,'Connection request limit; reconnect');
-    p.ids.add(m.id);
-    if(!p.hello && m.method!=='session.hello') throw new RpcError(-32600,'First request must be session.hello');
-    if(p.hello && m.method==='session.hello') throw new RpcError(-32600,'Hello already complete');
-    if(p.hello && !p.methods.includes(m.method)) throw new RpcError(-32601,'Method not advertised');
-    try { validateWire(m,this.protocol); } catch { throw new RpcError(-32602,'Invalid params'); }
-    if(m.method==='session.hello') {
-      if(!m.params.protocols.includes(this.protocol)) {this.error(p,id,-32001,'Incompatible protocol');p.closing=true;p.socket.end();return;}
-      if(m.params.token) {
-        const index=this.tokens.findIndex(t=>t.clientId===m.params.client.id && t.expires>Date.now() && timingSafeEqual(Buffer.from(t.token),Buffer.from(m.params.token)));
-        if(index<0) throw new RpcError(-32002,'Invalid launch token');
-        const [grant]=this.tokens.splice(index,1);
-        p.grants=m.params.capabilities.filter((c:Common_Capability)=>grant.capabilities.includes(c));
-      }
-      p.methods=Object.keys(requirements).filter(k=>(!requirements[k] || p.grants.includes(requirements[k]!)) && (this.protocol==='0.1-mock.1' || !['camera.set','waypoint.set','ui.open','data.publish'].includes(k)));
-      p.hello=true;clearTimeout(p.timer);
-      this.send(p,{jsonrpc:'2.0',id,result:{protocol:this.protocol,sessionId:this.sessionId,capabilities:p.grants,methods:p.methods,events:p.grants.includes('state.read')?['state.delta','runtime.notice','session.revoked',...(this.protocol==='0.1-mock.1'?['world.metadata','data.updated','ui.opened']:[])]:['session.revoked']}});
-      return;
-    }
-    const params=m.params; let result:any;
-    switch(m.method) {
-      case 'session.ping': result={monotonicMs:Math.floor(performance.now())};break;
-      case 'state.subscribe':
-        if(p.subscription) throw new RpcError(-32004,'Already subscribed');
-        p.subscription=randomUUID();p.baseline=this.revision;result={subscriptionId:p.subscription,snapshot:this.snapshot()};break;
-      case 'state.snapshot': this.subscription(p,params.subscriptionId);p.baseline=this.revision;result={snapshot:this.snapshot()};break;
-      case 'state.unsubscribe': this.subscription(p,params.subscriptionId);p.subscription=undefined;result={ok:true};break;
-      case 'world.load': {
-        const world=this.scenario.worlds.find(w=>w.id===params.worldId); if(!world) throw new RpcError(-32003,'World is not installed');
-        const spawn=params.spawnId || world.spawns[0]; if(!world.spawns.includes(spawn)) throw new RpcError(-32003,'Unknown spawn');
-        this.lastPose=Date.now();this.commit({world:{id:world.id,spawnId:spawn},runtime:{...this.state.runtime,active:true},movement:{...this.state.movement,position:[0,1.7,0],modeId:'com.hyprune.fly'}});result={revision:this.revision};break;
-      }
-      case 'surface.focus':
-        if(!this.state.surfaces.some(s=>s.id===params.surfaceId)) throw new RpcError(-32003,'Unknown surface');
-        if(params.intent==='keyboard') this.commit({surfaces:this.state.surfaces.map(s=>({...s,focused:s.id===params.surfaceId}))});
-        result={revision:this.revision};break;
-      case 'movement.set':
-        if(params.modeId!=='com.hyprune.fly') throw new RpcError(-32007,'Mock only implements free flight');
-        this.commit({movement:{...this.state.movement,modeId:params.modeId}});result={revision:this.revision};break;
-      case 'shell.claim': {
-        if(params.outputs.some((o:string)=>!this.state.runtime.outputs.includes(o))) throw new RpcError(-32003,'Unknown output');
-        if(this.state.shell.leases.some(l=>l.outputs.some(o=>params.outputs.includes(o)))) throw new RpcError(-32004,'Output already claimed');
-        const leaseId=randomUUID();p.leases.add(leaseId);this.commit({shell:{leases:[...this.state.shell.leases,{id:leaseId,outputs:params.outputs,overlays:[]}]}});result={leaseId,revision:this.revision};break;
-      }
-      case 'shell.release': this.lease(p,params.leaseId);p.leases.delete(params.leaseId);this.commit({shell:{leases:this.state.shell.leases.filter(l=>l.id!==params.leaseId)}});result={revision:this.revision};break;
-      case 'shell.overlay': case 'ui.open': {
-        const lease=this.lease(p,params.leaseId); if(!lease.outputs.includes(params.outputId)) throw new RpcError(-32003,'Output outside lease');
-        const overlay={outputId:params.outputId,visible:m.method==='ui.open'?true:params.visible,exclusiveInput:m.method==='ui.open'?false:params.exclusiveInput};
-        this.commit({shell:{leases:this.state.shell.leases.map(l=>l.id===lease.id?{...l,overlays:[...l.overlays.filter(o=>o.outputId!==params.outputId),overlay]}:l)}});result={revision:this.revision};break;
-      }
-      case 'runtime.exit': this.commit({runtime:{...this.state.runtime,active:false},shell:{leases:[]}});for(const peer of this.peers) peer.leases.clear(); result={revision:this.revision};break;
-      case 'camera.set': this.lastPose=Date.now();this.commit({movement:{...this.state.movement,position:params.position,orientation:params.orientation}});result={revision:this.revision};break;
-      case 'waypoint.set': this.scenario.waypoint=structuredClone(params);this.broadcast('world.metadata',this.metadata());result={revision:this.revision};break;
-      case 'data.publish': this.data.set(params.sourceId,structuredClone(params));this.broadcast('data.updated',params);result={revision:this.revision};break;
-      default: throw new RpcError(-32601,'Unimplemented');
-    }
-    this.send(p,{jsonrpc:'2.0',id,result});
-    if(m.method==='ui.open') this.broadcast('ui.opened',params);
-    if(['state.subscribe','state.snapshot','world.load'].includes(m.method) && this.protocol==='0.1-mock.1') {this.send(p,{jsonrpc:'2.0',method:'world.metadata',params:this.metadata()});for(const values of this.data.values()) this.send(p,{jsonrpc:'2.0',method:'data.updated',params:values});}
-  } catch(e) {
-    const error=e instanceof RpcError?e:new RpcError(-32603,'Internal error');this.error(p,id,error.code,error.message);
-    if(!p.hello || id===null || error.code===-32008) {p.closing=true;p.socket.end();}
+   if(!m || Array.isArray(m) || typeof m!=='object' || m.jsonrpc!=='2.0' || id===null || typeof m.method!=='string' || !Object.hasOwn(m,'params') || Object.keys(m).some(k=>!['jsonrpc','id','method','params'].includes(k))) throw new RpcError(-32600,'Invalid request profile');
+   if(p.ids.has(id)) throw new RpcError(-32600,'Request ID reused');if(p.ids.size>=100_000) throw new RpcError(-32008,'Connection request limit; reconnect');p.ids.add(id);
+   if(!p.hello && m.method!=='session.hello') throw new RpcError(-32600,'First request must be session.hello');
+   if(p.hello && m.method==='session.hello') throw new RpcError(-32600,'Hello already complete');
+   if(p.hello && !p.methods.includes(m.method)) throw new RpcError(-32601,'Method not advertised');
+   try{validateWire(m,p.protocol);}catch{throw new RpcError(-32602,'Invalid params');}
+   if(m.method==='session.hello') {
+    const supported=this.protocol==='0.1'?['0.1']:['0.2','0.1'];const selected=supported.find(version=>m.params.protocols.includes(version));
+    if(!selected){this.error(p,id,-32001,'Incompatible protocol');p.closing=true;p.socket!.end();return;}p.protocol=selected as Protocol;
+    try{validateWire(m,p.protocol);}catch{throw new RpcError(-32602,'Invalid capabilities for protocol');}
+    if(m.params.token){const index=this.tokens.findIndex(t=>t.clientId===m.params.client.id && t.expires>Date.now() && timingSafeEqual(Buffer.from(t.token),Buffer.from(m.params.token)));if(index<0)throw new RpcError(-32002,'Invalid launch token');const [grant]=this.tokens.splice(index,1);p.grants=m.params.capabilities.filter((c:Capability)=>grant.capabilities.includes(c));}
+    p.clientId=m.params.client.id;p.methods=Object.keys(REQUIREMENTS).filter(k=>(!REQUIREMENTS[k] || p.grants.includes(REQUIREMENTS[k]!)) && (p.protocol==='0.2' || LEGACY.has(k)));p.hello=true;clearTimeout(p.timer);
+    this.send(p,{jsonrpc:'2.0',id,result:{protocol:p.protocol,sessionId:this.sessionId,capabilities:p.grants,methods:p.methods,events:p.grants.includes('state.read')?['state.delta','runtime.notice','session.revoked',...(p.protocol==='0.2'?['location.transition','ui.opened','ui.closed','data.updated']:[])]:['session.revoked']}});return;
+   }
+   if(p.outstanding>=64)throw new RpcError(-32008,'64 outstanding calls exceeded');p.outstanding++;
+   try{const operation=this.execute(p,m.method,m.params);const result=operation instanceof Promise?await operation:operation;this.send(p,{jsonrpc:'2.0',id,result});}finally{p.outstanding--;}
+  }catch(e){const error=e instanceof RpcError?e:new RpcError(-32603,'Internal error');this.error(p,id,error.code,error.message);if(!p.hello || id===null || error.code===-32008 && p.outstanding>=64){p.closing=true;p.socket!.end();}}
+ }
+ private subscription(p:Peer,id:string):void {if(!p.subscription || p.subscription!==id)throw new RpcError(-32003,'Unknown subscription');}
+ private lease(p:Peer,id:string){const lease=this.state.shell.leases.find(l=>l.id===id);if(!lease || !p.leases.has(id))throw new RpcError(-32004,'Stale or foreign lease');return lease;}
+ private target(target:Ipc02_Target):Vec3 {
+  if(!this.state.world)throw new RpcError(-32005,'No world loaded');if('position' in target)return structuredClone(target.position);
+  const zone=this.state.location.zones.find(z=>z.id===target.zoneId);if(!zone)throw new RpcError(-32003,'Unknown zone');const {min,max}=zone.bounds;return [(min[0]+max[0])/2,min[1]+1.7,(min[2]+max[2])/2];
+ }
+ private blocked(point:Vec3):boolean {return (this.scenario.obstacles || []).some(b=>point[0]>b.min[0]-.3 && point[0]<b.max[0]+.3 && point[2]>b.min[2]-.3 && point[2]<b.max[2]+.3 && point[1]>b.min[1]-.1 && point[1]<b.max[1]+1.7);}
+ private hideUI(hints:Hint[]):State['shell'] {
+  return {leases:this.state.shell.leases.map(l=>({...l,overlays:l.overlays.map(o=>{if(o.visible)hints.push({method:'ui.closed',params:{leaseId:l.id,outputId:o.outputId}});return {...o,visible:false,exclusiveInput:false};})}))};
+ }
+ private transition(phase:Ipc02_Transition['phase'],progress:number|null):Hint[] {
+  const transition=this.state.location.transition;if(!transition)return [];
+  const next={...transition,phase,progress,monotonicMs:Math.floor(performance.now())};this.state.location={...this.state.location,transition:next};return [{method:'location.transition',params:next}];
+ }
+ private stopMotion():Hint[] {
+  this.holding=false;this.opened=false;const hints=this.motion?this.transition('cancelled',Math.min(1,(Date.now()-this.motion.start)/this.motion.duration)):[];this.motion=undefined;return hints;
+ }
+ private execute(p:Peer,method:string,params:any):any {
+  switch(method) {
+   case 'session.ping':return {monotonicMs:Math.floor(performance.now())};
+   case 'state.subscribe':if(p.subscription)throw new RpcError(-32004,'Already subscribed');p.subscription=randomUUID();p.baseline=this.revision;return {subscriptionId:p.subscription,snapshot:this.view(p)};
+   case 'state.snapshot':this.subscription(p,params.subscriptionId);p.baseline=this.revision;return {snapshot:this.view(p)};
+   case 'state.unsubscribe':this.subscription(p,params.subscriptionId);p.subscription=undefined;return {ok:true};
+   case 'world.load':return this.loadWorld(p,params);
+   case 'camera.get':return {position:structuredClone(this.state.movement.position),orientation:structuredClone(this.state.movement.orientation)};
+   case 'camera.set': {
+    if(!this.state.world)throw new RpcError(-32005,'No world loaded');
+    const [x,y,z,w]=params.orientation;const fx=-2*(x*z+w*y),fy=-2*(y*z-w*x),fz=-(1-2*(x*x+y*y));const yaw=Math.atan2(fx,-fz),pitch=Math.asin(Math.max(-1,Math.min(1,fy)));const cy=Math.cos(-yaw/2),sy=Math.sin(-yaw/2),cp=Math.cos(pitch/2),sp=Math.sin(pitch/2);
+    if(Math.abs(x*cy*sp+y*sy*cp-z*sy*sp+w*cy*cp)<=.9999 || Math.abs(pitch)>=1.49)throw new RpcError(-32007,'Camera roll or vertical pitch unsupported');
+    const hints=this.stopMotion();this.lastPose=Infinity;this.commit({movement:{...this.state.movement,position:params.position,orientation:params.orientation},location:{...this.state.location,autodrive:false}},hints);break;
+   }
+   case 'waypoint.set':{const target=params.target || {position:params.position};const position=this.target(target);this.commit({location:{...this.state.location,waypoint:{id:params.id,label:params.label,target,position}}});break;}
+   case 'waypoint.clear':this.commit({location:{...this.state.location,waypoint:null}});break;
+   case 'route.set':{const route=params.points.map((target:Ipc02_Target)=>({target,position:this.target(target)}));this.driveIndex=0;this.commit({location:{...this.state.location,route,autodrive:false}});break;}
+   case 'route.clear':this.commit({location:{...this.state.location,route:[],autodrive:false}});break;
+   case 'travel.start': {
+    if(!this.state.runtime.active)throw new RpcError(-32005,'World mode inactive');if(this.load || this.motion || this.state.location.autodrive)throw new RpcError(-32004,'Automatic operation already active');
+    const to=this.target(params.to);if(this.blocked(to))throw new RpcError(-32004,'Destination obstructed');const duration=params.durationMs ?? 600;
+    const hints=this.stopMotion(),shell=this.hideUI(hints),transition:Ipc02_Transition={id:randomUUID(),outputId:this.state.runtime.outputs[0] || null,phase:'departing',progress:0,to:params.to,monotonicMs:Math.floor(performance.now())};
+    this.lastPose=Infinity;this.motion=duration?{from:[...this.state.movement.position],to,start:Date.now(),duration}:undefined;
+    hints.push({method:'location.transition',params:transition});this.commit({shell,location:{...this.state.location,autodrive:false,transition}},hints);
+    if(!duration){const events=this.transition('arrived',1);this.commit({movement:{...this.state.movement,position:to},location:this.state.location},events);}break;
+   }
+   case 'travel.cancel':{const hints=this.stopMotion();this.commit({location:this.state.location},hints);break;}
+   case 'autodrive.start':{
+    if(!this.state.runtime.active || !this.state.world || !this.state.location.route.length)throw new RpcError(-32005,'Active world and route required');if(this.load || this.motion || this.state.location.autodrive)throw new RpcError(-32004,'Automatic operation already active');
+    this.speed=params.speed ?? 3.5;this.driveIndex=0;this.lastPose=Infinity;const hints=this.stopMotion();this.commit({shell:this.hideUI(hints),location:{...this.state.location,autodrive:true}},hints);break;
+   }
+   case 'autodrive.stop':this.commit({location:{...this.state.location,autodrive:false}});break;
+   case 'surface.focus':if(!this.state.surfaces.some(s=>s.id===params.surfaceId))throw new RpcError(-32003,'Unknown surface');if(params.intent==='keyboard')this.commit({surfaces:this.state.surfaces.map(s=>({...s,focused:s.id===params.surfaceId}))});break;
+   case 'movement.set':if(params.modeId!=='com.hyprune.fly')throw new RpcError(-32007,'Mock implements free flight only');this.commit({movement:{...this.state.movement,modeId:params.modeId}});break;
+   case 'shell.claim':{
+    if(params.outputs.some((o:string)=>!this.state.runtime.outputs.includes(o)))throw new RpcError(-32003,'Unknown output');if(this.state.shell.leases.some(l=>l.outputs.some(o=>params.outputs.includes(o))))throw new RpcError(-32004,'Output already claimed');
+    const leaseId=randomUUID();p.leases.add(leaseId);this.commit({shell:{leases:[...this.state.shell.leases,{id:leaseId,outputs:params.outputs,overlays:params.outputs.map((outputId:string)=>({outputId,visible:false,exclusiveInput:false}))}]}});return {leaseId,revision:this.revision};
+   }
+   case 'shell.release':this.lease(p,params.leaseId);p.leases.delete(params.leaseId);this.commit({shell:{leases:this.state.shell.leases.filter(l=>l.id!==params.leaseId)}});break;
+   case 'shell.overlay':case 'ui.open':case 'ui.close':{
+    const lease=this.lease(p,params.leaseId);if(!lease.outputs.includes(params.outputId))throw new RpcError(-32003,'Output outside lease');if(params.exclusiveInput)throw new RpcError(-32007,'Exclusive input requires trusted Wayland association');
+    const visible=method==='ui.open' || method==='shell.overlay' && params.visible;const hints=method==='shell.overlay'?[]:[{method:method==='ui.open'?'ui.opened':'ui.closed',params}];
+    this.commit({shell:{leases:this.state.shell.leases.map(l=>l.id===lease.id?{...l,overlays:l.overlays.map(o=>o.outputId===params.outputId?{...o,visible,exclusiveInput:false}:o)}:l)}},hints);break;
+   }
+   case 'data.publish':case 'data.remove':this.publish(p,method,params);break;
+   case 'runtime.exit':{this.load?.cancel();const hints=this.stopMotion();this.hideUI(hints);this.commit({runtime:{...this.state.runtime,active:false},shell:{leases:[]},location:{...this.state.location,autodrive:false}},hints);for(const peer of [...this.peers,this.supervisor])peer.leases.clear();break;}
+   default:throw new RpcError(-32601,'Unimplemented');
   }
+  return {revision:this.revision};
  }
- private subscription(p:Peer,id:string):void { if(!p.subscription || p.subscription!==id) throw new RpcError(-32003,'Unknown subscription'); }
- private lease(p:Peer,id:string) {const l=this.state.shell.leases.find(l=>l.id===id);if(!l || !p.leases.has(id)) throw new RpcError(-32004,'Stale or foreign lease');return l;}
- private metadata() {return {worldId:this.state.world?.id || this.scenario.worlds[0].id,zones:this.scenario.zones,waypoint:this.scenario.waypoint};}
- commit(changes:Partial<State>):void {
-  const next={...this.state,...structuredClone(changes)};
-  if(this.revision>=Number.MAX_SAFE_INTEGER) throw new RpcError(-32008,'Session revision exhausted');
-  const snapshot={sessionId:this.sessionId,revision:this.revision+1,state:next};validateState(snapshot);
-  if(encodeFrame({jsonrpc:'2.0',id:'x',result:{subscriptionId:randomUUID(),snapshot}}).length>MAX_FRAME-4096) throw new RpcError(-32008,'State exceeds frame budget');
-  this.state=next;this.revision++;
+ private publish(p:Peer,method:string,params:any):void {
+  const id=params.sourceId;if(id!==p.clientId && !id.startsWith(p.clientId+'.'))throw new RpcError(-32002,'Source outside authenticated namespace');
+  const prior=this.publications.get(id);if(prior && prior.owner!==p)throw new RpcError(-32004,'Source belongs to another connection');
+  const sources=this.state.integrations.sources,old=sources.find(s=>s.sourceId===id);
+  if(method==='data.remove'){this.publications.delete(id);this.commit({integrations:{sources:sources.filter(s=>s.sourceId!==id)}});return;}
+  if(prior && Date.now()-prior.time<100)throw new RpcError(-32008,'Publication rate exceeds 10 Hz');if(old && params.sequence<=old.sequence)throw new RpcError(-32004,'Stale source sequence');
+  if(!old && sources.length>=32)throw new RpcError(-32008,'Source limit');const size=Buffer.byteLength(JSON.stringify(params.values));
+  if(size>16384)throw new RpcError(-32602,'Value map exceeds 16 KiB');if(size+sources.filter(s=>s.sourceId!==id).reduce((n,s)=>n+Buffer.byteLength(JSON.stringify(s.values)),0)>65536)throw new RpcError(-32008,'Aggregate values exceed 64 KiB');
+  const source={sourceId:id,sequence:params.sequence,values:structuredClone(params.values),monotonicMs:Math.floor(performance.now()),ttlMs:params.ttlMs ?? 5000};
+  this.commit({integrations:{sources:[...sources.filter(s=>s.sourceId!==id),source]}},[{method:'data.updated',params:source}]);this.publications.set(id,{owner:p,time:Date.now()});
  }
- private flushDeltas():void {
-  for(const p of this.peers) if(p.subscription && p.baseline!==this.revision) {
-    // Whole-key replacements allow coalescing without per-peer patch journals.
-    this.send(p,{jsonrpc:'2.0',method:'state.delta',params:{subscriptionId:p.subscription,sessionId:this.sessionId,baseRevision:p.baseline,revision:this.revision,changes:this.state}});p.baseline=this.revision;
-  }
+ private async loadWorld(p:Peer,params:any):Promise<{revision:number}> {
+  if(this.load)throw new RpcError(-32004,'World load pending');const world=this.scenario.worlds.find(w=>w.id===params.worldId);
+  const hints=this.stopMotion();const shell=this.hideUI(hints);const transition:Ipc02_Transition={id:randomUUID(),outputId:this.state.runtime.outputs[0] || null,phase:'loading',progress:null,to:params,monotonicMs:Math.floor(performance.now())};
+  this.commit({shell,location:{...this.state.location,autodrive:false,transition}},[...hints,{method:'location.transition',params:transition}]);
+  let cancelled=false;let finish:()=>void=()=>{};const cancel=()=>{cancelled=true;finish();};this.load={peer:p,cancel};
+  await new Promise<void>(resolve=>{const timer=setTimeout(()=>{this.timers.delete(timer);resolve();},world?.loadMs ?? 150);finish=()=>{clearTimeout(timer);this.timers.delete(timer);resolve();};this.timers.set(timer,resolve);});this.load=undefined;
+  if(cancelled || this.stopped || p.closing){const events=this.transition('cancelled',0);this.commit({location:this.state.location},events);throw new RpcError(-32004,'World load cancelled');}
+  const spawn=params.spawnId || world?.spawns[0];if(!world || world.failLoad || !spawn || !world.spawns.includes(spawn)){const events=this.transition('failed',0);this.commit({location:this.state.location},events);throw new RpcError(world?.failLoad?-32602:-32003,'World load failed');}
+  const arrival={...transition,phase:'arrived' as const,progress:1,monotonicMs:Math.floor(performance.now())};this.lastPose=Date.now();
+  this.commit({world:{id:world.id,spawnId:spawn},runtime:{...this.state.runtime,active:true},movement:{...this.state.movement,position:[0,1.7,0],modeId:'com.hyprune.fly'},location:{zones:world.zones || [],waypoint:null,route:[],autodrive:false,transition:arrival}},[{method:'location.transition',params:arrival}]);return {revision:this.revision};
  }
- private broadcast(method:string,params:unknown):void {for(const p of this.peers) if(p.hello && p.grants.includes('state.read')) this.send(p,{jsonrpc:'2.0',method,params});}
+ private cleanup(p:Peer):void {
+  const owned=[...this.publications].filter(([,v])=>v.owner===p).map(([id])=>id);for(const id of owned)this.publications.delete(id);
+  this.commit({shell:{leases:this.state.shell.leases.filter(l=>!p.leases.has(l.id))},integrations:{sources:this.state.integrations.sources.filter(s=>!owned.includes(s.sourceId))}});
+ }
+ commit(changes:Partial<State>,hints:Hint[]=[]):void {
+  const next={...this.state,...structuredClone(changes)};validateState({sessionId:this.sessionId,revision:this.revision,state:next});
+  if(encodeFrame({jsonrpc:'2.0',id:'budget',result:{subscriptionId:randomUUID(),snapshot:{sessionId:this.sessionId,revision:this.revision,state:next}}}).length>MAX_FRAME-4096)throw new RpcError(-32008,'State exceeds frame budget');
+  // Some native control helpers stage a transition before committing it.
+  if(JSON.stringify(next)!==JSON.stringify(this.state) || hints.length){if(this.revision>=Number.MAX_SAFE_INTEGER)throw new RpcError(-32008,'Session revision exhausted');this.revision++;}this.state=next;
+  for(const hint of hints)this.broadcast(hint.method,{...(hint.params as object),sessionId:this.sessionId,revision:this.revision});
+ }
+ private flushDeltas():void {for(const p of this.peers)if(p.subscription && p.baseline!==this.revision){this.send(p,{jsonrpc:'2.0',method:'state.delta',params:{subscriptionId:p.subscription,sessionId:this.sessionId,baseRevision:p.baseline,revision:this.revision,changes:this.view(p).state}});p.baseline=this.revision;}}
+ private broadcast(method:string,params:unknown):void {for(const p of this.peers)if(p.hello && p.grants.includes('state.read') && (method==='runtime.notice' || p.protocol==='0.2' && p.subscription))this.send(p,{jsonrpc:'2.0',method,params});}
  private advance():void {
-  const path=this.scenario.path;if(path.length<2 || !this.state.runtime.active || Date.now()-this.lastPose<1000) return;
-  const t=((Date.now()-this.started)/2500)%(path.length-1),i=Math.floor(t),f=t-i;
-  const position=path[i].map((n,j)=>n+(path[i+1][j]-n)*f) as [number,number,number];
-  this.commit({movement:{...this.state.movement,position}});
+  const now=Date.now(),dt=Math.min(.1,(now-this.lastTick)/1000);this.lastTick=now;
+  const expired=this.state.integrations.sources.filter(s=>Math.floor(performance.now())-s.monotonicMs>=s.ttlMs);if(expired.length){for(const s of expired)this.publications.delete(s.sourceId);this.commit({integrations:{sources:this.state.integrations.sources.filter(s=>!expired.includes(s))}});}
+  if(this.holding && !this.opened && now-this.heldSince>=350){this.opened=true;const hints:Hint[]=[];const shell={leases:this.state.shell.leases.map(l=>({...l,overlays:l.overlays.map(o=>{hints.push({method:'ui.opened',params:{leaseId:l.id,outputId:o.outputId,panel:'overview'}});return {...o,visible:true,exclusiveInput:false};})}))};this.commit({shell},hints);}
+  if(this.load || !this.state.runtime.active)return;
+  if(this.motion){const motion=this.motion,progress=Math.min(1,(now-motion.start)/motion.duration),eased=progress*progress*(3-2*progress);const position=motion.from.map((n,i)=>n+(motion.to[i]-n)*eased) as Vec3;const hints=this.transition(progress===1?'arrived':'travelling',progress);this.commit({movement:{...this.state.movement,position},location:this.state.location},hints);if(progress===1)this.motion=undefined;return;}
+  if(this.state.location.autodrive){const point=this.state.location.route[this.driveIndex]?.position;if(!point){this.commit({location:{...this.state.location,autodrive:false}});return;}const from=this.state.movement.position,distance=Math.hypot(...point.map((n,i)=>n-from[i])),step=this.speed*dt,position=distance<=step?point:from.map((n,i)=>n+(point[i]-n)*step/distance) as Vec3;
+   const steps=Math.max(1,Math.ceil(Math.min(distance,step)/.05));if(Array.from({length:steps},(_,i)=>from.map((n,j)=>n+(position[j]-n)*(i+1)/steps) as Vec3).some(p=>this.blocked(p))){this.commit({location:{...this.state.location,autodrive:false}});return;}
+   const done=distance<=step && ++this.driveIndex>=this.state.location.route.length;this.commit({movement:{...this.state.movement,position},location:{...this.state.location,autodrive:!done}});return;
+  }
+  const path=this.scenario.path;if(path.length<2 || now-this.lastPose<1000)return;const t=((now-this.started)/2500)%(path.length-1),i=Math.floor(t),f=t-i;const position=path[i].map((n,j)=>n+(path[i+1][j]-n)*f) as Vec3;this.commit({movement:{...this.state.movement,position}});
  }
 }

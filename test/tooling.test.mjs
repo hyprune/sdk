@@ -63,7 +63,8 @@ test('CLI launcher transfers token by FD; call, subscribe and doctor work',async
 });
 test('both example manifests are valid and mock demo publishes /proc values',async t=>{
  for(const name of ['system-pulse','pulse-widget']) assert.equal(validateManifest('extension',JSON.parse(await readFile(`examples/${name}/extension.json`))).valid,true);
- const {root}=await fixture(t),demo=await command(['dist/src/mock-cli.js','--socket',join(root,'demo','control.sock'),'--demo','--duration','2.5']);assert.match(demo.out,/CPU .*RAM .*net RX/);
+ const pulse=JSON.parse(await readFile('examples/system-pulse/extension.json'));pulse.capabilities=['data.publish'];assert.equal(validateManifest('extension',pulse).valid,false,'publishing grant still requires an upstream manifest update');
+ const {root}=await fixture(t),demo=await command(['dist/src/mock-cli.js','--socket',join(root,'demo','control.sock'),'--demo','--duration','2.5']);assert.match(demo.out,/CPU .*RAM .*net RX/);assert.doesNotMatch(demo.err,/system-pulse:|pulse-widget:/,'publishers finish cleanup before the socket closes');
 });
 test('world rejects unsupported required glTF extensions',async t=>{
  const {world}=await fixture(t),path=join(world,'scene.gltf'),gltf=JSON.parse(await readFile(path));gltf.extensionsRequired=['VENDOR_unknown'];gltf.extensionsUsed=['VENDOR_unknown'];await writeFile(path,JSON.stringify(gltf));await assert.rejects(validateWorld(world),/Unsupported required glTF/);
@@ -78,4 +79,7 @@ test('world checks lightmap UV1 and supports GLB JSON/BIN packages',async t=>{
  await mutate(world,m=>{delete m.lightmaps;m.scene='scene.glb';});
  const json=Buffer.from(JSON.stringify({asset:{version:'2.0'},scene:0,scenes:[{nodes:[0]}],nodes:[{}]})),padding=(4-json.length%4)%4,chunk=Buffer.concat([json,Buffer.alloc(padding,0x20)]),glb=Buffer.alloc(20+chunk.length);
  glb.writeUInt32LE(0x46546c67,0);glb.writeUInt32LE(2,4);glb.writeUInt32LE(glb.length,8);glb.writeUInt32LE(chunk.length,12);glb.writeUInt32LE(0x4e4f534a,16);chunk.copy(glb,20);await writeFile(join(world,'scene.glb'),glb);await validateWorld(world);
+});
+test('world format 0.2 accepts the ratified material profile and retains 0.1',async t=>{
+ const {world}=await fixture(t);await mutate(world,m=>m.formatVersion='0.2');const path=join(world,'scene.gltf'),gltf=JSON.parse(await readFile(path));gltf.extensionsRequired=['KHR_texture_transform'];gltf.extensionsUsed=['KHR_texture_transform'];await writeFile(path,JSON.stringify(gltf));assert.equal((await validateWorld(world)).manifest.formatVersion,'0.2');await mutate(world,m=>m.formatVersion='0.1');assert.equal((await validateWorld(world)).manifest.formatVersion,'0.1');
 });

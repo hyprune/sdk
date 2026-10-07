@@ -8,16 +8,20 @@ const base = 'https://hyprune.com/schema/v0/';
 for (const name of names) {
   ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0/${name}.schema.json`, import.meta.url))));
 }
+for (const name of ['common','world','ipc']) {
+  ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.2/${name}.schema.json`, import.meta.url))));
+}
 const validators = new Map();
 
 // The optional method binds a response to the caller's outstanding request.
 // An envelope alone cannot know whether a valid result belongs to that method.
-export function validate(kind, value, method) {
+export function validate(kind, value, method, version = '0.1') {
   if (!names.includes(kind) || kind === 'common') throw new Error(`Unknown schema: ${kind}`);
-  const key = `${kind}:${method || ''}`;
+  if (!['0.1','0.2'].includes(version)) throw new Error(`Unknown contract: ${version}`);
+  const key = `${version}:${kind}:${method || ''}`;
   if (method && kind !== 'ipc') throw new Error('Method context is only valid for IPC');
   if (!validators.has(key)) {
-    let schema = `${base}${kind}.schema.json`;
+    let schema = `${version === '0.2' && ['world','ipc'].includes(kind) ? base.replace('/v0/','/v0.2/') : base}${kind}.schema.json`;
     if (method) {
       if (!ajv.getSchema(`${schema}#/$defs/${method}.result`)) throw new Error(`Unknown method: ${method}`);
       schema += `#/$defs/${method}.response`;
@@ -61,6 +65,13 @@ export function validate(kind, value, method) {
     }
   }
   if (kind === 'ipc') {
+    const transition = value.method === 'location.transition' ? value.params : value.result?.snapshot?.state?.location?.transition;
+    if (transition) {
+      if ((transition.phase === 'loading') !== (transition.progress === null)) fail('only loading uses indeterminate progress');
+      if (transition.phase === 'arrived' && transition.progress !== 1) fail('arrival progress must be 1');
+    }
+    if (value.method === 'camera.set') quat(value.params.orientation, 'camera');
+    if (method === 'camera.get' && value.result) quat(value.result.orientation, 'camera');
     if (value.method === 'state.delta' && value.params.revision <= value.params.baseRevision) fail('delta revision must advance');
     if (value.method === 'shell.overlay' && !value.params.visible && value.params.exclusiveInput) fail('hidden overlays cannot claim exclusive input');
     if (value.error && value.id === null && ![-32700, -32600].includes(value.error.code)) fail('null error ID is only allowed for malformed requests');

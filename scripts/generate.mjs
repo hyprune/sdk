@@ -3,13 +3,14 @@
 import {readFileSync, writeFileSync} from 'node:fs';
 const names = ['common','ipc','world','extension','screen-type'];
 const docs = Object.fromEntries(names.map(n => [n, JSON.parse(readFileSync(`vendor/schema/v0/${n}.schema.json`))]));
-docs.mock = JSON.parse(readFileSync('contracts/mock.schema.json'));
+for (const name of ['common','world','ipc']) docs[name+'02']=JSON.parse(readFileSync(`vendor/schema/v0.2/${name}.schema.json`));
 const ident = s => s.split(/[^A-Za-z0-9]+/).map(p=>p[0]?.toUpperCase()+p.slice(1)).join('');
 const refName = (file, def) => ident(file)+'_'+ident(def || 'Document');
 function type(s, file) {
   if (s.$ref) {
     const [path, fragment] = s.$ref.split('#');
-    return refName(path ? path.split('/').at(-1).replace('.schema.json','') : file, fragment?.split('/').at(-1));
+    const target=path ? path.split('/').at(-1).replace('.schema.json','')+(file.endsWith('02')?'02':'') : file;
+    return refName(target, fragment?.split('/').at(-1));
   }
   if ('const' in s) return JSON.stringify(s.const);
   if (s.enum) return s.enum.map(JSON.stringify).join(' | ');
@@ -34,12 +35,13 @@ for (const [name,doc] of Object.entries(docs)) {
   output += `export type ${refName(name)} = ${type(doc,name)};\n`;
   for (const [key,s] of Object.entries(doc.$defs || {})) output += `export type ${refName(name,key)} = ${type(s,name)};\n`;
 }
-writeFileSync('src/generated.ts',output);
-let maps='\nexport interface MethodMap {\n';
-for(const [key] of Object.entries(docs.ipc.$defs).filter(([k])=>k.endsWith('.params'))) {
- const method=key.slice(0,-7); maps+=`  '${method}': {params: Ipc_${ident(key)}; result: Ipc_${ident(method+'.result')}};\n`;
+for (const [name,doc] of Object.entries(docs)) for(const [key,s] of Object.entries(doc.properties || {})) output += `export type ${refName(name,key)} = ${type(s,name)};\n`;
+for (const [name,map] of [['ipc','LegacyMethodMap'],['ipc02','MethodMap']]) {
+ output+=`\nexport interface ${map} {\n`;
+ for(const key of Object.keys(docs[name].$defs).filter(k=>k.endsWith('.params'))) {
+  const method=key.slice(0,-7); output+=`  '${method}': {params: ${refName(name,key)}; result: ${refName(name,method+'.result')}};\n`;
+ }
+ output+='}\n';
 }
-maps+='}\nexport interface MockMethodMap extends Omit<MethodMap, "session.hello"> {\n';
-for(const method of ['session.hello','camera.set','waypoint.set','ui.open','data.publish']) maps+=`  '${method}': {params: Mock_${ident(method+'.params')}; result: Mock_${ident(method+'.result')}};\n`;
-maps+='}\n';
-writeFileSync('src/generated.ts',output+maps);
+output+="export interface ProtocolMethods {'0.1':LegacyMethodMap; '0.2':MethodMap}\n";
+writeFileSync('src/generated.ts',output);

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://hyprune.com/sdk/mock/0.1-mock.1/ipc.schema.json",
-  "title": "Hyprune mock-only protocol (not core IPC)",
+  "$id": "https://hyprune.com/schema/v0.2/ipc.schema.json",
+  "title": "Hyprune 0.2 ipc",
   "oneOf": [
     {
       "$ref": "#/$defs/request"
@@ -52,10 +52,10 @@
               "type": "object",
               "properties": {
                 "id": {
-                  "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/id"
+                  "$ref": "common.schema.json#/$defs/id"
                 },
                 "spawnId": {
-                  "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/slug"
+                  "$ref": "common.schema.json#/$defs/slug"
                 }
               },
               "required": [
@@ -118,7 +118,7 @@
           "type": "object",
           "properties": {
             "modeId": {
-              "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/id"
+              "$ref": "common.schema.json#/$defs/id"
             },
             "position": {
               "type": "array",
@@ -208,6 +208,12 @@
             "leases"
           ],
           "additionalProperties": false
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "integrations": {
+          "$ref": "#/$defs/integrations"
         }
       },
       "required": [
@@ -215,7 +221,9 @@
         "world",
         "surfaces",
         "movement",
-        "shell"
+        "shell",
+        "location",
+        "integrations"
       ],
       "additionalProperties": false
     },
@@ -228,7 +236,7 @@
           "maxLength": 128
         },
         "revision": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/revision"
+          "$ref": "common.schema.json#/$defs/revision"
         },
         "state": {
           "$ref": "#/$defs/state"
@@ -258,7 +266,7 @@
           "type": "object",
           "properties": {
             "id": {
-              "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/id"
+              "$ref": "common.schema.json#/$defs/id"
             },
             "name": {
               "type": "string",
@@ -275,7 +283,7 @@
         "capabilities": {
           "type": "array",
           "items": {
-            "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/capability"
+            "$ref": "common.schema.json#/$defs/capability"
           },
           "minItems": 0,
           "uniqueItems": true
@@ -298,7 +306,7 @@
       "type": "object",
       "properties": {
         "protocol": {
-          "const": "0.1-mock.1"
+          "const": "0.2"
         },
         "sessionId": {
           "type": "string",
@@ -308,7 +316,7 @@
         "capabilities": {
           "type": "array",
           "items": {
-            "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/capability"
+            "$ref": "common.schema.json#/$defs/capability"
           },
           "minItems": 0,
           "uniqueItems": true
@@ -329,10 +337,20 @@
               "shell.release",
               "shell.overlay",
               "runtime.exit",
+              "camera.get",
               "camera.set",
               "waypoint.set",
+              "waypoint.clear",
+              "route.set",
+              "route.clear",
+              "travel.start",
+              "travel.cancel",
+              "autodrive.start",
+              "autodrive.stop",
               "ui.open",
-              "data.publish"
+              "ui.close",
+              "data.publish",
+              "data.remove"
             ]
           },
           "minItems": 0,
@@ -345,9 +363,10 @@
               "state.delta",
               "runtime.notice",
               "session.revoked",
-              "world.metadata",
-              "data.updated",
-              "ui.opened"
+              "location.transition",
+              "ui.opened",
+              "ui.closed",
+              "data.updated"
             ]
           },
           "minItems": 0,
@@ -421,7 +440,7 @@
       "type": "object",
       "properties": {
         "monotonicMs": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/revision"
+          "$ref": "common.schema.json#/$defs/revision"
         }
       },
       "required": [
@@ -709,10 +728,10 @@
       "type": "object",
       "properties": {
         "worldId": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/id"
+          "$ref": "common.schema.json#/$defs/id"
         },
         "spawnId": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/slug"
+          "$ref": "common.schema.json#/$defs/slug"
         }
       },
       "required": [
@@ -724,7 +743,7 @@
       "type": "object",
       "properties": {
         "revision": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/revision"
+          "$ref": "common.schema.json#/$defs/revision"
         }
       },
       "required": [
@@ -805,7 +824,7 @@
       "type": "object",
       "properties": {
         "revision": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/revision"
+          "$ref": "common.schema.json#/$defs/revision"
         }
       },
       "required": [
@@ -865,7 +884,7 @@
       "type": "object",
       "properties": {
         "modeId": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/id"
+          "$ref": "common.schema.json#/$defs/id"
         }
       },
       "required": [
@@ -877,7 +896,7 @@
       "type": "object",
       "properties": {
         "revision": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/revision"
+          "$ref": "common.schema.json#/$defs/revision"
         }
       },
       "required": [
@@ -961,7 +980,7 @@
           "maxLength": 128
         },
         "revision": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/revision"
+          "$ref": "common.schema.json#/$defs/revision"
         }
       },
       "required": [
@@ -1036,7 +1055,7 @@
       "type": "object",
       "properties": {
         "revision": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/revision"
+          "$ref": "common.schema.json#/$defs/revision"
         }
       },
       "required": [
@@ -1124,7 +1143,7 @@
       "type": "object",
       "properties": {
         "revision": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/revision"
+          "$ref": "common.schema.json#/$defs/revision"
         }
       },
       "required": [
@@ -1190,7 +1209,7 @@
       "type": "object",
       "properties": {
         "revision": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/revision"
+          "$ref": "common.schema.json#/$defs/revision"
         }
       },
       "required": [
@@ -1269,10 +1288,10 @@
               "maxLength": 128
             },
             "baseRevision": {
-              "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/revision"
+              "$ref": "common.schema.json#/$defs/revision"
             },
             "revision": {
-              "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/revision"
+              "$ref": "common.schema.json#/$defs/revision"
             },
             "changes": {
               "type": "object",
@@ -1309,10 +1328,10 @@
                       "type": "object",
                       "properties": {
                         "id": {
-                          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/id"
+                          "$ref": "common.schema.json#/$defs/id"
                         },
                         "spawnId": {
-                          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/slug"
+                          "$ref": "common.schema.json#/$defs/slug"
                         }
                       },
                       "required": [
@@ -1375,7 +1394,7 @@
                   "type": "object",
                   "properties": {
                     "modeId": {
-                      "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/id"
+                      "$ref": "common.schema.json#/$defs/id"
                     },
                     "position": {
                       "type": "array",
@@ -1465,6 +1484,12 @@
                     "leases"
                   ],
                   "additionalProperties": false
+                },
+                "location": {
+                  "$ref": "#/$defs/location"
+                },
+                "integrations": {
+                  "$ref": "#/$defs/integrations"
                 }
               },
               "required": [],
@@ -1674,16 +1699,46 @@
           "$ref": "#/$defs/runtime.exit.request"
         },
         {
+          "$ref": "#/$defs/camera.get.request"
+        },
+        {
           "$ref": "#/$defs/camera.set.request"
         },
         {
           "$ref": "#/$defs/waypoint.set.request"
         },
         {
+          "$ref": "#/$defs/waypoint.clear.request"
+        },
+        {
+          "$ref": "#/$defs/route.set.request"
+        },
+        {
+          "$ref": "#/$defs/route.clear.request"
+        },
+        {
+          "$ref": "#/$defs/travel.start.request"
+        },
+        {
+          "$ref": "#/$defs/travel.cancel.request"
+        },
+        {
+          "$ref": "#/$defs/autodrive.start.request"
+        },
+        {
+          "$ref": "#/$defs/autodrive.stop.request"
+        },
+        {
           "$ref": "#/$defs/ui.open.request"
         },
         {
+          "$ref": "#/$defs/ui.close.request"
+        },
+        {
           "$ref": "#/$defs/data.publish.request"
+        },
+        {
+          "$ref": "#/$defs/data.remove.request"
         }
       ]
     },
@@ -1726,16 +1781,46 @@
           "$ref": "#/$defs/shell.claim.response"
         },
         {
+          "$ref": "#/$defs/camera.get.response"
+        },
+        {
           "$ref": "#/$defs/camera.set.response"
         },
         {
           "$ref": "#/$defs/waypoint.set.response"
         },
         {
+          "$ref": "#/$defs/waypoint.clear.response"
+        },
+        {
+          "$ref": "#/$defs/route.set.response"
+        },
+        {
+          "$ref": "#/$defs/route.clear.response"
+        },
+        {
+          "$ref": "#/$defs/travel.start.response"
+        },
+        {
+          "$ref": "#/$defs/travel.cancel.response"
+        },
+        {
+          "$ref": "#/$defs/autodrive.start.response"
+        },
+        {
+          "$ref": "#/$defs/autodrive.stop.response"
+        },
+        {
           "$ref": "#/$defs/ui.open.response"
         },
         {
+          "$ref": "#/$defs/ui.close.response"
+        },
+        {
           "$ref": "#/$defs/data.publish.response"
+        },
+        {
+          "$ref": "#/$defs/data.remove.response"
         }
       ]
     },
@@ -1751,15 +1836,372 @@
           "$ref": "#/$defs/session.revoked.notification"
         },
         {
-          "$ref": "#/$defs/world.metadata.notification"
-        },
-        {
-          "$ref": "#/$defs/data.updated.notification"
+          "$ref": "#/$defs/location.transition.notification"
         },
         {
           "$ref": "#/$defs/ui.opened.notification"
+        },
+        {
+          "$ref": "#/$defs/ui.closed.notification"
+        },
+        {
+          "$ref": "#/$defs/data.updated.notification"
         }
       ]
+    },
+    "target": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "position": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          },
+          "required": [
+            "position"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "zoneId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "zoneId"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "transition": {
+      "type": "object",
+      "properties": {
+        "phase": {
+          "enum": [
+            "departing",
+            "travelling",
+            "arrived",
+            "cancelled",
+            "loading",
+            "failed"
+          ]
+        },
+        "progress": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          ]
+        },
+        "to": {
+          "$ref": "#/$defs/destination"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "outputId": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          ]
+        },
+        "monotonicMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "phase",
+        "progress",
+        "to",
+        "id",
+        "outputId",
+        "monotonicMs"
+      ],
+      "additionalProperties": false
+    },
+    "waypoint": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "target": {
+          "$ref": "#/$defs/target"
+        },
+        "position": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": -100000,
+            "maximum": 100000
+          },
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "target",
+        "position"
+      ],
+      "additionalProperties": false
+    },
+    "routePoint": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/target"
+        },
+        "position": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": -100000,
+            "maximum": 100000
+          },
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": [
+        "target",
+        "position"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "sourceId": {
+          "$ref": "common.schema.json#/$defs/id"
+        },
+        "values": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {
+            "maxLength": 128
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string",
+                "maxLength": 256
+              }
+            ]
+          }
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "monotonicMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "ttlMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 60000
+        }
+      },
+      "required": [
+        "sourceId",
+        "values",
+        "sequence",
+        "monotonicMs",
+        "ttlMs"
+      ],
+      "additionalProperties": false
+    },
+    "location": {
+      "type": "object",
+      "properties": {
+        "zones": {
+          "$ref": "world.schema.json#/properties/zones"
+        },
+        "waypoint": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/waypoint"
+            }
+          ]
+        },
+        "route": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/routePoint"
+          },
+          "minItems": 0,
+          "maxItems": 64
+        },
+        "autodrive": {
+          "type": "boolean"
+        },
+        "transition": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/transition"
+            }
+          ]
+        }
+      },
+      "required": [
+        "zones",
+        "waypoint",
+        "route",
+        "autodrive",
+        "transition"
+      ],
+      "additionalProperties": false
+    },
+    "integrations": {
+      "type": "object",
+      "properties": {
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source"
+          },
+          "minItems": 0,
+          "maxItems": 32
+        }
+      },
+      "required": [
+        "sources"
+      ],
+      "additionalProperties": false
+    },
+    "camera.get.params": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "camera.get.result": {
+      "type": "object",
+      "properties": {
+        "position": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": -100000,
+            "maximum": 100000
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "orientation": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4
+        }
+      },
+      "required": [
+        "position",
+        "orientation"
+      ],
+      "additionalProperties": false
+    },
+    "camera.get.request": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "const": "camera.get"
+        },
+        "params": {
+          "$ref": "#/$defs/camera.get.params"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "camera.get.response": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "result": {
+          "$ref": "#/$defs/camera.get.result"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "additionalProperties": false
     },
     "camera.set.params": {
       "type": "object",
@@ -1767,7 +2209,9 @@
         "position": {
           "type": "array",
           "items": {
-            "type": "number"
+            "type": "number",
+            "minimum": -100000,
+            "maximum": 100000
           },
           "minItems": 3,
           "maxItems": 3
@@ -1791,7 +2235,9 @@
       "type": "object",
       "properties": {
         "revision": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/revision"
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "required": [
@@ -1848,39 +2294,71 @@
       "additionalProperties": false
     },
     "waypoint.set.params": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 256
-        },
-        "position": {
-          "type": "array",
-          "items": {
-            "type": "number"
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "target": {
+              "$ref": "#/$defs/target"
+            }
           },
-          "minItems": 3,
-          "maxItems": 3
+          "required": [
+            "id",
+            "label",
+            "target"
+          ],
+          "additionalProperties": false
         },
-        "label": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 256
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "position": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "position"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "id",
-        "position",
-        "label"
-      ],
-      "additionalProperties": false
+      ]
     },
     "waypoint.set.result": {
       "type": "object",
       "properties": {
         "revision": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/revision"
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "required": [
@@ -1936,23 +2414,527 @@
       ],
       "additionalProperties": false
     },
+    "waypoint.clear.params": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "waypoint.clear.result": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "waypoint.clear.request": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "const": "waypoint.clear"
+        },
+        "params": {
+          "$ref": "#/$defs/waypoint.clear.params"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "waypoint.clear.response": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "result": {
+          "$ref": "#/$defs/waypoint.clear.result"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "route.set.params": {
+      "type": "object",
+      "properties": {
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/target"
+          },
+          "minItems": 1,
+          "maxItems": 64
+        }
+      },
+      "required": [
+        "points"
+      ],
+      "additionalProperties": false
+    },
+    "route.set.result": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "route.set.request": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "const": "route.set"
+        },
+        "params": {
+          "$ref": "#/$defs/route.set.params"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "route.set.response": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "result": {
+          "$ref": "#/$defs/route.set.result"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "route.clear.params": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "route.clear.result": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "route.clear.request": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "const": "route.clear"
+        },
+        "params": {
+          "$ref": "#/$defs/route.clear.params"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "route.clear.response": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "result": {
+          "$ref": "#/$defs/route.clear.result"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "travel.start.params": {
+      "type": "object",
+      "properties": {
+        "to": {
+          "$ref": "#/$defs/target"
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      },
+      "required": [
+        "to"
+      ],
+      "additionalProperties": false
+    },
+    "travel.start.result": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "travel.start.request": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "const": "travel.start"
+        },
+        "params": {
+          "$ref": "#/$defs/travel.start.params"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "travel.start.response": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "result": {
+          "$ref": "#/$defs/travel.start.result"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "travel.cancel.params": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "travel.cancel.result": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "travel.cancel.request": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "const": "travel.cancel"
+        },
+        "params": {
+          "$ref": "#/$defs/travel.cancel.params"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "travel.cancel.response": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "result": {
+          "$ref": "#/$defs/travel.cancel.result"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "autodrive.start.params": {
+      "type": "object",
+      "properties": {
+        "speed": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 10
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "autodrive.start.result": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "autodrive.start.request": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "const": "autodrive.start"
+        },
+        "params": {
+          "$ref": "#/$defs/autodrive.start.params"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "autodrive.start.response": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "result": {
+          "$ref": "#/$defs/autodrive.start.result"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "autodrive.stop.params": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "autodrive.stop.result": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "autodrive.stop.request": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "const": "autodrive.stop"
+        },
+        "params": {
+          "$ref": "#/$defs/autodrive.stop.params"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "autodrive.stop.response": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "result": {
+          "$ref": "#/$defs/autodrive.stop.result"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "additionalProperties": false
+    },
     "ui.open.params": {
       "type": "object",
       "properties": {
         "leaseId": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 256
+          "maxLength": 128
         },
         "outputId": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 256
+          "maxLength": 128
         },
         "panel": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 256
+          "maxLength": 128
         }
       },
       "required": [
@@ -1966,7 +2948,9 @@
       "type": "object",
       "properties": {
         "revision": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/revision"
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "required": [
@@ -2022,50 +3006,130 @@
       ],
       "additionalProperties": false
     },
+    "ui.close.params": {
+      "type": "object",
+      "properties": {
+        "leaseId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "outputId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "leaseId",
+        "outputId"
+      ],
+      "additionalProperties": false
+    },
+    "ui.close.result": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "ui.close.request": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "const": "ui.close"
+        },
+        "params": {
+          "$ref": "#/$defs/ui.close.params"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "ui.close.response": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "result": {
+          "$ref": "#/$defs/ui.close.result"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "additionalProperties": false
+    },
     "data.publish.params": {
       "type": "object",
       "properties": {
         "sourceId": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/id"
+          "$ref": "common.schema.json#/$defs/id"
         },
         "values": {
           "type": "object",
-          "properties": {
-            "cpuPercent": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 100
-            },
-            "ramUsedBytes": {
-              "type": "number",
-              "minimum": 0
-            },
-            "ramTotalBytes": {
-              "type": "number",
-              "minimum": 1
-            },
-            "netRxBytes": {
-              "type": "number",
-              "minimum": 0
-            },
-            "netTxBytes": {
-              "type": "number",
-              "minimum": 0
-            }
+          "maxProperties": 32,
+          "propertyNames": {
+            "maxLength": 128
           },
-          "required": [
-            "cpuPercent",
-            "ramUsedBytes",
-            "ramTotalBytes",
-            "netRxBytes",
-            "netTxBytes"
-          ],
-          "additionalProperties": false
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string",
+                "maxLength": 256
+              }
+            ]
+          }
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "ttlMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 60000
         }
       },
       "required": [
         "sourceId",
-        "values"
+        "values",
+        "sequence"
       ],
       "additionalProperties": false
     },
@@ -2073,7 +3137,9 @@
       "type": "object",
       "properties": {
         "revision": {
-          "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/revision"
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "required": [
@@ -2129,145 +3195,159 @@
       ],
       "additionalProperties": false
     },
-    "world.metadata.notification": {
+    "data.remove.params": {
+      "type": "object",
+      "properties": {
+        "sourceId": {
+          "$ref": "common.schema.json#/$defs/id"
+        }
+      },
+      "required": [
+        "sourceId"
+      ],
+      "additionalProperties": false
+    },
+    "data.remove.result": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "data.remove.request": {
       "type": "object",
       "properties": {
         "jsonrpc": {
           "const": "2.0"
         },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
         "method": {
-          "const": "world.metadata"
+          "const": "data.remove"
         },
         "params": {
-          "type": "object",
-          "properties": {
-            "worldId": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 256
-            },
-            "zones": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "bounds": {
-                    "type": "object",
-                    "properties": {
-                      "min": {
-                        "type": "array",
-                        "items": {
-                          "type": "number"
-                        },
-                        "minItems": 3,
-                        "maxItems": 3
-                      },
-                      "max": {
-                        "type": "array",
-                        "items": {
-                          "type": "number"
-                        },
-                        "minItems": 3,
-                        "maxItems": 3
-                      }
-                    },
-                    "required": [
-                      "min",
-                      "max"
-                    ],
-                    "additionalProperties": false
-                  }
-                },
-                "required": [
-                  "id",
-                  "name",
-                  "bounds"
-                ],
-                "additionalProperties": false
-              }
-            },
-            "waypoint": {
-              "$ref": "#/$defs/waypoint.set.params"
-            }
-          },
-          "required": [
-            "worldId",
-            "zones",
-            "waypoint"
-          ],
-          "additionalProperties": false
+          "$ref": "#/$defs/data.remove.params"
         }
       },
       "required": [
         "jsonrpc",
+        "id",
         "method",
         "params"
       ],
       "additionalProperties": false
     },
-    "data.updated.notification": {
+    "data.remove.response": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "result": {
+          "$ref": "#/$defs/data.remove.result"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "location.transition.notification": {
       "type": "object",
       "properties": {
         "jsonrpc": {
           "const": "2.0"
         },
         "method": {
-          "const": "data.updated"
+          "const": "location.transition"
         },
         "params": {
           "type": "object",
           "properties": {
-            "sourceId": {
-              "$ref": "https://hyprune.com/schema/v0/common.schema.json#/$defs/id"
+            "phase": {
+              "enum": [
+                "departing",
+                "travelling",
+                "arrived",
+                "cancelled",
+                "loading",
+                "failed"
+              ]
             },
-            "values": {
-              "type": "object",
-              "properties": {
-                "cpuPercent": {
+            "progress": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
                   "type": "number",
                   "minimum": 0,
-                  "maximum": 100
-                },
-                "ramUsedBytes": {
-                  "type": "number",
-                  "minimum": 0
-                },
-                "ramTotalBytes": {
-                  "type": "number",
-                  "minimum": 1
-                },
-                "netRxBytes": {
-                  "type": "number",
-                  "minimum": 0
-                },
-                "netTxBytes": {
-                  "type": "number",
-                  "minimum": 0
+                  "maximum": 1
                 }
-              },
-              "required": [
-                "cpuPercent",
-                "ramUsedBytes",
-                "ramTotalBytes",
-                "netRxBytes",
-                "netTxBytes"
-              ],
-              "additionalProperties": false
+              ]
+            },
+            "to": {
+              "$ref": "#/$defs/destination"
+            },
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "outputId": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              ]
+            },
+            "monotonicMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
             }
           },
           "required": [
-            "sourceId",
-            "values"
+            "phase",
+            "progress",
+            "to",
+            "sessionId",
+            "revision",
+            "id",
+            "outputId",
+            "monotonicMs"
           ],
           "additionalProperties": false
         }
@@ -2294,23 +3374,35 @@
             "leaseId": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 256
+              "maxLength": 128
             },
             "outputId": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 256
+              "maxLength": 128
             },
             "panel": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 256
+              "maxLength": 128
+            },
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
             }
           },
           "required": [
             "leaseId",
             "outputId",
-            "panel"
+            "panel",
+            "sessionId",
+            "revision"
           ],
           "additionalProperties": false
         }
@@ -2321,6 +3413,158 @@
         "params"
       ],
       "additionalProperties": false
+    },
+    "ui.closed.notification": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "ui.closed"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "leaseId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "outputId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "leaseId",
+            "outputId",
+            "sessionId",
+            "revision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "data.updated.notification": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "method": {
+          "const": "data.updated"
+        },
+        "params": {
+          "type": "object",
+          "properties": {
+            "sourceId": {
+              "$ref": "common.schema.json#/$defs/id"
+            },
+            "values": {
+              "type": "object",
+              "maxProperties": 32,
+              "propertyNames": {
+                "maxLength": 128
+              },
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "string",
+                    "maxLength": 256
+                  }
+                ]
+              }
+            },
+            "sequence": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "monotonicMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "ttlMs": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 60000
+            },
+            "sessionId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "sourceId",
+            "values",
+            "sequence",
+            "monotonicMs",
+            "ttlMs",
+            "sessionId",
+            "revision"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "destination": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/target"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "worldId": {
+              "$ref": "common.schema.json#/$defs/id"
+            },
+            "spawnId": {
+              "$ref": "common.schema.json#/$defs/slug"
+            }
+          },
+          "required": [
+            "worldId"
+          ],
+          "additionalProperties": false
+        }
+      ]
     }
   }
 }
