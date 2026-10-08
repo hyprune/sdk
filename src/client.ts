@@ -5,7 +5,7 @@ import {FrameDecoder,encodeFrame} from './codec.js';
 import {StateStore,type Snapshot} from './state.js';
 import {socketPath} from './paths.js';
 import {validateWire,type Protocol} from './validation.js';
-import type {ProtocolMethods,Ipc_Notification,Ipc02_Notification,Ipc03_Notification,Ipc04_Notification,Ipc05_Notification} from './generated.js';
+import type {ProtocolMethods,Ipc_Notification,Ipc02_Notification,Ipc03_Notification,Ipc04_Notification,Ipc05_Notification,Ipc06_Notification} from './generated.js';
 export class RpcError extends Error { constructor(public code:number,message:string,public data?:{retryable:boolean}) { super(message); } }
 export interface ClientOptions<P extends Protocol=Protocol> {
   socket?:string; protocol?:P; client?:{id:string;name:string};
@@ -14,7 +14,7 @@ export interface ClientOptions<P extends Protocol=Protocol> {
   tokenProvider?:()=>Promise<string|undefined>|string|undefined;
   reconnect?:boolean; callTimeoutMs?:number;
 }
-export type Notification<P extends Protocol='0.2'>=P extends '0.1'?Ipc_Notification:P extends '0.5'?Ipc05_Notification:P extends '0.4'?Ipc04_Notification:P extends '0.3'?Ipc03_Notification:Ipc02_Notification;
+export type Notification<P extends Protocol='0.2'>=P extends '0.1'?Ipc_Notification:P extends '0.6'?Ipc06_Notification:P extends '0.5'?Ipc05_Notification:P extends '0.4'?Ipc04_Notification:P extends '0.3'?Ipc03_Notification:Ipc02_Notification;
 type EventMap<P extends Protocol>={ [N in Notification<P> as N['method']]:N['params'] } & {
   state:Snapshot<P>; notification:Notification<P>; ready:ProtocolMethods[P]['session.hello']['result'];
   fault:Error; disconnect:undefined; reconnecting:number;

@@ -106,3 +106,9 @@ mount methods and generated types are also available. StateStore validates the
 negotiated exact snapshot/delta before installation; old contracts remain isolated.
 The mock continues to implement IPC 0.1/0.2 only. Rendering, hand input, cursor
 ownership and Lua config validation belong to core; see core/docs/M3A.md.
+
+IPC 0.6 clients opt in with `protocol: '0.6'`. Generated types cover independent
+keymap v2 config, core-side preview/save and verified Director capture, plus mode,
+tool/submode, paths and object transforms. Request `input.control` for writes.
+Older versions and the default 0.2 stay unchanged. The mock remains a 0.2 world
+simulator; native input stealing and capture require real core nested tests.

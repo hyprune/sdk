@@ -1,0 +1,451 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hyprune.com/schema/v0.6/input.schema.json",
+  "title": "Hyprune input keymap v2",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "longHoldMs": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 5000
+    },
+    "scopeVignette": {
+      "type": "boolean"
+    },
+    "useDistance": {
+      "type": "number",
+      "minimum": 0.2,
+      "maximum": 30
+    },
+    "useTolerance": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 0.5
+    },
+    "captureInputLimit": {
+      "type": "integer",
+      "minimum": 16,
+      "maximum": 1024
+    },
+    "modes": {
+      "type": "object",
+      "properties": {
+        "world": {
+          "type": "object",
+          "properties": {
+            "look": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "forward": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "back": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "left": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "right": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "menu": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "sprint": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "up": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "down": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "use": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "focus": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "noclip": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "scope": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "debug": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "capture": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "carry": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "resize": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "distance": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "rotate": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "tool1": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "tool2": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "tool3": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "tool4": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "tool5": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "transport": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "autopilot": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "primary": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "secondary": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "wheel": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "fly": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "look",
+            "forward",
+            "back",
+            "left",
+            "right",
+            "menu",
+            "sprint",
+            "up",
+            "down",
+            "use",
+            "focus",
+            "noclip",
+            "scope",
+            "debug",
+            "capture",
+            "carry",
+            "resize",
+            "distance",
+            "rotate",
+            "tool1",
+            "tool2",
+            "tool3",
+            "tool4",
+            "tool5",
+            "transport",
+            "autopilot",
+            "primary",
+            "secondary",
+            "wheel",
+            "fly"
+          ],
+          "additionalProperties": false
+        },
+        "interactive": {
+          "type": "object",
+          "properties": {
+            "exit": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "exit"
+          ],
+          "additionalProperties": false
+        },
+        "focus": {
+          "type": "object",
+          "properties": {
+            "exit": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "exit"
+          ],
+          "additionalProperties": false
+        },
+        "menu": {
+          "type": "object",
+          "properties": {
+            "exit": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "exit"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "world",
+        "interactive",
+        "focus",
+        "menu"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "version",
+    "longHoldMs",
+    "scopeVignette",
+    "useDistance",
+    "useTolerance",
+    "captureInputLimit",
+    "modes"
+  ],
+  "additionalProperties": false
+}
