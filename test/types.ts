@@ -55,3 +55,12 @@ function hands(client:HypruneClient<'0.5'>, old:HypruneClient<'0.4'>) {
  old.on('state',s=>console.log(s.state.interaction));
 }
 void hands;
+
+function hud(client:HypruneClient<'0.9'>, old:HypruneClient<'0.8'>) {
+ client.call('hud.subscribe',{topics:['hud.pose','hud.frame']});
+ // @ts-expect-error frozen 0.8 has no opt-in HUD streams
+ old.call('hud.subscribe',{topics:['hud.pose']});
+ // @ts-expect-error notifications are not callable RPC methods
+ client.call('hud.pose',{});
+}
+void hud;
