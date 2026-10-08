@@ -112,3 +112,10 @@ keymap v2 config, core-side preview/save and verified Director capture, plus mod
 tool/submode, paths and object transforms. Request `input.control` for writes.
 Older versions and the default 0.2 stay unchanged. The mock remains a 0.2 world
 simulator; native input stealing and capture require real core nested tests.
+
+
+IPC 0.7 adds typed graphics discovery/persistence (`graphics.get`/`graphics.set`);
+IPC 0.8 adds `keymap.holds` timing for local shell animation. Pass an explicit
+protocol to `HypruneClient`; defaults and earlier shapes remain unchanged.
+Generated types and offline validators are pinned to schema e0739d1. The mock
+still supports its existing scenarios; this update does not claim a GPU mock.

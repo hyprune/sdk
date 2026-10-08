@@ -15,17 +15,19 @@ for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSy
 for (const name of ['common','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.4/${name}.schema.json`, import.meta.url))));
 for (const name of ['common','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.5/${name}.schema.json`, import.meta.url))));
 for (const name of ['common','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.6/${name}.schema.json`, import.meta.url))));
+for (const v of ['0.7','0.8']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v${v}/ipc.schema.json`, import.meta.url))));
 const validators = new Map();
 
 // The optional method binds a response to the caller's outstanding request.
 // An envelope alone cannot know whether a valid result belongs to that method.
 export function validate(kind, value, method, version = '0.1') {
   if (!names.includes(kind) || kind === 'common') throw new Error(`Unknown schema: ${kind}`);
-  if (!['0.1','0.2','0.3','0.4','0.5','0.6'].includes(version)) throw new Error(`Unknown contract: ${version}`);
+  if (!['0.1','0.2','0.3','0.4','0.5','0.6','0.7','0.8'].includes(version)) throw new Error(`Unknown contract: ${version}`);
   const key = `${version}:${kind}:${method || ''}`;
   if (method && kind !== 'ipc') throw new Error('Method context is only valid for IPC');
   if (!validators.has(key)) {
-    let schema = `${version === '0.2' && ['world','ipc'].includes(kind) ? base.replace('/v0/','/v0.2/') : version === '0.3' && ['world','ipc'].includes(kind) ? base.replace('/v0/','/v0.3/') : version === '0.4' && kind === 'ipc' ? base.replace('/v0/','/v0.4/') : version === '0.6' && kind === 'ipc' ? base.replace('/v0/','/v0.6/') : version === '0.6' && kind === 'ipc' ? base.replace('/v0/','/v0.6/') : version === '0.5' && kind === 'ipc' ? base.replace('/v0/','/v0.5/') : base}${kind}.schema.json`;
+    const directory = kind === 'ipc' && version !== '0.1' ? `v${version}` : kind === 'world' && ['0.2','0.3'].includes(version) ? `v${version}` : 'v0';
+    let schema = `https://hyprune.com/schema/${directory}/${kind}.schema.json`;
     if (method) {
       if (!ajv.getSchema(`${schema}#/$defs/${method}.result`)) throw new Error(`Unknown method: ${method}`);
       schema += `#/$defs/${method}.response`;
