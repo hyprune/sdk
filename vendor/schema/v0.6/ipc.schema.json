@@ -402,7 +402,8 @@
               "input.preview",
               "input.set",
               "input.capture",
-              "input.capture.cancel"
+              "input.capture.cancel",
+              "overlay.style"
             ]
           },
           "minItems": 0,
@@ -1877,6 +1878,9 @@
         },
         {
           "$ref": "#/$defs/input.capture.cancel.request"
+        },
+        {
+          "$ref": "#/$defs/overlay.style.request"
         }
       ]
     },
@@ -2019,6 +2023,9 @@
         },
         {
           "$ref": "#/$defs/input.capture.cancel.response"
+        },
+        {
+          "$ref": "#/$defs/overlay.style.response"
         }
       ]
     },
@@ -6327,6 +6334,10 @@
         "invert_y": {
           "type": "boolean",
           "description": "Invert vertical mouse look; default false."
+        },
+        "show_area_markers": {
+          "type": "boolean",
+          "description": "Render optional place/area labels in core; default false."
         }
       },
       "required": [
@@ -7083,6 +7094,274 @@
         },
         "result": {
           "$ref": "#/$defs/input.capture.cancel.result"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "overlayStylePatch": {
+      "type": "object",
+      "properties": {
+        "waypointColor": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "routeColor": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "labelColor": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "promptColor": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "fontFamily": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 96,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "iconAtlas": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "pattern": "^/[^\\u0000]*$",
+                  "maxLength": 4096
+                },
+                "cellSize": {
+                  "type": "integer",
+                  "minimum": 16,
+                  "maximum": 128
+                },
+                "waypointIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255
+                },
+                "promptIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255
+                }
+              },
+              "required": [
+                "path",
+                "cellSize",
+                "waypointIndex",
+                "promptIndex"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "overlayStyle": {
+      "type": "object",
+      "properties": {
+        "waypointColor": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "routeColor": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "labelColor": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "promptColor": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "fontFamily": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 96,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "iconAtlas": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "pattern": "^/[^\\u0000]*$",
+                  "maxLength": 4096
+                },
+                "cellSize": {
+                  "type": "integer",
+                  "minimum": 16,
+                  "maximum": 128
+                },
+                "waypointIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255
+                },
+                "promptIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255
+                }
+              },
+              "required": [
+                "path",
+                "cellSize",
+                "waypointIndex",
+                "promptIndex"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "waypointColor",
+        "routeColor",
+        "labelColor",
+        "promptColor",
+        "fontFamily",
+        "iconAtlas"
+      ]
+    },
+    "overlay.style.params": {
+      "type": "object",
+      "properties": {
+        "leaseId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "style": {
+          "$ref": "#/$defs/overlayStylePatch"
+        }
+      },
+      "required": [
+        "leaseId",
+        "style"
+      ],
+      "additionalProperties": false
+    },
+    "overlay.style.result": {
+      "type": "object",
+      "properties": {
+        "style": {
+          "$ref": "#/$defs/overlayStyle"
+        }
+      },
+      "required": [
+        "style"
+      ],
+      "additionalProperties": false
+    },
+    "overlay.style.request": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "method": {
+          "const": "overlay.style"
+        },
+        "params": {
+          "$ref": "#/$defs/overlay.style.params"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "id",
+        "method",
+        "params"
+      ],
+      "additionalProperties": false
+    },
+    "overlay.style.response": {
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "result": {
+          "$ref": "#/$defs/overlay.style.result"
         }
       },
       "required": [

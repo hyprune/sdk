@@ -500,6 +500,10 @@
     "invert_y": {
       "type": "boolean",
       "description": "Invert vertical mouse look; default false."
+    },
+    "show_area_markers": {
+      "type": "boolean",
+      "description": "Render optional place/area labels in core; default false."
     }
   },
   "required": [
