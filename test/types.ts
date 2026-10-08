@@ -47,3 +47,11 @@ const envClient=clientFromEnvironment();
 envClient.call('camera.get',{}); // dynamic protocol: unavailable methods reject at runtime
 // @ts-expect-error environment-driven clients may be legacy, so location requires narrowing
 console.log(envClient.snapshot?.state.location);
+
+function hands(client:HypruneClient<'0.5'>, old:HypruneClient<'0.4'>) {
+ client.call('surface.pull',{surfaceId:'terminal'});
+ client.on('state',s=>{const slot:number=s.state.interaction.tool;const mode:'movement'|'typing'|'workspace'|'fullscreen'=s.state.interaction.mode;console.log(slot,mode,s.state.apps[0]?.appClass);});
+ // @ts-expect-error the frozen 0.4 state has no hands-on mode or app list
+ old.on('state',s=>console.log(s.state.interaction));
+}
+void hands;

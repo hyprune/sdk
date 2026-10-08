@@ -1,8 +1,8 @@
-import type {Ipc_Snapshot,Ipc_StateDeltaNotification,Ipc02_Snapshot,Ipc02_StateDeltaNotification,Ipc03_Snapshot,Ipc03_StateDeltaNotification} from './generated.js';
+import type {Ipc_Snapshot,Ipc_StateDeltaNotification,Ipc02_Snapshot,Ipc02_StateDeltaNotification,Ipc03_Snapshot,Ipc03_StateDeltaNotification,Ipc04_Snapshot,Ipc04_StateDeltaNotification,Ipc05_Snapshot,Ipc05_StateDeltaNotification} from './generated.js';
 import {validateState,validateWire,type Protocol} from './validation.js';
-export type Snapshot<P extends Protocol='0.2'>=P extends '0.1'?Ipc_Snapshot:P extends '0.3'?Ipc03_Snapshot:Ipc02_Snapshot;
+export type Snapshot<P extends Protocol='0.2'>=P extends '0.1'?Ipc_Snapshot:P extends '0.5'?Ipc05_Snapshot:P extends '0.4'?Ipc04_Snapshot:P extends '0.3'?Ipc03_Snapshot:Ipc02_Snapshot;
 export type State<P extends Protocol='0.2'>=Snapshot<P>['state'];
-export type Delta<P extends Protocol='0.2'>=P extends '0.1'?Ipc_StateDeltaNotification['params']:P extends '0.3'?Ipc03_StateDeltaNotification['params']:Ipc02_StateDeltaNotification['params'];
+export type Delta<P extends Protocol='0.2'>=P extends '0.1'?Ipc_StateDeltaNotification['params']:P extends '0.5'?Ipc05_StateDeltaNotification['params']:P extends '0.4'?Ipc04_StateDeltaNotification['params']:P extends '0.3'?Ipc03_StateDeltaNotification['params']:Ipc02_StateDeltaNotification['params'];
 export class StateStore<P extends Protocol='0.2'> {
   snapshot?:Snapshot<P>;
   subscriptionId?:string;

@@ -1,10 +1,10 @@
-# Hyprune SDK · IPC 0.3
+# Hyprune SDK · IPC 0.1–0.5
 
-TypeScript/JavaScript client, `hyprune-mock` development daemon, and `hyprune` author/debug CLI. MIT. **SDK `0.3.0`, default IPC `0.2`, explicit IPC `0.1` compatibility.** World formats `0.1`/`0.2` are supported; extension and screen manifests remain `0.1`.
+TypeScript/JavaScript client, `hyprune-mock` development daemon, and `hyprune` author/debug CLI. MIT. **SDK `0.3.0`, default IPC `0.2`, explicit IPC `0.1` compatibility.** World formats `0.1`/`0.2`/`0.3` are supported; extension and screen manifests remain `0.1`.
 
 RFC-0007 chooses JavaScript as the first reference client. TypeScript supplies generated types and compiles to JavaScript for **Node >=22.12 and Bun**; Python is used only by the core test harness. Quickshell needs its own native socket bridge; Node modules cannot be imported directly into QML.
 
-Schemas and their Node validator are vendored unchanged from [hyprune/schema at 4facaa1](https://github.com/hyprune/schema/tree/4facaa1a66d01986e0d469762e9f93ac48858892), with SHA-256 verification. Builds neither follow sibling repositories nor fetch schemas. `npm run generate` derives method, result, event, state and manifest types for all three protocols. The former `0.1-mock.1` contract has been removed.
+Schemas and their Node validator are vendored unchanged from [hyprune/schema at 2f8e80e](https://github.com/hyprune/schema/tree/2f8e80e458a930550034206da4458d857a1b1a4a), with SHA-256 verification. Builds neither follow sibling repositories nor fetch schemas. `npm run generate` derives method, result, event, state and manifest types for all five protocols. The former `0.1-mock.1` contract has been removed.
 
 ## First real session
 
@@ -96,3 +96,13 @@ Local verification: **52/52 Node tests with built core**, **50/50 Bun tests**, a
 - [Extension scaffolds and examples](docs/extensions.md)
 - [Tests, conformance and schema updates](docs/testing.md)
 - [RFC gaps and proposed fixes](NOTES-rfc-gaps.md)
+
+## M3A hands-on desktop contract
+
+Use `new HypruneClient({protocol:'0.5', ...})` for revisioned `interaction` mode,
+selected tool, five slots, noclip and cursor state, plus workspace `apps` metadata.
+Custom mounts include metre pose/size with an empty authored anchor ID. IPC 0.4
+mount methods and generated types are also available. StateStore validates the
+negotiated exact snapshot/delta before installation; old contracts remain isolated.
+The mock continues to implement IPC 0.1/0.2 only. Rendering, hand input, cursor
+ownership and Lua config validation belong to core; see core/docs/M3A.md.

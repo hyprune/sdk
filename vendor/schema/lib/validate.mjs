@@ -11,18 +11,20 @@ for (const name of names) {
 for (const name of ['common','world','ipc']) {
   ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.2/${name}.schema.json`, import.meta.url))));
 }
-for (const name of ['common','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.3/${name}.schema.json`, import.meta.url))));
+for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.3/${name}.schema.json`, import.meta.url))));
+for (const name of ['common','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.4/${name}.schema.json`, import.meta.url))));
+for (const name of ['common','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.5/${name}.schema.json`, import.meta.url))));
 const validators = new Map();
 
 // The optional method binds a response to the caller's outstanding request.
 // An envelope alone cannot know whether a valid result belongs to that method.
 export function validate(kind, value, method, version = '0.1') {
   if (!names.includes(kind) || kind === 'common') throw new Error(`Unknown schema: ${kind}`);
-  if (!['0.1','0.2','0.3'].includes(version)) throw new Error(`Unknown contract: ${version}`);
+  if (!['0.1','0.2','0.3','0.4','0.5'].includes(version)) throw new Error(`Unknown contract: ${version}`);
   const key = `${version}:${kind}:${method || ''}`;
   if (method && kind !== 'ipc') throw new Error('Method context is only valid for IPC');
   if (!validators.has(key)) {
-    let schema = `${version === '0.2' && ['world','ipc'].includes(kind) ? base.replace('/v0/','/v0.2/') : version === '0.3' && kind === 'ipc' ? base.replace('/v0/','/v0.3/') : base}${kind}.schema.json`;
+    let schema = `${version === '0.2' && ['world','ipc'].includes(kind) ? base.replace('/v0/','/v0.2/') : version === '0.3' && ['world','ipc'].includes(kind) ? base.replace('/v0/','/v0.3/') : version === '0.4' && kind === 'ipc' ? base.replace('/v0/','/v0.4/') : version === '0.5' && kind === 'ipc' ? base.replace('/v0/','/v0.5/') : base}${kind}.schema.json`;
     if (method) {
       if (!ajv.getSchema(`${schema}#/$defs/${method}.result`)) throw new Error(`Unknown method: ${method}`);
       schema += `#/$defs/${method}.response`;
@@ -57,6 +59,35 @@ export function validate(kind, value, method, version = '0.1') {
     for (const entry of [...value.spawns, ...(value.anchors || [])]) quat(entry.pose.rotation, entry.id);
     for (const zone of value.zones || []) if (zone.bounds.min.some((n, i) => n >= zone.bounds.max[i])) fail(`${zone.id}: bounds min must be below max`);
     unique(value.lightmaps || [], 'material', 'lightmaps');
+    if (value.formatVersion === '0.3') {
+      unique(value.areas || [], 'id', 'areas'); unique(value.areas || [], 'workspaceSlot', 'areas');
+      const anchors = new Map((value.anchors || []).map(a => [a.id, a]));
+      unique(value.dataObjects || [], 'id', 'dataObjects');
+      for(const o of value.dataObjects || []) if(o.mount.role !== 'data-object' || o.mount.interaction !== 'none') fail(`object ${o.id}: role/interaction mismatch`);
+      const objects = new Map((value.dataObjects || []).map(a => [a.id, a]));
+      const zones = new Map((value.placementZones || []).map(a => [a.id, a]));
+      const owned = new Set();
+      for (const area of value.areas || []) {
+        for (const [role, ids] of [['mounted-workspace', [area.primaryAnchor]], ['tool-mount', area.toolAnchors], ['data-object', area.dataAnchors]]) {
+          for (const id of ids) {
+            if (owned.has(id)) fail(`anchor ${id}: multiple area owners`); owned.add(id);
+            if (role === 'data-object' && objects.has(id)) {
+              if (objects.get(id).areaId !== area.id) fail(`object ${id}: area mismatch`);
+            } else if (anchors.get(id)?.mount?.role !== role) fail(`anchor ${id}: missing or wrong role`);
+          }
+        }
+        for (const id of area.freePlacementZones || []) if (!zones.has(id)) fail(`zone ${id}: unknown placement volume`);
+        if (area.spawnId && !value.spawns.some(s => s.id === area.spawnId)) fail(`area ${area.id}: unknown spawn`);
+      }
+      for (const a of value.anchors || []) if (a.mount) {
+        if (!owned.has(a.id)) fail(`anchor ${a.id}: no area owner`);
+        const expected = {'mounted-workspace':'focus-in','tool-mount':'in-place','data-object':'none'}[a.mount.role];
+        if (a.mount.interaction !== expected) fail(`anchor ${a.id}: incompatible interaction`);
+        const l=a.mount.limits;
+        if (l && (l.minAspect>l.maxAspect || l.minSize.some((v,i)=>v>l.maxSize[i]))) fail(`anchor ${a.id}: inverted limits`);
+      }
+      for (const zone of zones.values()) if (zone.bounds.min.some((v,i)=>v>=zone.bounds.max[i])) fail(`zone ${zone.id}: inverted bounds`);
+    }
     unique(value.attribution, 'path', 'attribution');
     for (const a of value.attribution) license(a.license, `attribution ${a.path}`);
   }
