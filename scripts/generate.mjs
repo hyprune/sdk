@@ -6,7 +6,7 @@ const docs = Object.fromEntries(names.map(n => [n, JSON.parse(readFileSync(`vend
 for (const name of ['common','world','ipc']) docs[name+'02']=JSON.parse(readFileSync(`vendor/schema/v0.2/${name}.schema.json`));
 for (const name of ['common','ipc']) docs[name+'03']=JSON.parse(readFileSync(`vendor/schema/v0.3/${name}.schema.json`));
 for(const v of ['04','05','06'])for (const name of ['common','ipc'])docs[name+v]=JSON.parse(readFileSync(`vendor/schema/v0.${Number(v)}/${name}.schema.json`));
-for(const v of ['07','08','09']) docs['ipc'+v]=JSON.parse(readFileSync(`vendor/schema/v0.${Number(v)}/ipc.schema.json`));
+for(const v of ['07','08','09','10']) docs['ipc'+v]=JSON.parse(readFileSync(`vendor/schema/v0.${Number(v)}/ipc.schema.json`));
 const ident = s => s.split(/[^A-Za-z0-9]+/).map(p=>p[0]?.toUpperCase()+p.slice(1)).join('');
 const refName = (file, def) => ident(file)+'_'+ident(def || 'Document');
 function type(s, file) {
@@ -42,12 +42,12 @@ for (const [name,doc] of Object.entries(docs)) {
   for (const [key,s] of Object.entries(doc.$defs || {})) output += `export type ${refName(name,key)} = ${type(s,name)};\n`;
 }
 for (const [name,doc] of Object.entries(docs)) for(const [key,s] of Object.entries(doc.properties || {})) output += `export type ${refName(name,key)} = ${type(s,name)};\n`;
-for (const [name,map] of [['ipc','LegacyMethodMap'],['ipc02','MethodMap'],['ipc03','SessionMethodMap'],['ipc04','MountMethodMap'],['ipc05','HandsMethodMap'],['ipc06','KeymapMethodMap'],['ipc07','GraphicsMethodMap'],['ipc08','HoldMethodMap'],['ipc09','HudMethodMap']]) {
+for (const [name,map] of [['ipc','LegacyMethodMap'],['ipc02','MethodMap'],['ipc03','SessionMethodMap'],['ipc04','MountMethodMap'],['ipc05','HandsMethodMap'],['ipc06','KeymapMethodMap'],['ipc07','GraphicsMethodMap'],['ipc08','HoldMethodMap'],['ipc09','HudMethodMap'],['ipc10','PerformanceMethodMap']]) {
  output+=`\nexport interface ${map} {\n`;
  for(const key of Object.keys(docs[name].$defs).filter(k=>k.endsWith('.params') && docs[name].$defs[k.slice(0,-7)+'.result'])) {
   const method=key.slice(0,-7); output+=`  '${method}': {params: ${refName(name,key)}; result: ${refName(name,method+'.result')}};\n`;
  }
  output+='}\n';
 }
-output+="export interface ProtocolMethods {'0.1':LegacyMethodMap; '0.2':MethodMap; '0.3':SessionMethodMap; '0.4':MountMethodMap; '0.5':HandsMethodMap; '0.6':KeymapMethodMap; '0.7':GraphicsMethodMap; '0.8':HoldMethodMap; '0.9':HudMethodMap}\n";
+output+="export interface ProtocolMethods {'0.1':LegacyMethodMap; '0.2':MethodMap; '0.3':SessionMethodMap; '0.4':MountMethodMap; '0.5':HandsMethodMap; '0.6':KeymapMethodMap; '0.7':GraphicsMethodMap; '0.8':HoldMethodMap; '0.9':HudMethodMap; '0.10':PerformanceMethodMap}\n";
 writeFileSync('src/generated.ts',output);

@@ -64,3 +64,10 @@ function hud(client:HypruneClient<'0.9'>, old:HypruneClient<'0.8'>) {
  client.call('hud.pose',{});
 }
 void hud;
+
+function performance(client:HypruneClient<'0.10'>, old:HypruneClient<'0.9'>) {
+ client.call('graphics.set',{patch:{offload:'on',scale_min:.5,offload_power_cap_w:45}}).then(r=>console.log(r.performance.activeRenderer));
+ // @ts-expect-error 0.9 has no offload mutation
+ old.call('graphics.set',{patch:{offload:'on'}});
+}
+void performance;
