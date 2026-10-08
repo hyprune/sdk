@@ -5792,7 +5792,7 @@
     },
     "apps": {
       "type": "array",
-      "maxItems": 16,
+      "maxItems": 128,
       "items": {
         "type": "object",
         "properties": {
