@@ -383,6 +383,26 @@
               },
               "maxItems": 3,
               "uniqueItems": true
+            },
+            "debug": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "capture": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
             }
           },
           "required": [
@@ -394,6 +414,26 @@
           "type": "object",
           "properties": {
             "exit": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "debug": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "capture": {
               "type": "array",
               "items": {
                 "type": "string",
@@ -421,6 +461,26 @@
               },
               "maxItems": 3,
               "uniqueItems": true
+            },
+            "debug": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "capture": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "maxItems": 3,
+              "uniqueItems": true
             }
           },
           "required": [
@@ -436,6 +496,10 @@
         "menu"
       ],
       "additionalProperties": false
+    },
+    "invert_y": {
+      "type": "boolean",
+      "description": "Invert vertical mouse look; default false."
     }
   },
   "required": [
