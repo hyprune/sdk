@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/hyprune/schema",
-  "commit": "011743afff378ae65a149ea47960959537df0d98",
+  "commit": "153d4d8f97d3d84bd02ff0957418e727fb142e37",
   "version": "0.5.0",
   "protocols": [
     "0.1",
@@ -12,16 +12,21 @@
     "0.7",
     "0.8",
     "0.9",
-    "0.10"
+    "0.10",
+    "0.11",
+    "0.12"
   ],
   "sha256": {
     "LICENSE": "fbca288262847f32b11b67d0a0b9cbed0b777c08e2dcfe752e920724542fb102",
-    "lib/validate.mjs": "3ae29a97f480dc0a44a2e099d9d8248f228c90a11e372f9bb283c418e9e33423",
+    "lib/validate.mjs": "ee48bc2c8219f94da32043c9e590d7cb9f7da88fb637ba7f23f1e0cd7f14042b",
     "v0/common.schema.json": "051da0368f3fb8242632b616d9583b34798df2d3f401840a4a26c86396796506",
     "v0/extension.schema.json": "b5a73bb9f0a6d2b6c12e1ff32c0a39463e08eaa5af245c397cf55aa97613704b",
     "v0/ipc.schema.json": "982df2596d2ae688a1572456330146dc5701e6b7a3571b16cbdeca470dea535f",
     "v0/screen-type.schema.json": "dbe01adbe14c139db458a562887dbf0960031b6312b1ca460fee7391833d5851",
     "v0/world.schema.json": "c99e88eaa0a6ec4c1efacd6633e23dc6d24b99c33a8a3e0525795b34150c1787",
+    "v0.10/ipc.schema.json": "ecdd7cb31c08fc6f5ebfa9c828741ab8ffb9a61a52b56275aa59f698ab3bc649",
+    "v0.11/ipc.schema.json": "de2ee467a5389704d8cda65a6cde56e6da8be83decf3a09559fdcdbd152af82d",
+    "v0.12/ipc.schema.json": "cded701591cd40f2e0eac79190402e607c922533772bdccb833b056bfbe1e9b1",
     "v0.2/common.schema.json": "f8b00d1be570b6b285e2ba6db631347efa7499b951c59ba0ca9b5fc9fbb2b64d",
     "v0.2/ipc.schema.json": "2ffc756163665b449c6e35f09e034ca8c30ca69aaceaeaa9f44aeca1eade7399",
     "v0.2/world.schema.json": "2827f5a73689e4bf4193236bab28b979215cb809d339a4ef5cb25530abc32f5e",
@@ -30,15 +35,15 @@
     "v0.3/world.schema.json": "56efe855b91924964b1b26a7363e080b36d7310b0263bfed0bfc605d1e880ad9",
     "v0.4/common.schema.json": "7d4411fa456019d11918d65d24d582abdf6e5b75c893d71553b2d4396354dba2",
     "v0.4/ipc.schema.json": "d624f3a41d020f89f5963b84abcb83acfffbda0c7ed32613c498f89b541dc7b8",
+    "v0.4/world.schema.json": "a8f56e25b09f4c592cec8d5930b3a22126355dc9fd9c3fb7c07c36420a189b37",
     "v0.5/common.schema.json": "718a4b4fdaa69763f36384a7dce9d185282b47d2608206c30c6f702200fa2e3c",
     "v0.5/ipc.schema.json": "2744c0c8a8f416ec33a1dd3d688a5bbe3bd7fc6193c17860334b317d181fe3b9",
     "v0.6/common.schema.json": "3ac1521713e46a50ddd1d8b5a914718af5f5c28d82c718a65d6465af35d31dd8",
-    "v0.6/ipc.schema.json": "74dc000e7aec6a63abcf601678c7aa2b49b99e250b188dc8843b2ca115cc8b8f",
     "v0.6/input.schema.json": "41193bad62d8b977a781c015614781a76caff25a67aecdc7927e7e6575957fca",
+    "v0.6/ipc.schema.json": "74dc000e7aec6a63abcf601678c7aa2b49b99e250b188dc8843b2ca115cc8b8f",
     "v0.7/ipc.schema.json": "7e3a7ef0a554182671bc972b2c9c14360ce8d8442e7069b545db7670d2bbce07",
     "v0.8/ipc.schema.json": "72d5e186214cff598300cc8b4ef294e6042ecb5f089afd772be4e8c3ac5eea71",
-    "v0.9/ipc.schema.json": "4c56a24da3814a9d7e378bb648ef742ea30fb24b6d97cda9dd0384594b478cf3",
     "v0.9/input.schema.json": "a069cb5db721bf78a3760516b0e6da855b382705eccfa9b41c04d41da5aa6064",
-    "v0.10/ipc.schema.json": "ecdd7cb31c08fc6f5ebfa9c828741ab8ffb9a61a52b56275aa59f698ab3bc649"
+    "v0.9/ipc.schema.json": "4c56a24da3814a9d7e378bb648ef742ea30fb24b6d97cda9dd0384594b478cf3"
   }
 }

@@ -12,21 +12,21 @@ for (const name of ['common','world','ipc']) {
   ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.2/${name}.schema.json`, import.meta.url))));
 }
 for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.3/${name}.schema.json`, import.meta.url))));
-for (const name of ['common','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.4/${name}.schema.json`, import.meta.url))));
+for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.4/${name}.schema.json`, import.meta.url))));
 for (const name of ['common','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.5/${name}.schema.json`, import.meta.url))));
 for (const name of ['common','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.6/${name}.schema.json`, import.meta.url))));
-for (const v of ['0.7','0.8','0.9','0.10']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v${v}/ipc.schema.json`, import.meta.url))));
+for (const v of ['0.7','0.8','0.9','0.10','0.11','0.12']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v${v}/ipc.schema.json`, import.meta.url))));
 const validators = new Map();
 
 // The optional method binds a response to the caller's outstanding request.
 // An envelope alone cannot know whether a valid result belongs to that method.
 export function validate(kind, value, method, version = '0.1') {
   if (!names.includes(kind) || kind === 'common') throw new Error(`Unknown schema: ${kind}`);
-  if (!['0.1','0.2','0.3','0.4','0.5','0.6','0.7','0.8','0.9','0.10'].includes(version)) throw new Error(`Unknown contract: ${version}`);
+  if (!['0.1','0.2','0.3','0.4','0.5','0.6','0.7','0.8','0.9','0.10','0.11','0.12'].includes(version)) throw new Error(`Unknown contract: ${version}`);
   const key = `${version}:${kind}:${method || ''}`;
   if (method && kind !== 'ipc') throw new Error('Method context is only valid for IPC');
   if (!validators.has(key)) {
-    const directory = kind === 'ipc' && version !== '0.1' ? `v${version}` : kind === 'world' && ['0.2','0.3'].includes(version) ? `v${version}` : 'v0';
+    const directory = kind === 'ipc' && version !== '0.1' ? `v${version}` : kind === 'world' && ['0.2','0.3','0.4'].includes(version) ? `v${version}` : 'v0';
     let schema = `https://hyprune.com/schema/${directory}/${kind}.schema.json`;
     if (method) {
       if (!ajv.getSchema(`${schema}#/$defs/${method}.result`)) throw new Error(`Unknown method: ${method}`);
@@ -62,7 +62,7 @@ export function validate(kind, value, method, version = '0.1') {
     for (const entry of [...value.spawns, ...(value.anchors || [])]) quat(entry.pose.rotation, entry.id);
     for (const zone of value.zones || []) if (zone.bounds.min.some((n, i) => n >= zone.bounds.max[i])) fail(`${zone.id}: bounds min must be below max`);
     unique(value.lightmaps || [], 'material', 'lightmaps');
-    if (value.formatVersion === '0.3') {
+    if (['0.3','0.4'].includes(value.formatVersion)) {
       unique(value.areas || [], 'id', 'areas'); unique(value.areas || [], 'workspaceSlot', 'areas');
       const anchors = new Map((value.anchors || []).map(a => [a.id, a]));
       unique(value.dataObjects || [], 'id', 'dataObjects');
@@ -91,6 +91,14 @@ export function validate(kind, value, method, version = '0.1') {
       }
       for (const zone of zones.values()) if (zone.bounds.min.some((v,i)=>v>=zone.bounds.max[i])) fail(`zone ${zone.id}: inverted bounds`);
     }
+    unique(value.climbables || [], 'id', 'climbables');
+    for (const c of value.climbables || []) {
+      const axis = c.top.map((v,i) => v-c.bottom[i]);
+      const length = Math.hypot(...axis);
+      if (length < .5 || length > 100 || axis[1]/length < .25) fail(`${c.id}: invalid ascending segment`);
+      if (Math.abs(Math.hypot(...c.facing)-1) > .001 || Math.abs(axis.reduce((v,n,i)=>v+n*c.facing[i],0)/length) > .001) fail(`${c.id}: facing must be unit and perpendicular to segment`);
+      for (const end of ['top','bottom']) if (Math.hypot(...c.exits[end].map((v,i)=>v-c[end][i])) > 3) fail(`${c.id}: exit too far from segment`);
+    }
     unique(value.attribution, 'path', 'attribution');
     for (const a of value.attribution) license(a.license, `attribution ${a.path}`);
   }
@@ -113,7 +121,10 @@ export function validate(kind, value, method, version = '0.1') {
     const state = value.result?.snapshot?.state;
     const changes = value.method === 'state.delta' ? value.params.changes : undefined;
     for (const s of [state, changes].filter(Boolean)) {
-      if (s.movement) quat(s.movement.orientation, 'movement');
+      if (s.movement) {
+        quat(s.movement.orientation, 'movement');
+        if (version === '0.11' && ((s.movement.state === 'climbing') !== (typeof s.movement.ladderId === 'string'))) fail('climbing requires ladderId; other states require null');
+      }
       if (s.surfaces) unique(s.surfaces, 'id', 'surfaces');
       if (s.shell) {
         unique(s.shell.leases, 'id', 'leases');

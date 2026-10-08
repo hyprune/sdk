@@ -119,3 +119,11 @@ IPC 0.8 adds `keymap.holds` timing for local shell animation. Pass an explicit
 protocol to `HypruneClient`; defaults and earlier shapes remain unchanged.
 Generated types and offline validators are pinned to schema e0739d1. The mock
 still supports its existing scenarios; this update does not claim a GPU mock.
+
+IPC **0.11** adds climbing movement activity; **0.12** adds private recording and
+fixed-step/camera replay. The generated `ClimbingMethodMap` and
+`RecordingMethodMap` inherit all older methods. Recording/replay methods require
+`input.control`; keystrokes delivered to apps are masked by default. Use
+`recording.start`, `recording.mark`, `recording.stop`, and `replay.start` with an
+optional assertion spec. Camera mode accepts `smoothingMs` and never types into
+apps. Schemas now pin canonical schema `153d4d8` including world format 0.4.

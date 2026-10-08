@@ -71,3 +71,13 @@ function performance(client:HypruneClient<'0.10'>, old:HypruneClient<'0.9'>) {
  old.call('graphics.set',{patch:{offload:'on'}});
 }
 void performance;
+
+function recording(client:HypruneClient<'0.12'>, old:HypruneClient<'0.11'>) {
+ client.call('recording.start',{includeAppKeys:false});
+ client.call('replay.start',{path:'/tmp/session.jsonl',mode:'camera',smoothingMs:100,assertions:{marks:{end:{tool:2}}}}).then(s=>console.log(s.playing));
+ // @ts-expect-error 0.11 climbing does not expose input recording
+ old.call('recording.start',{});
+ // @ts-expect-error camera replay cannot request a native-input injection mode
+ client.call('replay.start',{path:'/tmp/session.jsonl',mode:'inject'});
+}
+void recording;
