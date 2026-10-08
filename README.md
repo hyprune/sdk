@@ -127,3 +127,6 @@ fixed-step/camera replay. The generated `ClimbingMethodMap` and
 `recording.start`, `recording.mark`, `recording.stop`, and `replay.start` with an
 optional assertion spec. Camera mode accepts `smoothingMs` and never types into
 apps. Schemas now pin canonical schema `153d4d8` including world format 0.4.
+
+Unreleased IPC 0.12 includes `cursor` interaction/editor mode and the world
+free-cursor toggle. Schema pin: `011bcd0db8eccf5b5392e20a308aa84e0ff8e1a4`.

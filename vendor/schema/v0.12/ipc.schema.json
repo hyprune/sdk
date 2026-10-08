@@ -5894,7 +5894,8 @@
             "movement",
             "typing",
             "workspace",
-            "fullscreen"
+            "fullscreen",
+            "cursor"
           ]
         },
         "tool": {
@@ -6332,6 +6333,16 @@
                   },
                   "maxItems": 3,
                   "uniqueItems": true
+                },
+                "exit": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 96
+                  },
+                  "maxItems": 3,
+                  "uniqueItems": true
                 }
               },
               "required": [
@@ -6365,7 +6376,8 @@
                 "secondary",
                 "wheel",
                 "fly",
-                "record.toggle"
+                "record.toggle",
+                "exit"
               ],
               "additionalProperties": false
             },
@@ -6836,7 +6848,8 @@
             "world",
             "interactive",
             "focus",
-            "menu"
+            "menu",
+            "cursor"
           ]
         },
         "tool": {
@@ -8998,7 +9011,8 @@
                   "world",
                   "interactive",
                   "focus",
-                  "menu"
+                  "menu",
+                  "cursor"
                 ]
               },
               "tool": {
