@@ -4713,7 +4713,6 @@
             "required": [
               "surfaceId",
               "workspaceId",
-              "areaId",
               "anchorId",
               "status"
             ],
