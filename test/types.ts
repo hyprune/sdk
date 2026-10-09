@@ -86,3 +86,13 @@ const photoClient = new HypruneClient({protocol:'0.13',capabilities:['camera.aut
 void photoClient.call('camera.photo',{position:[0,2,4],orientation:[0,0,0,1],fov:15,lensShift:[.2,0],renderScale:1});
 void photoClient.call('camera.release',{});
 void photoClient.call('graphics.set',{patch:{outline:true,visibility_culling:false}});
+
+// IPC 0.14 inherits photo controls and exposes a typed nullable ink tier.
+declare const inkClient: import('../src/client.js').HypruneClient<'0.14'>;
+inkClient.call('graphics.set', {patch:{outline_quality:'smooth'}});
+inkClient.call('graphics.set', {patch:{outline_quality:null}});
+// @ts-expect-error unsupported tier
+inkClient.call('graphics.set', {patch:{outline_quality:'ultra'}});
+
+inkClient.call('graphics.set', {patch:{outline_width_px:3.5,outline_colour:[.2,.4,.6]}});
+inkClient.call('graphics.set', {patch:{outline_width_px:null,outline_colour:null}});

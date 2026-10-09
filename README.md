@@ -136,3 +136,12 @@ IPC **0.13** exposes `camera.photo`/`camera.release` only with a trusted dev
 controls `outline`/`visibility_culling`. Normal shell grants omit camera.author.
 Generated world 0.5 types describe optional ink and directed visibility regions;
 the package validator checks node bounds and conflicting subtree ownership.
+
+IPC **0.14** adds `graphics.outline_quality: "fast" | "smooth" | null` to
+`graphics.set` and Performance data. Null inherits the preset. Fast is a fixed
+1 logical px stroke; smooth honours the world's outline width (1–4 logical px).
+Core performs the effect at internal world resolution before native app surfaces.
+
+Use `graphics.set` with nullable `outline_width_px` (1–4) and `outline_colour`
+(RGB triplet, 0–1) for persistent user overrides. Null restores the current world
+style. `atmosphere.set` is a transient preview, not a settings persistence API.
