@@ -163,3 +163,7 @@ compressed scene assets: `KHR_texture_basisu` KTX2 material textures,
 the shared schema `scene` check (required glTF extensions by world format, PNG
 lightmaps) and drops the bundled glTF validator's KTX2 "unknown image"
 warnings, which predate the extension. Vendored schema: `6250450`.
+
+IPC **0.16** (`HypruneClient<'0.16'>`) adds the typed `upscaler` graphics setting
+(`'fsr1' | 'bilinear' | null`). `PROTOCOLS` in `validation.ts` is the single runtime
+list of negotiable protocols; `Protocol` is derived from it. Vendored schema `1ae2ed1`.

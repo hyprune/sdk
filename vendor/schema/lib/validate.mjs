@@ -16,7 +16,7 @@ for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSy
 for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.5/${name}.schema.json`, import.meta.url))));
 for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.6/${name}.schema.json`, import.meta.url))));
 for (const name of ['common','world']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.7/${name}.schema.json`, import.meta.url))));
-for (const v of ['0.7','0.8','0.9','0.10','0.11','0.12','0.13','0.14','0.15']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v${v}/ipc.schema.json`, import.meta.url))));
+for (const v of ['0.7','0.8','0.9','0.10','0.11','0.12','0.13','0.14','0.15','0.16']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v${v}/ipc.schema.json`, import.meta.url))));
 const validators = new Map();
 
 // Contract versions are dotted numbers; compare numerically, never by list.
@@ -70,7 +70,7 @@ export function validate(kind, value, method, version = '0.1', options = {}) {
     return validateScene(value, version, options.world);
   }
   if (!names.includes(kind) || kind === 'common') throw new Error(`Unknown schema: ${kind}`);
-  if (!['0.1','0.2','0.3','0.4','0.5','0.6','0.7','0.8','0.9','0.10','0.11','0.12','0.13','0.14','0.15'].includes(version)) throw new Error(`Unknown contract: ${version}`);
+  if (!['0.1','0.2','0.3','0.4','0.5','0.6','0.7','0.8','0.9','0.10','0.11','0.12','0.13','0.14','0.15','0.16'].includes(version)) throw new Error(`Unknown contract: ${version}`);
   const key = `${version}:${kind}:${method || ''}`;
   if (method && kind !== 'ipc') throw new Error('Method context is only valid for IPC');
   if (!validators.has(key)) {

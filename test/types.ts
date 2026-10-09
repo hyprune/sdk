@@ -112,3 +112,12 @@ const format07:World07_Document['formatVersion']='0.7';
 void format07;
 // @ts-expect-error a 0.7 document is not labelled 0.6
 const format06as07:World07_Document['formatVersion']='0.6';
+
+// IPC 0.16 adds a typed nullable upscaler choice and inherits 0.14 ink tiers.
+declare const upscalerClient: import('../src/client.js').HypruneClient<'0.16'>;
+upscalerClient.call('graphics.set', {patch:{upscaler:'fsr1',outline_quality:'fast'}});
+upscalerClient.call('graphics.set', {patch:{upscaler:null}});
+// @ts-expect-error unsupported upscaler
+upscalerClient.call('graphics.set', {patch:{upscaler:'fsr2'}});
+// @ts-expect-error 0.15 sessions cannot write the upscaler
+inkClient.call('graphics.set', {patch:{upscaler:'bilinear'}});
