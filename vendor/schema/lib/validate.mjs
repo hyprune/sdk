@@ -13,20 +13,20 @@ for (const name of ['common','world','ipc']) {
 }
 for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.3/${name}.schema.json`, import.meta.url))));
 for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.4/${name}.schema.json`, import.meta.url))));
-for (const name of ['common','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.5/${name}.schema.json`, import.meta.url))));
+for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.5/${name}.schema.json`, import.meta.url))));
 for (const name of ['common','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.6/${name}.schema.json`, import.meta.url))));
-for (const v of ['0.7','0.8','0.9','0.10','0.11','0.12']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v${v}/ipc.schema.json`, import.meta.url))));
+for (const v of ['0.7','0.8','0.9','0.10','0.11','0.12','0.13']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v${v}/ipc.schema.json`, import.meta.url))));
 const validators = new Map();
 
 // The optional method binds a response to the caller's outstanding request.
 // An envelope alone cannot know whether a valid result belongs to that method.
 export function validate(kind, value, method, version = '0.1') {
   if (!names.includes(kind) || kind === 'common') throw new Error(`Unknown schema: ${kind}`);
-  if (!['0.1','0.2','0.3','0.4','0.5','0.6','0.7','0.8','0.9','0.10','0.11','0.12'].includes(version)) throw new Error(`Unknown contract: ${version}`);
+  if (!['0.1','0.2','0.3','0.4','0.5','0.6','0.7','0.8','0.9','0.10','0.11','0.12','0.13'].includes(version)) throw new Error(`Unknown contract: ${version}`);
   const key = `${version}:${kind}:${method || ''}`;
   if (method && kind !== 'ipc') throw new Error('Method context is only valid for IPC');
   if (!validators.has(key)) {
-    const directory = kind === 'ipc' && version !== '0.1' ? `v${version}` : kind === 'world' && ['0.2','0.3','0.4'].includes(version) ? `v${version}` : 'v0';
+    const directory = kind === 'ipc' && version !== '0.1' ? `v${version}` : kind === 'world' && ['0.2','0.3','0.4','0.5'].includes(version) ? `v${version}` : 'v0';
     let schema = `https://hyprune.com/schema/${directory}/${kind}.schema.json`;
     if (method) {
       if (!ajv.getSchema(`${schema}#/$defs/${method}.result`)) throw new Error(`Unknown method: ${method}`);
@@ -57,12 +57,21 @@ export function validate(kind, value, method, version = '0.1') {
     if (!Object.hasOwn(value.extensions || {}, id)) fail(`requiredExtensions: missing ${id}`);
   }
   if (kind === 'world') {
+    const areas=value.visibility?.areas || [];
+    unique(areas,'id','visibility areas');
+    const areaIds=new Set(areas.map(a=>a.id)), nodes=new Set();
+    for(const area of areas){
+      if(area.bounds.min.some((v,i)=>v>=area.bounds.max[i]))fail('visibility bounds inverted');
+      for(const id of area.visibleFrom)if(!areaIds.has(id))fail('unknown visibility area');
+      for(const id of area.nodes){if(nodes.has(id))fail('duplicate visibility node');nodes.add(id);}
+    }
+
     for (const name of ['spawns', 'zones', 'anchors', 'audio']) unique(value[name] || [], 'id', name);
     if (!value.spawns.some(s => s.id === value.defaultSpawn)) fail('defaultSpawn: unknown spawn');
     for (const entry of [...value.spawns, ...(value.anchors || [])]) quat(entry.pose.rotation, entry.id);
     for (const zone of value.zones || []) if (zone.bounds.min.some((n, i) => n >= zone.bounds.max[i])) fail(`${zone.id}: bounds min must be below max`);
     unique(value.lightmaps || [], 'material', 'lightmaps');
-    if (['0.3','0.4'].includes(value.formatVersion)) {
+    if (['0.3','0.4','0.5'].includes(value.formatVersion)) {
       unique(value.areas || [], 'id', 'areas'); unique(value.areas || [], 'workspaceSlot', 'areas');
       const anchors = new Map((value.anchors || []).map(a => [a.id, a]));
       unique(value.dataObjects || [], 'id', 'dataObjects');
@@ -113,7 +122,7 @@ export function validate(kind, value, method, version = '0.1') {
       if ((transition.phase === 'loading') !== (transition.progress === null)) fail('only loading uses indeterminate progress');
       if (transition.phase === 'arrived' && transition.progress !== 1) fail('arrival progress must be 1');
     }
-    if (value.method === 'camera.set') quat(value.params.orientation, 'camera');
+    if ((value.method === 'camera.set' || value.method === 'camera.photo')) quat(value.params.orientation, 'camera');
     if (method === 'camera.get' && value.result) quat(value.result.orientation, 'camera');
     if (value.method === 'state.delta' && value.params.revision <= value.params.baseRevision) fail('delta revision must advance');
     if (value.method === 'shell.overlay' && !value.params.visible && value.params.exclusiveInput) fail('hidden overlays cannot claim exclusive input');

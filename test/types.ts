@@ -81,3 +81,8 @@ function recording(client:HypruneClient<'0.12'>, old:HypruneClient<'0.11'>) {
  client.call('replay.start',{path:'/tmp/session.jsonl',mode:'inject'});
 }
 void recording;
+
+const photoClient = new HypruneClient({protocol:'0.13',capabilities:['camera.author','state.read']});
+void photoClient.call('camera.photo',{position:[0,2,4],orientation:[0,0,0,1],fov:15,lensShift:[.2,0],renderScale:1});
+void photoClient.call('camera.release',{});
+void photoClient.call('graphics.set',{patch:{outline:true,visibility_culling:false}});

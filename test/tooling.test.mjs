@@ -83,3 +83,14 @@ test('world checks lightmap UV1 and supports GLB JSON/BIN packages',async t=>{
 test('world format 0.2 accepts the ratified material profile and retains 0.1',async t=>{
  const {world}=await fixture(t);await mutate(world,m=>m.formatVersion='0.2');const path=join(world,'scene.gltf'),gltf=JSON.parse(await readFile(path));gltf.extensionsRequired=['KHR_texture_transform'];gltf.extensionsUsed=['KHR_texture_transform'];await writeFile(path,JSON.stringify(gltf));assert.equal((await validateWorld(world)).manifest.formatVersion,'0.2');await mutate(world,m=>m.formatVersion='0.1');assert.equal((await validateWorld(world)).manifest.formatVersion,'0.1');
 });
+test('world 0.5 visibility validates glTF node ownership',async t=>{
+ const {world}=await fixture(t);
+ await mutate(world,m=>{m.formatVersion='0.5';m.visibility={areas:[{id:'room',bounds:{min:[-4,-1,-4],max:[4,4,4]},nodes:[0],visibleFrom:[]}]};});
+ assert.equal((await validateWorld(world)).manifest.formatVersion,'0.5');
+ await mutate(world,m=>m.visibility.areas[0].nodes=[999]);
+ await assert.rejects(validateWorld(world),/unknown node/);
+ await mutate(world,m=>{m.visibility.areas[0].nodes=[0];m.visibility.areas.push({id:'other',bounds:{min:[5,-1,-4],max:[10,4,4]},nodes:[1],visibleFrom:[]});});
+ const path=join(world,'scene.gltf'),gltf=JSON.parse(await readFile(path));
+ gltf.nodes[0].children=[1];gltf.nodes.push({});await writeFile(path,JSON.stringify(gltf));
+ await assert.rejects(validateWorld(world),/Conflicting visibility subtree/);
+});

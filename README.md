@@ -130,3 +130,9 @@ apps. Schemas now pin canonical schema `153d4d8` including world format 0.4.
 
 Unreleased IPC 0.12 includes `cursor` interaction/editor mode and the world
 free-cursor toggle. Schema pin: `011bcd0db8eccf5b5392e20a308aa84e0ff8e1a4`.
+
+IPC **0.13** exposes `camera.photo`/`camera.release` only with a trusted dev
+`camera.author` grant, actual roll/FOV/lens shift in camera.get, and Performance
+controls `outline`/`visibility_culling`. Normal shell grants omit camera.author.
+Generated world 0.5 types describe optional ink and directed visibility regions;
+the package validator checks node bounds and conflicting subtree ownership.

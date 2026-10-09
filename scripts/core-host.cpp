@@ -1,6 +1,7 @@
 // Test-only plugin stand-in linked to the independently built core runtime.
 // Uses real Control/world/collision code and real hypruned; no compositor or GL.
 #include "control/Control.hpp"
+#include "ipc/Protocol.hpp"
 #include <csignal>
 #include <fcntl.h>
 #include <filesystem>
@@ -58,14 +59,15 @@ int main(int argc,char**argv) {
     char bytes[196609];auto count=recv(bridge[0],bytes,sizeof bytes,0);if(count<=0)break;auto message=Json::parse(bytes,bytes+count);
     if(message.at("type")=="cancel")cancelled=true;
     if(message.at("type")=="command"){
-     const auto id=message.at("id"),method=message.at("method");auto params=message.at("params");const auto actor=params.value("_actor","host"),client=params.value("_client","org.example.host");params.erase("_actor");params.erase("_client");params.erase("_pid");params.erase("_protocol");
+     const auto id=message.at("id"),method=message.at("method");auto params=message.at("params");const auto actor=params.value("_actor","host"),client=params.value("_client","org.example.host");params.erase("_actor");params.erase("_client");params.erase("_pid");auto protocol=params.value("_protocol","0.1");params.erase("_protocol");
      try {
-      if(method=="_connection.closed"){control.disconnect(actor);publish();reply(id,Json::object());}
+      if(method=="_connection.closed"){control.disconnect(actor,camera);publish();reply(id,Json::object());}
       else if(method=="world.load"){control.beginLoad(params,"output-main");publish();pending=message;cancelled=false;ready=Clock::now()+std::chrono::milliseconds(100);}
       else if(method=="runtime.exit"){control.stop();active=false;publish();reply(id,{{"revision",revision}});}
       else {
        if((method=="travel.start" || method=="autodrive.start") && !active)throw ipc::Error(-32005,"world mode inactive");
-       auto result=control.execute(method,params,actor,client,current.get(),camera,Json::array({"output-main"}));publish();if(method!="camera.get")result["revision"]=revision;reply(id,result);
+       auto result=control.execute(method,params,actor,client,current.get(),camera,Json::array({"output-main"}));publish();if(method!="camera.get")result["revision"]=revision;
+       else if(!ipc::protocol::atLeast(protocol,"0.13"))for(auto field:{"roll","fov","lensShift","held","renderScale"})result.erase(field);reply(id,result);
       }
      }catch(const ipc::Error&e){error(id,e.code,e.what());}catch(const std::exception&e){error(id,-32603,e.what());}
     }

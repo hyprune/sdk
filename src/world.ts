@@ -6,7 +6,7 @@ import {execFileSync} from 'node:child_process';
 import {validateBytes} from 'gltf-validator';
 import {parseJson} from './codec.js';
 import {validateManifest} from './validation.js';
-import type {World_Document,World02_Document} from './generated.js';
+import type {World_Document,World02_Document,World04_Document,World05_Document} from './generated.js';
 export const LIMITS={files:10_000,single:128*1024*1024,total:1024*1024*1024,gpu:512*1024*1024};
 export function packagePath(root:string,path:string):string {
  if(!path || path.startsWith('/') || /[\\:%?#\x00-\x1f]/.test(path) || path.split('/').some(p=>!p || p==='.' || p==='..')) throw new Error('Unsafe package path: '+path);
@@ -45,10 +45,10 @@ function gltfDocument(bytes:Buffer,path:string):any {
  const length=bytes.readUInt32LE(12);if(length>bytes.length-20) throw new Error('Invalid GLB chunk length');
  return parseJson(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(20,20+length)));
 }
-export async function validateWorld(directory:string):Promise<{manifest:World_Document|World02_Document;files:Array<{path:string;size:number}>;digest:string;warnings:string[]}> {
+export async function validateWorld(directory:string):Promise<{manifest:World_Document|World02_Document|World04_Document|World05_Document;files:Array<{path:string;size:number}>;digest:string;warnings:string[]}> {
  const root=resolve(directory),files=inventory(root),manifestBytes=readAsset(root,'world.json');
  if(manifestBytes.length>1_048_576) throw new Error('Manifest exceeds 1 MiB');
- const manifest=parseJson(new TextDecoder('utf-8',{fatal:true}).decode(manifestBytes)) as World_Document|World02_Document;
+ const manifest=parseJson(new TextDecoder('utf-8',{fatal:true}).decode(manifestBytes)) as World_Document|World02_Document|World04_Document|World05_Document;
  const result=validateManifest('world',manifest,undefined,manifest.formatVersion);if(!result.valid) throw new Error(result.errors.join('\n'));
  if(manifest.requiredExtensions?.length) throw new Error('M0 validator supports no required Hyprune world extensions');
  const paths=[manifest.scene,manifest.preview,...(manifest.audio || []).map(a=>a.path),...manifest.attribution.filter(a=>a.path!=='.').map(a=>a.path)].filter((x):x is string=>!!x);
@@ -72,6 +72,12 @@ export async function validateWorld(directory:string):Promise<{manifest:World_Do
  for(let i=0;i<nodes.length;i++) for(const c of nodes[i].children || []) {node(c,'child');if(parents.has(c)) throw new Error('Multiple-parent node');parents.set(c,i);}
  const indegree=nodes.map((_:unknown,i:number)=>parents.has(i)?1:0),queue:number[]=indegree.flatMap((n:number,i:number)=>n===0?[i]:[]);
  let count=0;for(let i=0;i<queue.length;i++){const n=queue[i];count++;for(const c of nodes[n].children || []) if(--indegree[c]===0) queue.push(c);}if(count!==nodes.length) throw new Error('Node cycle');
+ if('visibility' in manifest && manifest.visibility) {
+  const owners=new Map<number,string>();
+  for(const area of manifest.visibility.areas)for(const n of area.nodes){node(n,'visibility');owners.set(n,area.id);}
+  for(const [n,owner] of owners)for(let parent=parents.get(n);parent!==undefined;parent=parents.get(parent))
+   if(owners.has(parent) && owners.get(parent)!==owner)throw new Error('Conflicting visibility subtree');
+ }
  for(const entry of [...manifest.spawns,...(manifest.anchors || [])]) if(entry.node!==undefined) node(entry.node,entry.id);
  for(const entry of [...(manifest.collision || []),...(manifest.navigation?[manifest.navigation]:[])]) {
   node(entry.node,'collision/navigation');const mesh=gltf.meshes?.[nodes[entry.node].mesh];
