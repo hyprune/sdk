@@ -15,18 +15,66 @@ for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSy
 for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.4/${name}.schema.json`, import.meta.url))));
 for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.5/${name}.schema.json`, import.meta.url))));
 for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.6/${name}.schema.json`, import.meta.url))));
+for (const name of ['common','world']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.7/${name}.schema.json`, import.meta.url))));
 for (const v of ['0.7','0.8','0.9','0.10','0.11','0.12','0.13','0.14','0.15']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v${v}/ipc.schema.json`, import.meta.url))));
 const validators = new Map();
 
+// Contract versions are dotted numbers; compare numerically, never by list.
+export function atLeast(version, minimum) {
+  const a = version.split('.').map(Number), b = minimum.split('.').map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++)
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
+  return true;
+}
+// World formats with their own schema directory (0.1 uses v0).
+export const worldFormats = ['0.1','0.2','0.3','0.4','0.5','0.6','0.7'];
+// glTF extensions a package may require, by world format (RFC-0004).
+export function sceneExtensions(version) {
+  const base = ['KHR_materials_unlit','KHR_texture_transform','KHR_materials_emissive_strength'];
+  return atLeast(version, '0.7') ? [...base,'KHR_texture_basisu','EXT_meshopt_compression','KHR_mesh_quantization'] : base;
+}
+// scene.gltf rules that depend on the world format: extensionsRequired, and
+// lightmap textures (world.lightmaps[].texture) stay PNG in every v0 format.
+function validateScene(gltf, version, world) {
+  const errors = [], fail = m => errors.push(m);
+  if (!worldFormats.includes(version)) throw new Error(`Unknown world format: ${version}`);
+  const allowed = new Set(sceneExtensions(version)), required = new Set(gltf.extensionsRequired || []);
+  for (const id of required) if (!allowed.has(id)) fail(`extensionsRequired: ${id} is not allowed in world ${version}`);
+  const textures = gltf.textures || [], images = gltf.images || [];
+  textures.forEach((texture, i) => {
+    if (!texture.extensions?.KHR_texture_basisu) return;
+    if (!allowed.has('KHR_texture_basisu')) fail(`textures/${i}: KHR_texture_basisu needs world 0.7`);
+    else if (!required.has('KHR_texture_basisu')) fail('extensionsRequired: KHR_texture_basisu must be listed when textures use it');
+    const image = images[texture.extensions.KHR_texture_basisu.source];
+    if (!image || (image.mimeType && image.mimeType !== 'image/ktx2') || (image.uri && !/\.ktx2$/i.test(image.uri)))
+      fail(`textures/${i}: KHR_texture_basisu source must be a KTX2 image`);
+  });
+  if ((gltf.bufferViews || []).some(v => v.extensions?.EXT_meshopt_compression) && !required.has('EXT_meshopt_compression'))
+    fail(allowed.has('EXT_meshopt_compression') ? 'extensionsRequired: EXT_meshopt_compression must be listed when buffer views use it'
+                                                : 'bufferViews: EXT_meshopt_compression needs world 0.7');
+  for (const lightmap of world?.lightmaps || []) {
+    const texture = textures[lightmap.texture];
+    if (!texture) { fail(`lightmaps: texture ${lightmap.texture} missing from scene`); continue; }
+    const image = images[texture.source];
+    if (texture.extensions?.KHR_texture_basisu || !image || (image.mimeType && image.mimeType !== 'image/png') || (image.uri && !/\.png$/i.test(image.uri)))
+      fail(`lightmaps: texture ${lightmap.texture} must be a PNG image (KTX2 lightmaps are not allowed in v0)`);
+  }
+  return { valid: errors.length === 0, errors };
+}
+
 // The optional method binds a response to the caller's outstanding request.
 // An envelope alone cannot know whether a valid result belongs to that method.
-export function validate(kind, value, method, version = '0.1') {
+export function validate(kind, value, method, version = '0.1', options = {}) {
+  if (kind === 'scene') {
+    if (method) throw new Error('Method context is only valid for IPC');
+    return validateScene(value, version, options.world);
+  }
   if (!names.includes(kind) || kind === 'common') throw new Error(`Unknown schema: ${kind}`);
   if (!['0.1','0.2','0.3','0.4','0.5','0.6','0.7','0.8','0.9','0.10','0.11','0.12','0.13','0.14','0.15'].includes(version)) throw new Error(`Unknown contract: ${version}`);
   const key = `${version}:${kind}:${method || ''}`;
   if (method && kind !== 'ipc') throw new Error('Method context is only valid for IPC');
   if (!validators.has(key)) {
-    const directory = kind === 'ipc' && version !== '0.1' ? `v${version}` : kind === 'world' && ['0.2','0.3','0.4','0.5','0.6'].includes(version) ? `v${version}` : 'v0';
+    const directory = kind === 'ipc' && version !== '0.1' ? `v${version}` : kind === 'world' && worldFormats.includes(version) && version !== '0.1' ? `v${version}` : 'v0';
     let schema = `https://hyprune.com/schema/${directory}/${kind}.schema.json`;
     if (method) {
       if (!ajv.getSchema(`${schema}#/$defs/${method}.result`)) throw new Error(`Unknown method: ${method}`);
@@ -84,7 +132,7 @@ export function validate(kind, value, method, version = '0.1') {
     for (const entry of [...value.spawns, ...(value.anchors || [])]) quat(entry.pose.rotation, entry.id);
     for (const zone of value.zones || []) if (zone.bounds.min.some((n, i) => n >= zone.bounds.max[i])) fail(`${zone.id}: bounds min must be below max`);
     unique(value.lightmaps || [], 'material', 'lightmaps');
-    if (['0.3','0.4','0.5','0.6'].includes(value.formatVersion)) {
+    if (atLeast(value.formatVersion, '0.3')) {
       unique(value.areas || [], 'id', 'areas'); unique(value.areas || [], 'workspaceSlot', 'areas');
       const anchors = new Map((value.anchors || []).map(a => [a.id, a]));
       unique(value.dataObjects || [], 'id', 'dataObjects');

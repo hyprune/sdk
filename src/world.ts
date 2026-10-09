@@ -6,7 +6,7 @@ import {execFileSync} from 'node:child_process';
 import {validateBytes} from 'gltf-validator';
 import {parseJson} from './codec.js';
 import {validateManifest} from './validation.js';
-import type {World_Document,World02_Document,World04_Document,World05_Document,World06_Document} from './generated.js';
+import type {World_Document,World02_Document,World04_Document,World05_Document,World06_Document,World07_Document} from './generated.js';
 export const LIMITS={files:10_000,single:128*1024*1024,total:1024*1024*1024,gpu:512*1024*1024};
 export function packagePath(root:string,path:string):string {
  if(!path || path.startsWith('/') || /[\\:%?#\x00-\x1f]/.test(path) || path.split('/').some(p=>!p || p==='.' || p==='..')) throw new Error('Unsafe package path: '+path);
@@ -45,10 +45,10 @@ function gltfDocument(bytes:Buffer,path:string):any {
  const length=bytes.readUInt32LE(12);if(length>bytes.length-20) throw new Error('Invalid GLB chunk length');
  return parseJson(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(20,20+length)));
 }
-export async function validateWorld(directory:string):Promise<{manifest:World_Document|World02_Document|World04_Document|World05_Document|World06_Document;files:Array<{path:string;size:number}>;digest:string;warnings:string[]}> {
+export async function validateWorld(directory:string):Promise<{manifest:World_Document|World02_Document|World04_Document|World05_Document|World06_Document|World07_Document;files:Array<{path:string;size:number}>;digest:string;warnings:string[]}> {
  const root=resolve(directory),files=inventory(root),manifestBytes=readAsset(root,'world.json');
  if(manifestBytes.length>1_048_576) throw new Error('Manifest exceeds 1 MiB');
- const manifest=parseJson(new TextDecoder('utf-8',{fatal:true}).decode(manifestBytes)) as World_Document|World02_Document|World04_Document|World05_Document|World06_Document;
+ const manifest=parseJson(new TextDecoder('utf-8',{fatal:true}).decode(manifestBytes)) as World_Document|World02_Document|World04_Document|World05_Document|World06_Document|World07_Document;
  const result=validateManifest('world',manifest,undefined,manifest.formatVersion);if(!result.valid) throw new Error(result.errors.join('\n'));
  if(manifest.requiredExtensions?.length) throw new Error('M0 validator supports no required Hyprune world extensions');
  const paths=[manifest.scene,manifest.preview,...(manifest.audio || []).map(a=>a.path),...manifest.attribution.filter(a=>a.path!=='.').map(a=>a.path)].filter((x):x is string=>!!x);
@@ -56,7 +56,9 @@ export async function validateWorld(directory:string):Promise<{manifest:World_Do
  for(const f of files) if(!manifest.attribution.some(a=>a.path==='.' || a.path===f.path || f.path.startsWith(a.path+'/'))) throw new Error('Missing attribution coverage: '+f.path);
  for(const required of ['LICENSE','ATTRIBUTION.md']) if(!files.some(f=>f.path===required)) throw new Error('Missing '+required);
  const bytes=readAsset(root,manifest.scene),gltf=gltfDocument(bytes,manifest.scene);
- if((gltf.extensionsRequired || []).some((id:string)=>!['KHR_materials_unlit','KHR_texture_transform'].includes(id))) throw new Error('Unsupported required glTF extension; M1 profile supports KHR_materials_unlit and KHR_texture_transform');
+ // RFC-0004: required glTF extensions and PNG lightmaps, gated by world format (0.7 adds KTX2/meshopt/quantization).
+ const sceneCheck=validateManifest('scene',gltf,undefined,manifest.formatVersion,{world:manifest});
+ if(!sceneCheck.valid) throw new Error('Unsupported required glTF extension or lightmap for world '+manifest.formatVersion+': '+sceneCheck.errors.join('; '));
  const sceneDir=relative(root,dirname(join(root,manifest.scene)));
  const resource=(uri:string)=>{
   // Do not decode percent escapes: forbidden even if they encode benign text.
@@ -116,7 +118,11 @@ export async function validateWorld(directory:string):Promise<{manifest:World_Do
  const gpu=files.reduce((n,f)=>n+(/\.(png|jpg|jpeg|ktx2|bin|glb)$/i.test(f.path)?f.size:0),0)+(gltf.buffers || []).reduce((n:number,b:any)=>n+b.byteLength,0);
  if(gpu>LIMITS.gpu) throw new Error('World exceeds preliminary 512 MiB resource budget');
  const digest=createHash('sha256');for(const f of files) {digest.update(f.path+'\0'+f.size+'\0');digest.update(readAsset(root,f.path));}
- const warnings=report.issues.messages.filter(m=>m.severity===1).map(m=>`${m.code}: ${m.message}`);
+ // The bundled glTF validator predates KHR_texture_basisu; the scene check above validates it.
+ const ktx2Image=(pointer:string|undefined)=>{const i=/^\/images\/(\d+)/.exec(pointer || '');return !!i && gltf.images?.[Number(i[1])]?.mimeType==='image/ktx2';};
+ const ktx2Noise=(m:any)=>sceneCheck.valid && (gltf.extensionsRequired || []).includes('KHR_texture_basisu') &&
+  ((m.code==='VALUE_NOT_IN_LIST' && /'image\/ktx2'/.test(m.message)) || (m.code==='IMAGE_UNRECOGNIZED_FORMAT' && ktx2Image(m.pointer)));
+ const warnings=report.issues.messages.filter(m=>m.severity===1 && !ktx2Noise(m)).map(m=>`${m.code}: ${m.message}`);
  warnings.push(...backdropWarnings);
  if(manifest.collision?.length || manifest.navigation) warnings.push('Collision/navigation and spawn clearance need authoritative core runtime validation.');
  warnings.push('GPU allocation and image decode budgets require core validation; this is an authoring check.');

@@ -105,3 +105,30 @@ test('world 0.6 far-card declarations warn for descendant CLAMP textures only',a
  g.samplers[0].wrapS=10497;await save();assert.ok(!(await validateWorld(world)).warnings.some(w=>w.includes('CLAMP_TO_EDGE')));
  await mutate(world,m=>m.backdrop.farCards=[99]);await assert.rejects(validateWorld(world),/backdrop farCards: unknown node/);
 });
+
+// World 0.7 (RFC-0004): KTX2 material textures; lightmaps stay PNG; older formats reject.
+const KTX2='q0tUWCAyMLsNChoKAAAAAAEAAAAIAAAACAAAAAAAAAAAAAAAAQAAAAQAAAACAAAAsAAAACwAAADcAAAAJAAAAAAAAAAAAAAAAAAAAAAAAABLAQAAAAAAADQAAAAAAAAAQAAAAAAAAAAyAQAAAAAAABkAAAAAAAAAEAAAAAAAAAAZAQAAAAAAABkAAAAAAAAAEAAAAAAAAAAAAQAAAAAAABkAAAAAAAAAEAAAAAAAAAAsAAAAAAAAAAIAKACmAQEAAwMAABAAAAAAAAAAAAB/AAAAAAAAAAAA/////x8AAABLVFh3cml0ZXIAQmFzaXMgVW5pdmVyc2FsIDIuMTAAACi1L/0gEIEAABcODvB/bO0BAAAAAAAAAAAotS/9IBCBAADbFQ+fDzPM/8PM8//z//P/KLUv/SAQgQAA26QGn2+eef9DyFHZYupz+yi1L/0gQF0BAAQC25IGAA8wwP9DyFHZYupz+9uSAwH/E5QNGQ/wTwMa/9MDAGATYIoxZhM=';
+const PNG1='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=';
+test('world 0.7 accepts KHR_texture_basisu material textures and rejects them before 0.7',async t=>{
+ const {world}=await fixture(t),positions=Buffer.alloc(60);
+ [0,0,0,1,0,0,0,1,0,0,0,1,0,0,1].forEach((n,i)=>positions.writeFloatLE(n,i*4));await writeFile(join(world,'mesh.bin'),positions);
+ await writeFile(join(world,'albedo.ktx2'),Buffer.from(KTX2,'base64'));await writeFile(join(world,'light.png'),Buffer.from(PNG1,'base64'));
+ const g={asset:{version:'2.0'},scene:0,scenes:[{nodes:[0]}],nodes:[{mesh:0}],extensionsUsed:['KHR_texture_basisu'],extensionsRequired:['KHR_texture_basisu'],
+  meshes:[{primitives:[{attributes:{POSITION:0,TEXCOORD_0:1,TEXCOORD_1:1},material:0}]}],materials:[{pbrMetallicRoughness:{baseColorTexture:{index:0}}}],
+  textures:[{extensions:{KHR_texture_basisu:{source:0}}},{source:1}],images:[{uri:'albedo.ktx2',mimeType:'image/ktx2'},{uri:'light.png',mimeType:'image/png'}],
+  buffers:[{uri:'mesh.bin',byteLength:60}],bufferViews:[{buffer:0,byteLength:36,target:34962},{buffer:0,byteOffset:36,byteLength:24,target:34962}],
+  accessors:[{bufferView:0,componentType:5126,count:3,type:'VEC3',min:[0,0,0],max:[1,1,0]},{bufferView:1,componentType:5126,count:3,type:'VEC2'}]};
+ const save=()=>writeFile(join(world,'scene.gltf'),JSON.stringify(g));await save();
+ const light={material:0,texture:1,texCoord:1,encoding:'srgb',intensity:1};
+ await mutate(world,m=>{m.formatVersion='0.7';m.lightmaps=[light];});
+ assert.ok(!(await validateWorld(world)).warnings.some(w=>w.includes('image/ktx2') || w.includes('IMAGE_UNRECOGNIZED_FORMAT')));
+ await mutate(world,m=>m.formatVersion='0.6');await assert.rejects(validateWorld(world),/KHR_texture_basisu is not allowed in world 0.6/);
+ await mutate(world,m=>{m.formatVersion='0.7';m.lightmaps=[{...light,texture:0}];});await assert.rejects(validateWorld(world),/PNG/);
+ await mutate(world,m=>m.lightmaps=[light]);g.extensionsRequired=[];await save();await assert.rejects(validateWorld(world),/must be listed/);
+});
+test('world 0.7 manifests inherit 0.6',()=>{
+ const w=JSON.parse(execFileSync('cat',['examples/world-minimal/world.json'],{encoding:'utf8'}));
+ w.formatVersion='0.7';w.playable={volumes:[{type:'box',min:[-5,0,-5],max:[5,8,5]}]};
+ assert.equal(validateManifest('world',w,undefined,'0.7').valid,true);
+ assert.equal(validateManifest('world',w,undefined,'0.6').valid,false);
+});

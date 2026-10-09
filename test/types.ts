@@ -105,3 +105,10 @@ void playable;
 const invalidPlayable:World06_Document['playable']={maxFlyHeight:'high'};
 // @ts-expect-error a declaration cannot be empty
 const emptyPlayable:World06_Document['playable']={};
+
+// World 0.7 keeps the 0.6 manifest shape under its own format identifier.
+import type {World07_Document} from '../src/generated.js';
+const format07:World07_Document['formatVersion']='0.7';
+void format07;
+// @ts-expect-error a 0.7 document is not labelled 0.6
+const format06as07:World07_Document['formatVersion']='0.6';

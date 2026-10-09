@@ -156,3 +156,10 @@ World validation also accepts format **0.6** (`World06_Document`): world/area
 playable boxes or convex hulls, maximum fly height, and declared backdrop cards.
 `validateWorld()` reports CLAMP_TO_EDGE warnings for far-card texture samplers;
 core remains authoritative for flight, collision and renderer behavior.
+
+World format **0.7** (`World07_Document`) keeps the 0.6 manifest and allows
+compressed scene assets: `KHR_texture_basisu` KTX2 material textures,
+`EXT_meshopt_compression` and `KHR_mesh_quantization`. `validateWorld` applies
+the shared schema `scene` check (required glTF extensions by world format, PNG
+lightmaps) and drops the bundled glTF validator's KTX2 "unknown image"
+warnings, which predate the extension. Vendored schema: `6250450`.
