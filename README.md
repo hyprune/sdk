@@ -151,3 +151,8 @@ IPC `0.15` adds the four shared tool bindings (`primary`, `secondary`,
 `editor.unplaced`, carry-facing and content-scale feedback. Placement 5's
 Alternate pockets the aimed window; it does not restore an old spot. Older
 protocols retain their frozen keymap/state projection.
+
+World validation also accepts format **0.6** (`World06_Document`): world/area
+playable boxes or convex hulls, maximum fly height, and declared backdrop cards.
+`validateWorld()` reports CLAMP_TO_EDGE warnings for far-card texture samplers;
+core remains authoritative for flight, collision and renderer behavior.

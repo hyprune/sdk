@@ -7,6 +7,7 @@ for (const name of ['common','world','ipc']) docs[name+'02']=JSON.parse(readFile
 for (const name of ['common','ipc']) docs[name+'03']=JSON.parse(readFileSync(`vendor/schema/v0.3/${name}.schema.json`));
 for(const v of ['04','05','06'])for (const name of ['common','ipc'])docs[name+v]=JSON.parse(readFileSync(`vendor/schema/v0.${Number(v)}/${name}.schema.json`));
 for(const v of ['07','08','09','10','11','12','13','14','15']) docs['ipc'+v]=JSON.parse(readFileSync(`vendor/schema/v0.${Number(v)}/ipc.schema.json`));
+docs.world06=JSON.parse(readFileSync('vendor/schema/v0.6/world.schema.json'));
 docs.world05=JSON.parse(readFileSync('vendor/schema/v0.5/world.schema.json'));
 docs.world04=JSON.parse(readFileSync('vendor/schema/v0.4/world.schema.json'));
 const ident = s => s.split(/[^A-Za-z0-9]+/).map(p=>p[0]?.toUpperCase()+p.slice(1)).join('');
@@ -22,9 +23,13 @@ function type(s, file) {
   if ('const' in s) return JSON.stringify(s.const);
   if (s.enum) return s.enum.map(JSON.stringify).join(' | ');
   if (s.allOf) return "("+s.allOf.map(x=>type(x,file)).join(" & ")+")";
-  if (s.oneOf || s.anyOf) return '('+(s.oneOf || s.anyOf).map(x=>type(x,file)).join(' | ')+')';
+  if (s.oneOf || s.anyOf) {
+    const {oneOf,anyOf,...base}=s;
+    const union='('+(oneOf || anyOf).map(x=>type(x,file)).join(' | ')+')';
+    return base.type || base.properties ? '('+type(base,file)+' & '+union+')' : union;
+  }
   if(Array.isArray(s.type))return s.type.map(t=>type({...s,type:t},file)).join(' | ');
-  if (s.type === 'object') {
+  if (s.type === 'object' || s.properties) {
     const props = Object.entries(s.properties || {}).map(([k,v]) => `${JSON.stringify(k)}${s.required?.includes(k)?'':'?'}: ${type(v,file)}`).join('; ');
     if (s.additionalProperties && typeof s.additionalProperties === 'object') return `Record<string, ${type(s.additionalProperties,file)}>`;
     return props ? `{ ${props} }` : s.additionalProperties===false?'Record<string, never>':'Record<string, unknown>';

@@ -94,3 +94,14 @@ test('world 0.5 visibility validates glTF node ownership',async t=>{
  gltf.nodes[0].children=[1];gltf.nodes.push({});await writeFile(path,JSON.stringify(gltf));
  await assert.rejects(validateWorld(world),/Conflicting visibility subtree/);
 });
+test('world 0.6 far-card declarations warn for descendant CLAMP textures only',async t=>{
+ const {world}=await fixture(t),positions=Buffer.alloc(60);
+ [0,0,0,1,0,0,0,1,0,0,0,1,0,0,1].forEach((n,i)=>positions.writeFloatLE(n,i*4));await writeFile(join(world,'mesh.bin'),positions);
+ await writeFile(join(world,'card.png'),Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=','base64'));
+ const g={asset:{version:'2.0'},scene:0,scenes:[{nodes:[0]}],nodes:[{children:[1]},{mesh:0}],meshes:[{primitives:[{attributes:{POSITION:0,TEXCOORD_0:1},material:0}]}],materials:[{pbrMetallicRoughness:{baseColorTexture:{index:0}}}],textures:[{source:0,sampler:0}],samplers:[{wrapS:33071,wrapT:10497}],images:[{uri:'card.png'}],buffers:[{uri:'mesh.bin',byteLength:60}],bufferViews:[{buffer:0,byteLength:36,target:34962},{buffer:0,byteOffset:36,byteLength:24,target:34962}],accessors:[{bufferView:0,componentType:5126,count:3,type:'VEC3',min:[0,0,0],max:[1,1,0]},{bufferView:1,componentType:5126,count:3,type:'VEC2'}]};
+ const save=()=>writeFile(join(world,'scene.gltf'),JSON.stringify(g));await save();
+ await mutate(world,m=>{m.formatVersion='0.6';m.playable={maxFlyHeight:12};m.backdrop={farCards:[0]};});
+ assert.ok((await validateWorld(world)).warnings.some(w=>w.includes('node 0 texture 0 uses CLAMP_TO_EDGE (S)')));
+ g.samplers[0].wrapS=10497;await save();assert.ok(!(await validateWorld(world)).warnings.some(w=>w.includes('CLAMP_TO_EDGE')));
+ await mutate(world,m=>m.backdrop.farCards=[99]);await assert.rejects(validateWorld(world),/backdrop farCards: unknown node/);
+});

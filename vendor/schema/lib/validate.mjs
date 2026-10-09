@@ -14,7 +14,7 @@ for (const name of ['common','world','ipc']) {
 for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.3/${name}.schema.json`, import.meta.url))));
 for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.4/${name}.schema.json`, import.meta.url))));
 for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.5/${name}.schema.json`, import.meta.url))));
-for (const name of ['common','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.6/${name}.schema.json`, import.meta.url))));
+for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.6/${name}.schema.json`, import.meta.url))));
 for (const v of ['0.7','0.8','0.9','0.10','0.11','0.12','0.13','0.14','0.15']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v${v}/ipc.schema.json`, import.meta.url))));
 const validators = new Map();
 
@@ -26,7 +26,7 @@ export function validate(kind, value, method, version = '0.1') {
   const key = `${version}:${kind}:${method || ''}`;
   if (method && kind !== 'ipc') throw new Error('Method context is only valid for IPC');
   if (!validators.has(key)) {
-    const directory = kind === 'ipc' && version !== '0.1' ? `v${version}` : kind === 'world' && ['0.2','0.3','0.4','0.5'].includes(version) ? `v${version}` : 'v0';
+    const directory = kind === 'ipc' && version !== '0.1' ? `v${version}` : kind === 'world' && ['0.2','0.3','0.4','0.5','0.6'].includes(version) ? `v${version}` : 'v0';
     let schema = `https://hyprune.com/schema/${directory}/${kind}.schema.json`;
     if (method) {
       if (!ajv.getSchema(`${schema}#/$defs/${method}.result`)) throw new Error(`Unknown method: ${method}`);
@@ -57,6 +57,19 @@ export function validate(kind, value, method, version = '0.1') {
     if (!Object.hasOwn(value.extensions || {}, id)) fail(`requiredExtensions: missing ${id}`);
   }
   if (kind === 'world') {
+    const declarations = [value.playable, ...(value.areas || []).map(a=>a.playable)].filter(Boolean);
+    if ((value.areas || []).reduce((n,a)=>n+(a.playable?.volumes?.length || (a.playable ? 1 : 0)),0)>64) fail('too many area playable volumes');
+    const sub=(a,b)=>a.map((v,i)=>v-b[i]), dot=(a,b)=>a.reduce((n,v,i)=>n+v*b[i],0);
+    const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+    for(const d of declarations) for(const v of d.volumes || []) {
+      if(v.type==='box' && v.min.some((x,i)=>x>=v.max[i])) fail('playable box bounds inverted');
+      if(v.type==='convex') {
+        const p=v.points; let solid=false;
+        for(let i=1;i<p.length;i++)for(let j=i+1;j<p.length;j++)for(let k=j+1;k<p.length;k++)
+          if(Math.abs(dot(sub(p[i],p[0]),cross(sub(p[j],p[0]),sub(p[k],p[0]))))>1e-5)solid=true;
+        if(!solid)fail('playable convex hull must have nonzero volume');
+      }
+    }
     const areas=value.visibility?.areas || [];
     unique(areas,'id','visibility areas');
     const areaIds=new Set(areas.map(a=>a.id)), nodes=new Set();
@@ -71,7 +84,7 @@ export function validate(kind, value, method, version = '0.1') {
     for (const entry of [...value.spawns, ...(value.anchors || [])]) quat(entry.pose.rotation, entry.id);
     for (const zone of value.zones || []) if (zone.bounds.min.some((n, i) => n >= zone.bounds.max[i])) fail(`${zone.id}: bounds min must be below max`);
     unique(value.lightmaps || [], 'material', 'lightmaps');
-    if (['0.3','0.4','0.5'].includes(value.formatVersion)) {
+    if (['0.3','0.4','0.5','0.6'].includes(value.formatVersion)) {
       unique(value.areas || [], 'id', 'areas'); unique(value.areas || [], 'workspaceSlot', 'areas');
       const anchors = new Map((value.anchors || []).map(a => [a.id, a]));
       unique(value.dataObjects || [], 'id', 'dataObjects');

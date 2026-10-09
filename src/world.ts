@@ -6,7 +6,7 @@ import {execFileSync} from 'node:child_process';
 import {validateBytes} from 'gltf-validator';
 import {parseJson} from './codec.js';
 import {validateManifest} from './validation.js';
-import type {World_Document,World02_Document,World04_Document,World05_Document} from './generated.js';
+import type {World_Document,World02_Document,World04_Document,World05_Document,World06_Document} from './generated.js';
 export const LIMITS={files:10_000,single:128*1024*1024,total:1024*1024*1024,gpu:512*1024*1024};
 export function packagePath(root:string,path:string):string {
  if(!path || path.startsWith('/') || /[\\:%?#\x00-\x1f]/.test(path) || path.split('/').some(p=>!p || p==='.' || p==='..')) throw new Error('Unsafe package path: '+path);
@@ -45,10 +45,10 @@ function gltfDocument(bytes:Buffer,path:string):any {
  const length=bytes.readUInt32LE(12);if(length>bytes.length-20) throw new Error('Invalid GLB chunk length');
  return parseJson(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(20,20+length)));
 }
-export async function validateWorld(directory:string):Promise<{manifest:World_Document|World02_Document|World04_Document|World05_Document;files:Array<{path:string;size:number}>;digest:string;warnings:string[]}> {
+export async function validateWorld(directory:string):Promise<{manifest:World_Document|World02_Document|World04_Document|World05_Document|World06_Document;files:Array<{path:string;size:number}>;digest:string;warnings:string[]}> {
  const root=resolve(directory),files=inventory(root),manifestBytes=readAsset(root,'world.json');
  if(manifestBytes.length>1_048_576) throw new Error('Manifest exceeds 1 MiB');
- const manifest=parseJson(new TextDecoder('utf-8',{fatal:true}).decode(manifestBytes)) as World_Document|World02_Document|World04_Document|World05_Document;
+ const manifest=parseJson(new TextDecoder('utf-8',{fatal:true}).decode(manifestBytes)) as World_Document|World02_Document|World04_Document|World05_Document|World06_Document;
  const result=validateManifest('world',manifest,undefined,manifest.formatVersion);if(!result.valid) throw new Error(result.errors.join('\n'));
  if(manifest.requiredExtensions?.length) throw new Error('M0 validator supports no required Hyprune world extensions');
  const paths=[manifest.scene,manifest.preview,...(manifest.audio || []).map(a=>a.path),...manifest.attribution.filter(a=>a.path!=='.').map(a=>a.path)].filter((x):x is string=>!!x);
@@ -67,6 +67,7 @@ export async function validateWorld(directory:string):Promise<{manifest:World_Do
  const report=await validateBytes(new Uint8Array(bytes),{uri:manifest.scene,maxIssues:1000,writeTimestamp:false,externalResourceFunction:async uri=>new Uint8Array(readAsset(root,resource(uri)))});
  if(report.issues.numErrors) throw new Error('glTF validation failed: '+report.issues.messages.filter(m=>m.severity===0).map(m=>`${m.code} ${m.pointer || ''}: ${m.message}`).join('; '));
  const nodes=gltf.nodes || [];
+ const backdropWarnings:string[]=[];
  const node=(index:number,label:string)=>{if(!Number.isInteger(index) || index<0 || index>=nodes.length) throw new Error(label+': unknown node '+index);};
  const parents=new Map<number,number>();
  for(let i=0;i<nodes.length;i++) for(const c of nodes[i].children || []) {node(c,'child');if(parents.has(c)) throw new Error('Multiple-parent node');parents.set(c,i);}
@@ -77,6 +78,24 @@ export async function validateWorld(directory:string):Promise<{manifest:World_Do
   for(const area of manifest.visibility.areas)for(const n of area.nodes){node(n,'visibility');owners.set(n,area.id);}
   for(const [n,owner] of owners)for(let parent=parents.get(n);parent!==undefined;parent=parents.get(parent))
    if(owners.has(parent) && owners.get(parent)!==owner)throw new Error('Conflicting visibility subtree');
+ }
+ if('backdrop' in manifest && manifest.backdrop) for(const card of manifest.backdrop.farCards) {
+  node(card,'backdrop farCards');
+  for(let i=0;i<nodes.length;i++) {
+   let ancestor:number|undefined=i;while(ancestor!==undefined && ancestor!==card)ancestor=parents.get(ancestor);
+   if(ancestor===undefined)continue;
+   for(const primitive of gltf.meshes?.[nodes[i].mesh]?.primitives || []) {
+    const material=gltf.materials?.[primitive.material] || {}, pbr=material.pbrMetallicRoughness || {};
+    const diffuse=material.extensions?.KHR_materials_pbrSpecularGlossiness?.diffuseTexture;
+    for(const slot of [pbr.baseColorTexture,diffuse,pbr.metallicRoughnessTexture,material.normalTexture,material.occlusionTexture,material.emissiveTexture]) {
+     if(!slot)continue;
+     const sampler=gltf.samplers?.[gltf.textures?.[slot.index]?.sampler];
+     if(sampler?.wrapS!==33071 && sampler?.wrapT!==33071)continue;
+     const warning=`backdrop far card node ${card} texture ${slot.index} uses CLAMP_TO_EDGE (${sampler.wrapS===33071?'S':''}${sampler.wrapT===33071?'T':''}); far cards may smear at their edges`;
+     if(!backdropWarnings.includes(warning))backdropWarnings.push(warning);
+    }
+   }
+  }
  }
  for(const entry of [...manifest.spawns,...(manifest.anchors || [])]) if(entry.node!==undefined) node(entry.node,entry.id);
  for(const entry of [...(manifest.collision || []),...(manifest.navigation?[manifest.navigation]:[])]) {
@@ -98,6 +117,7 @@ export async function validateWorld(directory:string):Promise<{manifest:World_Do
  if(gpu>LIMITS.gpu) throw new Error('World exceeds preliminary 512 MiB resource budget');
  const digest=createHash('sha256');for(const f of files) {digest.update(f.path+'\0'+f.size+'\0');digest.update(readAsset(root,f.path));}
  const warnings=report.issues.messages.filter(m=>m.severity===1).map(m=>`${m.code}: ${m.message}`);
+ warnings.push(...backdropWarnings);
  if(manifest.collision?.length || manifest.navigation) warnings.push('Collision/navigation and spawn clearance need authoritative core runtime validation.');
  warnings.push('GPU allocation and image decode budgets require core validation; this is an authoring check.');
  return {manifest,files,digest:digest.digest('hex'),warnings};

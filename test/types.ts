@@ -96,3 +96,12 @@ inkClient.call('graphics.set', {patch:{outline_quality:'ultra'}});
 
 inkClient.call('graphics.set', {patch:{outline_width_px:3.5,outline_colour:[.2,.4,.6]}});
 inkClient.call('graphics.set', {patch:{outline_width_px:null,outline_colour:null}});
+
+// World 0.6 preserves property types alongside its at-least-one-field union.
+import type {World06_Document} from '../src/generated.js';
+const playable:World06_Document['playable']={volumes:[{type:'convex',points:[[0,0,0],[1,0,0],[0,1,0],[0,0,1]]}],maxFlyHeight:7};
+void playable;
+// @ts-expect-error height is numeric, even with the anyOf branch
+const invalidPlayable:World06_Document['playable']={maxFlyHeight:'high'};
+// @ts-expect-error a declaration cannot be empty
+const emptyPlayable:World06_Document['playable']={};
