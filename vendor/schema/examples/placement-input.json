@@ -1,0 +1,169 @@
+{
+  "version": 2,
+  "longHoldMs": 1000,
+  "scopeVignette": true,
+  "invert_y": false,
+  "useDistance": 6,
+  "useTolerance": 0.12,
+  "captureInputLimit": 256,
+  "modes": {
+    "world": {
+      "look": [
+        "MouseMove"
+      ],
+      "forward": [
+        "k",
+        "w",
+        "Up"
+      ],
+      "back": [
+        "j",
+        "s",
+        "Down"
+      ],
+      "left": [
+        "h",
+        "a",
+        "Left"
+      ],
+      "right": [
+        "l",
+        "d",
+        "Right"
+      ],
+      "menu": [
+        "Tab[L]"
+      ],
+      "sprint": [
+        "Shift_L"
+      ],
+      "up": [
+        "space"
+      ],
+      "down": [
+        "Control_L"
+      ],
+      "use": [
+        "e"
+      ],
+      "focus": [
+        "f"
+      ],
+      "noclip": [
+        "v"
+      ],
+      "scope": [
+        "q"
+      ],
+      "debug": [
+        "F3",
+        "y"
+      ],
+      "capture": [
+        "u"
+      ],
+      "carry": [
+        "Super+LMB"
+      ],
+      "resize": [
+        "Super+RMB"
+      ],
+      "distance": [
+        "Super+Wheel"
+      ],
+      "rotate": [
+        "Super+Ctrl+Wheel"
+      ],
+      "tool1": [
+        "1"
+      ],
+      "tool2": [
+        "2"
+      ],
+      "tool3": [
+        "3"
+      ],
+      "tool4": [
+        "4"
+      ],
+      "hud.cycle": [],
+      "transport": [
+        "z"
+      ],
+      "autopilot": [
+        "x"
+      ],
+      "primary": [
+        "LMB"
+      ],
+      "secondary": [
+        "RMB"
+      ],
+      "fly": [
+        "F4"
+      ],
+      "record.toggle": [],
+      "exit": [
+        "Super+Tab",
+        "Back"
+      ],
+      "tool5": [
+        "5"
+      ],
+      "content.scale": [
+        "Super+Shift+Wheel"
+      ],
+      "window.reset": [
+        "Super+Shift+MMB"
+      ],
+      "carry.facing": [
+        "r"
+      ],
+      "alternate": [
+        "MMB"
+      ],
+      "cycle": [
+        "Wheel"
+      ]
+    },
+    "interactive": {
+      "exit": [
+        "Super+Tab",
+        "Back"
+      ],
+      "debug": [
+        "F3"
+      ],
+      "capture": [
+        "Super+u"
+      ],
+      "record.toggle": []
+    },
+    "focus": {
+      "exit": [
+        "Super+Tab",
+        "Back"
+      ],
+      "debug": [
+        "F3"
+      ],
+      "capture": [
+        "Super+u"
+      ],
+      "record.toggle": []
+    },
+    "menu": {
+      "exit": [
+        "Escape"
+      ],
+      "debug": [
+        "F3"
+      ],
+      "capture": [
+        "Super+u"
+      ],
+      "record.toggle": []
+    }
+  },
+  "show_area_markers": false
+}

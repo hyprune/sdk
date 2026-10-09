@@ -145,3 +145,9 @@ Core performs the effect at internal world resolution before native app surfaces
 Use `graphics.set` with nullable `outline_width_px` (1–4) and `outline_colour`
 (RGB triplet, 0–1) for persistent user overrides. Null restores the current world
 style. `atmosphere.set` is a transient preview, not a settings persistence API.
+
+IPC `0.15` adds the four shared tool bindings (`primary`, `secondary`,
+`alternate`, `cycle`) and generic `editor.toolSlots` / `toolDefinitions`, plus
+`editor.unplaced`, carry-facing and content-scale feedback. Placement 5's
+Alternate pockets the aimed window; it does not restore an old spot. Older
+protocols retain their frozen keymap/state projection.
