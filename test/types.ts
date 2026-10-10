@@ -121,3 +121,30 @@ upscalerClient.call('graphics.set', {patch:{upscaler:null}});
 upscalerClient.call('graphics.set', {patch:{upscaler:'fsr2'}});
 // @ts-expect-error 0.15 sessions cannot write the upscaler
 inkClient.call('graphics.set', {patch:{upscaler:'bilinear'}});
+
+// IPC 0.18 makes the offload cap nullable (automatic) up to 1000 W, adds the
+// offload device choice and reports the cap source and chosen GPU.
+declare const offloadClient: import('../src/client.js').HypruneClient<'0.18'>;
+declare const captureClient: import('../src/client.js').HypruneClient<'0.17'>;
+offloadClient.call('graphics.set', {patch:{offload_power_cap_w:null,offload_device:'auto',upscaler:'fsr1'}});
+offloadClient.call('graphics.set', {patch:{offload_power_cap_w:350,offload_device:'0000:65:00.0'}});
+// @ts-expect-error the device is a string, not a render node index
+offloadClient.call('graphics.set', {patch:{offload_device:128}});
+// @ts-expect-error 0.17 sessions cannot choose the offload device
+captureClient.call('graphics.set', {patch:{offload_device:'auto'}});
+// @ts-expect-error 0.17 sessions cannot request the automatic cap
+captureClient.call('graphics.set', {patch:{offload_power_cap_w:null}});
+offloadClient.call('graphics.get', {}).then(({performance})=>{
+ const source:'profile'|'device'|'configured'|'fallback'=performance.capSource;void source;
+ // @ts-expect-error the device is null until one is chosen
+ const pci:string=performance.device.pci;void pci;
+ if(performance.device){
+  const limit:number|null=performance.device.enforcedLimitW;const own:boolean=performance.device.drivesCompositor;
+  const selection:'auto'|'explicit'=performance.device.selection;void limit;void own;void selection;
+ }
+ const cap:number|null=performance.effective.offload_power_cap_w;void cap;
+});
+captureClient.call('graphics.get', {}).then(({performance})=>{
+ // @ts-expect-error 0.17 Performance records have no cap source
+ void performance.capSource;
+});

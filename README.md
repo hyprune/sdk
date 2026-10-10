@@ -173,3 +173,11 @@ IPC **0.17** (`HypruneClient<'0.17'>`) adds debug capture notes: the
 `capture.annotate {captureId, note}` (shell.control; 0-1000 code points, no control
 characters). `PROTOCOLS` and the method maps follow the vendored pins. Vendored
 schema `2041dff`.
+
+IPC **0.18** (`HypruneClient<'0.18'>`) scales the offload power cap to the device:
+`offload_power_cap_w` is `number | null` (20-1000 W; `null` = automatic, the new
+default) and `offload_device` is `'auto'` or a lowercase PCI address such as
+`'0000:65:00.0'`. `graphics.get/set` Performance records add `capSource`
+(`'profile' | 'device' | 'configured' | 'fallback'`) and `device` (`null` or
+`{pci, node, name, enforcedLimitW, selection, drivesCompositor}`). Vendored schema
+`53c86f4`.
