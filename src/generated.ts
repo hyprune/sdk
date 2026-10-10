@@ -4798,3 +4798,4 @@ export interface UpscalerMethodMap {
   'camera.release': {params: Ipc16_CameraReleaseParams; result: Ipc16_CameraReleaseResult};
 }
 export interface ProtocolMethods {'0.1':LegacyMethodMap; '0.2':MethodMap; '0.3':SessionMethodMap; '0.4':MountMethodMap; '0.5':HandsMethodMap; '0.6':KeymapMethodMap; '0.7':GraphicsMethodMap; '0.8':HoldMethodMap; '0.9':HudMethodMap; '0.10':PerformanceMethodMap; '0.11':ClimbingMethodMap; '0.12':RecordingMethodMap; '0.13':AuthoringMethodMap; '0.14':InkMethodMap; '0.15':PlacementMethodMap; '0.16':UpscalerMethodMap}
+export const PROTOCOLS = ['0.1','0.2','0.3','0.4','0.5','0.6','0.7','0.8','0.9','0.10','0.11','0.12','0.13','0.14','0.15','0.16'] as const;

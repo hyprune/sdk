@@ -1,7 +1,9 @@
 import {validate as upstream} from '../vendor/schema/lib/validate.mjs';
 export {upstream as validateManifest};
-// The only runtime list of negotiable protocols; the type follows from it.
-export const PROTOCOLS = ['0.1','0.2','0.3','0.4','0.5','0.6','0.7','0.8','0.9','0.10','0.11','0.12','0.13','0.14','0.15','0.16'] as const;
+// The only runtime list of negotiable protocols, generated from the vendored IPC
+// pins and their method maps (scripts/generate.mjs); the type follows from it.
+import {PROTOCOLS} from './generated.js';
+export {PROTOCOLS};
 export type Protocol = typeof PROTOCOLS[number];
 export function validateWire(value: unknown, protocol:Protocol='0.2', method?:string):void {
   const result=upstream('ipc',value,method,protocol);

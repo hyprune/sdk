@@ -1,12 +1,17 @@
 // Deliberately small, deterministic generator for the pinned schemas, not a
 // general JSON Schema compiler. Reject new constructs rather than erasing types.
-import {readFileSync, writeFileSync} from 'node:fs';
+import {existsSync, readFileSync, readdirSync, writeFileSync} from 'node:fs';
 const names = ['common','ipc','world','extension','screen-type'];
 const docs = Object.fromEntries(names.map(n => [n, JSON.parse(readFileSync(`vendor/schema/v0/${n}.schema.json`))]));
 for (const name of ['common','world','ipc']) docs[name+'02']=JSON.parse(readFileSync(`vendor/schema/v0.2/${name}.schema.json`));
 for (const name of ['common','ipc']) docs[name+'03']=JSON.parse(readFileSync(`vendor/schema/v0.3/${name}.schema.json`));
 for(const v of ['04','05','06'])for (const name of ['common','ipc'])docs[name+v]=JSON.parse(readFileSync(`vendor/schema/v0.${Number(v)}/${name}.schema.json`));
-for(const v of ['07','08','09','10','11','12','13','14','15','16']) docs['ipc'+v]=JSON.parse(readFileSync(`vendor/schema/v0.${Number(v)}/ipc.schema.json`));
+// Vendored IPC pins come from the schema directories, never a hand list (AGENTS rule 6).
+const minor = v => Number(v.split('.')[1]);
+const ipcVersions = ['0.1', ...readdirSync('vendor/schema').filter(d => /^v0\.\d+$/.test(d) && existsSync(`vendor/schema/${d}/ipc.schema.json`))
+  .map(d => d.slice(1)).sort((a, b) => minor(a) - minor(b))];
+const docName = v => v === '0.1' ? 'ipc' : 'ipc' + String(minor(v)).padStart(2, '0');
+for (const v of ipcVersions.filter(v => minor(v) >= 7)) docs[docName(v)] = JSON.parse(readFileSync(`vendor/schema/v${v}/ipc.schema.json`));
 docs.common07=JSON.parse(readFileSync('vendor/schema/v0.7/common.schema.json'));
 docs.world07=JSON.parse(readFileSync('vendor/schema/v0.7/world.schema.json'));
 docs.world06=JSON.parse(readFileSync('vendor/schema/v0.6/world.schema.json'));
@@ -51,12 +56,18 @@ for (const [name,doc] of Object.entries(docs)) {
   for (const [key,s] of Object.entries(doc.$defs || {})) output += `export type ${refName(name,key)} = ${type(s,name)};\n`;
 }
 for (const [name,doc] of Object.entries(docs)) for(const [key,s] of Object.entries(doc.properties || {})) output += `export type ${refName(name,key)} = ${type(s,name)};\n`;
-for (const [name,map] of [['ipc','LegacyMethodMap'],['ipc02','MethodMap'],['ipc03','SessionMethodMap'],['ipc04','MountMethodMap'],['ipc05','HandsMethodMap'],['ipc06','KeymapMethodMap'],['ipc07','GraphicsMethodMap'],['ipc08','HoldMethodMap'],['ipc09','HudMethodMap'],['ipc10','PerformanceMethodMap'],['ipc11','ClimbingMethodMap'],['ipc12','RecordingMethodMap'],['ipc13','AuthoringMethodMap'],['ipc14','InkMethodMap'],['ipc15','PlacementMethodMap'],['ipc16','UpscalerMethodMap']]) {
+// Each supported IPC version has a deliberately named method map: the SDK's API
+// surface. Every vendored pin must have one, and PROTOCOLS follows this table.
+const methodMaps = {'0.1':'LegacyMethodMap','0.2':'MethodMap','0.3':'SessionMethodMap','0.4':'MountMethodMap','0.5':'HandsMethodMap','0.6':'KeymapMethodMap','0.7':'GraphicsMethodMap','0.8':'HoldMethodMap','0.9':'HudMethodMap','0.10':'PerformanceMethodMap','0.11':'ClimbingMethodMap','0.12':'RecordingMethodMap','0.13':'AuthoringMethodMap','0.14':'InkMethodMap','0.15':'PlacementMethodMap','0.16':'UpscalerMethodMap'};
+const unmapped = ipcVersions.filter(v => !methodMaps[v]), stale = Object.keys(methodMaps).filter(v => !ipcVersions.includes(v));
+if (unmapped.length || stale.length) throw new Error(`IPC method maps out of sync with vendored pins: add ${unmapped.join(', ') || '-'}; remove ${stale.join(', ') || '-'}`);
+for (const [name,map] of ipcVersions.map(v => [docName(v), methodMaps[v]])) {
  output+=`\nexport interface ${map} {\n`;
  for(const key of Object.keys(docs[name].$defs).filter(k=>k.endsWith('.params') && docs[name].$defs[k.slice(0,-7)+'.result'])) {
   const method=key.slice(0,-7); output+=`  '${method}': {params: ${refName(name,key)}; result: ${refName(name,method+'.result')}};\n`;
  }
  output+='}\n';
 }
-output+="export interface ProtocolMethods {'0.1':LegacyMethodMap; '0.2':MethodMap; '0.3':SessionMethodMap; '0.4':MountMethodMap; '0.5':HandsMethodMap; '0.6':KeymapMethodMap; '0.7':GraphicsMethodMap; '0.8':HoldMethodMap; '0.9':HudMethodMap; '0.10':PerformanceMethodMap; '0.11':ClimbingMethodMap; '0.12':RecordingMethodMap; '0.13':AuthoringMethodMap; '0.14':InkMethodMap; '0.15':PlacementMethodMap; '0.16':UpscalerMethodMap}\n";
+output+='export interface ProtocolMethods {'+ipcVersions.map(v => `'${v}':${methodMaps[v]}`).join('; ')+'}\n';
+output+='export const PROTOCOLS = ['+ipcVersions.map(v => `'${v}'`).join(',')+'] as const;\n';
 writeFileSync('src/generated.ts',output);
