@@ -27,6 +27,10 @@ export function atLeast(version, minimum) {
 }
 // World formats: every v0.N directory with a world schema (0.1 uses v0).
 export const worldFormats = ['0.1', ...versions.filter(v => has(v, 'world'))];
+// IPC protocols: every v0.N directory with an IPC schema (0.1 uses v0). Contract
+// versions are all of them (AGENTS rule 6: no hand-kept version lists).
+export const ipcProtocols = ['0.1', ...versions.filter(v => has(v, 'ipc'))];
+export const contractVersions = ['0.1', ...versions];
 // glTF extensions a package may require, by world format (RFC-0004).
 export function sceneExtensions(version) {
   const base = ['KHR_materials_unlit','KHR_texture_transform','KHR_materials_emissive_strength'];
@@ -69,7 +73,7 @@ export function validate(kind, value, method, version = '0.1', options = {}) {
     return validateScene(value, version, options.world);
   }
   if (!names.includes(kind) || kind === 'common') throw new Error(`Unknown schema: ${kind}`);
-  if (!['0.1','0.2','0.3','0.4','0.5','0.6','0.7','0.8','0.9','0.10','0.11','0.12','0.13','0.14','0.15','0.16'].includes(version)) throw new Error(`Unknown contract: ${version}`);
+  if (!contractVersions.includes(version)) throw new Error(`Unknown contract: ${version}`);
   const key = `${version}:${kind}:${method || ''}`;
   if (method && kind !== 'ipc') throw new Error('Method context is only valid for IPC');
   if (!validators.has(key)) {
