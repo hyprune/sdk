@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import Ajv2020 from 'ajv/dist/2020.js';
 import parseSpdx from 'spdx-expression-parse';
 
@@ -8,15 +8,14 @@ const base = 'https://hyprune.com/schema/v0/';
 for (const name of names) {
   ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0/${name}.schema.json`, import.meta.url))));
 }
-for (const name of ['common','world','ipc']) {
-  ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.2/${name}.schema.json`, import.meta.url))));
-}
-for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.3/${name}.schema.json`, import.meta.url))));
-for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.4/${name}.schema.json`, import.meta.url))));
-for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.5/${name}.schema.json`, import.meta.url))));
-for (const name of ['common','world','ipc']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.6/${name}.schema.json`, import.meta.url))));
-for (const name of ['common','world']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v0.7/${name}.schema.json`, import.meta.url))));
-for (const v of ['0.7','0.8','0.9','0.10','0.11','0.12','0.13','0.14','0.15','0.16']) ajv.addSchema(JSON.parse(readFileSync(new URL(`../v${v}/ipc.schema.json`, import.meta.url))));
+// Versioned directories (v0.N) hold a world format and/or an IPC version; discover
+// them rather than keeping a hand list, so a new pinned schema can't be forgotten.
+const root = new URL('../', import.meta.url);
+const byVersion = (a, b) => { const [x, y] = [a, b].map(v => v.split('.').map(Number)); return x[0] - y[0] || x[1] - y[1]; };
+const versions = readdirSync(root).filter(d => /^v0\.\d+$/.test(d)).map(d => d.slice(1)).sort(byVersion);
+const has = (version, name) => existsSync(new URL(`v${version}/${name}.schema.json`, root));
+for (const v of versions) for (const name of ['common', 'world', 'ipc'])
+  if (has(v, name)) ajv.addSchema(JSON.parse(readFileSync(new URL(`v${v}/${name}.schema.json`, root))));
 const validators = new Map();
 
 // Contract versions are dotted numbers; compare numerically, never by list.
@@ -26,8 +25,8 @@ export function atLeast(version, minimum) {
     if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
   return true;
 }
-// World formats with their own schema directory (0.1 uses v0).
-export const worldFormats = ['0.1','0.2','0.3','0.4','0.5','0.6','0.7'];
+// World formats: every v0.N directory with a world schema (0.1 uses v0).
+export const worldFormats = ['0.1', ...versions.filter(v => has(v, 'world'))];
 // glTF extensions a package may require, by world format (RFC-0004).
 export function sceneExtensions(version) {
   const base = ['KHR_materials_unlit','KHR_texture_transform','KHR_materials_emissive_strength'];

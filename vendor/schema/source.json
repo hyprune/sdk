@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/hyprune/schema",
-  "commit": "1ae2ed165893990536e592ed3ab7695477376309",
+  "commit": "f9f357d27cfdb543af662de971cc9abdef1b8d1d",
   "version": "0.5.0",
   "protocols": [
     "0.1",
@@ -22,7 +22,7 @@
   ],
   "sha256": {
     "LICENSE": "fbca288262847f32b11b67d0a0b9cbed0b777c08e2dcfe752e920724542fb102",
-    "lib/validate.mjs": "1c58c42c9633e08667365fc3a6f5f2d4c164cf6fa5eb8564c0b85b2736defd2d",
+    "lib/validate.mjs": "5be039a8089da4c483ed864c6d7ad1145f6f1ef343a33c6dd4295abbb0008270",
     "v0/common.schema.json": "051da0368f3fb8242632b616d9583b34798df2d3f401840a4a26c86396796506",
     "v0/extension.schema.json": "b5a73bb9f0a6d2b6c12e1ff32c0a39463e08eaa5af245c397cf55aa97613704b",
     "v0/ipc.schema.json": "982df2596d2ae688a1572456330146dc5701e6b7a3571b16cbdeca470dea535f",
