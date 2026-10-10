@@ -58,7 +58,7 @@ for (const [name,doc] of Object.entries(docs)) {
 for (const [name,doc] of Object.entries(docs)) for(const [key,s] of Object.entries(doc.properties || {})) output += `export type ${refName(name,key)} = ${type(s,name)};\n`;
 // Each supported IPC version has a deliberately named method map: the SDK's API
 // surface. Every vendored pin must have one, and PROTOCOLS follows this table.
-const methodMaps = {'0.1':'LegacyMethodMap','0.2':'MethodMap','0.3':'SessionMethodMap','0.4':'MountMethodMap','0.5':'HandsMethodMap','0.6':'KeymapMethodMap','0.7':'GraphicsMethodMap','0.8':'HoldMethodMap','0.9':'HudMethodMap','0.10':'PerformanceMethodMap','0.11':'ClimbingMethodMap','0.12':'RecordingMethodMap','0.13':'AuthoringMethodMap','0.14':'InkMethodMap','0.15':'PlacementMethodMap','0.16':'UpscalerMethodMap'};
+const methodMaps = {'0.1':'LegacyMethodMap','0.2':'MethodMap','0.3':'SessionMethodMap','0.4':'MountMethodMap','0.5':'HandsMethodMap','0.6':'KeymapMethodMap','0.7':'GraphicsMethodMap','0.8':'HoldMethodMap','0.9':'HudMethodMap','0.10':'PerformanceMethodMap','0.11':'ClimbingMethodMap','0.12':'RecordingMethodMap','0.13':'AuthoringMethodMap','0.14':'InkMethodMap','0.15':'PlacementMethodMap','0.16':'UpscalerMethodMap','0.17':'CaptureNotesMethodMap'};
 const unmapped = ipcVersions.filter(v => !methodMaps[v]), stale = Object.keys(methodMaps).filter(v => !ipcVersions.includes(v));
 if (unmapped.length || stale.length) throw new Error(`IPC method maps out of sync with vendored pins: add ${unmapped.join(', ') || '-'}; remove ${stale.join(', ') || '-'}`);
 for (const [name,map] of ipcVersions.map(v => [docName(v), methodMaps[v]])) {

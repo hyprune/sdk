@@ -167,3 +167,9 @@ warnings, which predate the extension. Vendored schema: `6250450`.
 IPC **0.16** (`HypruneClient<'0.16'>`) adds the typed `upscaler` graphics setting
 (`'fsr1' | 'bilinear' | null`). `PROTOCOLS` in `validation.ts` is the single runtime
 list of negotiable protocols; `Protocol` is derived from it. Vendored schema `1ae2ed1`.
+
+IPC **0.17** (`HypruneClient<'0.17'>`) adds debug capture notes: the
+`capture.taken` notification (`{captureId, timestampMs, mode}`) and
+`capture.annotate {captureId, note}` (shell.control; 0-1000 code points, no control
+characters). `PROTOCOLS` and the method maps follow the vendored pins. Vendored
+schema `2041dff`.
