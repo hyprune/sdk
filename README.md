@@ -181,3 +181,12 @@ default) and `offload_device` is `'auto'` or a lowercase PCI address such as
 (`'profile' | 'device' | 'configured' | 'fallback'`) and `device` (`null` or
 `{pci, node, name, enforcedLimitW, selection, drivesCompositor}`). Vendored schema
 `53c86f4`.
+
+IPC **0.19** (`HypruneClient<'0.19'>`) adds typed player settings: `player.get {}`
+(state.read) and `player.set {patch}` (movement.control) return `{config, defaults,
+overrides, options, ranges, path, error}` for walk/run speed, view bob, reticle
+style/size/thickness/gap/opacity/outline/colour/dynamic and the grab/mount/placement
+reach limits (`null` in a patch drops the override). Graphics `fov` goes to 120,
+`overlay.style` gains `reticleColor`/`validColor`/`invalidColor` and
+`state.interaction.reticle {state, action}` is required. Everything else, including
+the 0.18 offload keys, is inherited. Vendored schema `f76922b`.

@@ -148,3 +148,17 @@ captureClient.call('graphics.get', {}).then(({performance})=>{
  // @ts-expect-error 0.17 Performance records have no cap source
  void performance.capSource;
 });
+
+// IPC 0.19 adds typed player settings and the interaction reticle.
+declare const playerClient: import('../src/client.js').HypruneClient<'0.19'>;
+playerClient.call('player.get', {}).then(r=>{const reach:number=r.config.reach_grab;const bob:'off'|'subtle'|'normal'=r.defaults.view_bob;void reach;void bob;});
+playerClient.call('player.set', {patch:{walk_speed:5,reticle_colour:[1,0.5,0],view_bob:null}});
+playerClient.call('player.set', {patch:{reticle_colour:'theme',reticle_style:'chevron'}});
+playerClient.call('graphics.set', {patch:{offload_device:'auto',fov:120}});
+playerClient.on('state', s=>{const state:'hidden'|'neutral'|'typing'|'target'|'valid'|'out_of_range'|'invalid'|'holding'=s.state.interaction.reticle.state;void state;});
+// @ts-expect-error unknown reticle style
+playerClient.call('player.set', {patch:{reticle_style:'square'}});
+// @ts-expect-error run_multiplier is not part of the wire contract
+playerClient.call('player.set', {patch:{run_multiplier:2}});
+// @ts-expect-error 0.18 sessions have no player settings
+offloadClient.call('player.get', {});

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {validateWire,PROTOCOLS} from '../dist/src/validation.js';
 const set=patch=>({jsonrpc:'2.0',id:'od',method:'graphics.set',params:{patch}});
 test('IPC 0.18 automatic offload cap and offload device; 0.17 frozen',()=>{
- assert.equal(PROTOCOLS.at(-1),'0.18');
+ assert.ok(PROTOCOLS.includes('0.18'));
  for(const patch of [{offload_power_cap_w:null},{offload_power_cap_w:350},{offload_device:'auto'},{offload_device:'0000:65:00.0'}]) {
   validateWire(set(patch),'0.18');assert.throws(()=>validateWire(set(patch),'0.17'));
  }
