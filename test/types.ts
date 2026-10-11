@@ -186,3 +186,32 @@ pocketClient.on('state', s=>{const level=s.state.spatial.map?.levels?.[0];const 
 pocketClient.call('surface.unpocket', {surfaceId:'surface-1', anchorId:'desk'});
 // @ts-expect-error 0.19 sessions have no pocket actions
 playerClient.call('surface.pocket', {surfaceId:'surface-1'});
+
+// Object and library manifests (RFC-0011): 0.9, the draft 0.10 and the release record.
+import type {Object09_Document,Object10_Document,Library09_Document,LibraryReleases09_Document} from '../src/index.js';
+const bench:Object09_Document={formatVersion:'0.9',id:'bench',version:'1.0.0',name:'Bench',category:'furniture',scene:'object.glb',license:'CC0-1.0',
+ attribution:[{path:'.',author:'Example Author',license:'CC0-1.0'}],bounds:{min:[-0.8,0,-0.25],max:[0.8,0.85,0.25]},thumbnail:'thumbnail.png',
+ traits:{collidable:{node:'proxy'},movable:{surfaces:['floor'],scale:[0.5,2]},seat:{capacity:2,anchors:[{id:'left',position:[-0.4,0,0.55],yaw:0,height:0.45}]}}};
+void bench;
+const walker:Object09_Document['traits']={character:{height:1.7,clips:{walk:{speed:1.4},idle:{},wave:{}},interactions:[{id:'hello',label:'Talk',action:{type:'say',lines:['Hello']}}]}};
+void walker;
+// @ts-expect-error reserved traits can never be present in object format 0.9
+const mover09:Object09_Document['traits']={mover:{speed:2}};void mover09;
+// @ts-expect-error characters need walk and idle clips
+const noIdle:Object09_Document['traits']={character:{height:1.7,clips:{walk:{}}}};void noIdle;
+// @ts-expect-error unknown category
+const badCategory:Object09_Document['category']='weapons';void badCategory;
+// @ts-expect-error say interactions carry lines, not a panel
+const badAction:Object09_Document['traits']={character:{height:1.7,clips:{walk:{},idle:{}},interactions:[{id:'a',label:'A',action:{type:'say',panel:'map'}}]}};void badAction;
+const cart:Object10_Document['traits']={mover:{speed:2,pitch:'follow',item:false},decorative:{animations:[{node:'wheel',type:'spin',axis:[1,0,0],pivot:[0,0,0],period:2}]}};void cart;
+const lamp:Object10_Document['traits']={machine:{primary:'on',inputs:[{id:'on',type:'bool',label:'On',explain:'Lamp power',default:true}],drives:[{input:'on',target:'state:lamp',map:{cases:[{equals:true,to:'lit'}],else:'dark'}}]}};void lamp;
+// @ts-expect-error mapping cases need equals or in
+const noCase:Object10_Document['traits']={machine:{inputs:[{id:'on',type:'bool',label:'On',explain:'Power'}],drives:[{input:'on',target:'state:lamp',map:{cases:[{to:'lit'}]}}]}};void noCase;
+// @ts-expect-error 0.10 still reserves mount
+const mount10:Object10_Document['traits']={mount:{}};void mount10;
+const library:Library09_Document={formatVersion:'0.9',id:'com.example.street',version:'1.2.0',name:'Street',license:'CC0-1.0',attribution:[{path:'.',author:'Example Author',license:'CC0-1.0'}],objects:['bench','street-lantern']};void library;
+// @ts-expect-error a 0.9 library is not a 0.10 one
+const library10:Library09_Document={...library,formatVersion:'0.10'};void library10;
+const releases:LibraryReleases09_Document={'com.example.street@1.2.0':{id:'com.example.street',version:'1.2.0',formatVersion:'0.9',url:'https://example.com/com.example.street-1.2.0.tar.zst',sha256:'f0'.repeat(32),nixHash:'sha256-',published:false}};void releases;
+// @ts-expect-error release records say whether they are published
+const unpublished:LibraryReleases09_Document={'a.b@1.0.0':{id:'a.b',version:'1.0.0',formatVersion:'0.9',url:'https://example.com/a.b-1.0.0.tar.zst',sha256:'',nixHash:''}};void unpublished;

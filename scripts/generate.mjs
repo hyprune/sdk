@@ -20,6 +20,10 @@ docs.world07=JSON.parse(readFileSync('vendor/schema/v0.7/world.schema.json'));
 docs.world06=JSON.parse(readFileSync('vendor/schema/v0.6/world.schema.json'));
 docs.world05=JSON.parse(readFileSync('vendor/schema/v0.5/world.schema.json'));
 docs.world04=JSON.parse(readFileSync('vendor/schema/v0.4/world.schema.json'));
+// Object, library and library release record schemas (RFC-0011) are discovered the same way;
+// they share the world format numbering (object09 = v0.9/object.schema.json).
+for (const kind of ['object','library','library-releases']) for (const d of readdirSync('vendor/schema').filter(d => /^v0\.\d+$/.test(d) && existsSync(`vendor/schema/${d}/${kind}.schema.json`)).sort((a, b) => minor(a.slice(1)) - minor(b.slice(1))))
+  docs[kind + String(minor(d.slice(1))).padStart(2, '0')] = JSON.parse(readFileSync(`vendor/schema/${d}/${kind}.schema.json`));
 const ident = s => s.split(/[^A-Za-z0-9]+/).map(p=>p[0]?.toUpperCase()+p.slice(1)).join('');
 const refName = (file, def) => ident(file)+'_'+ident(def || 'Document');
 function type(s, file) {
@@ -32,7 +36,26 @@ function type(s, file) {
   }
   if ('const' in s) return JSON.stringify(s.const);
   if (s.enum) return s.enum.map(JSON.stringify).join(' | ');
-  if (s.allOf) return "("+s.allOf.map(x=>type(x,file)).join(" & ")+")";
+  // `not: {}` matches nothing (reserved names): the property can never be present.
+  if ('not' in s) {
+    if (Object.keys(s.not).length || Object.keys(s).some(k=>!['not','description','title'].includes(k))) throw new Error(`Unhandled not in ${file}: ${JSON.stringify(s)}`);
+    return 'never';
+  }
+  if (s.allOf) {
+    const {allOf,...base}=s;
+    // An if/then member only makes properties the parent already declares required
+    // (e.g. `values` when type is enum); it refines values, not the TypeScript shape.
+    const refinement=x=>{
+      if (!('if' in x)) return false;
+      const declared=Object.keys(base.properties || {});
+      if (Object.keys(x).some(k=>!['if','then'].includes(k)) || Object.keys(x.then || {}).some(k=>!['properties','required'].includes(k)) ||
+        [...Object.keys(x.then?.properties || {}),...(x.then?.required || [])].some(k=>!declared.includes(k))) throw new Error(`Unhandled if/then in ${file}: ${JSON.stringify(x)}`);
+      return true;
+    };
+    const parts=allOf.filter(x=>!refinement(x)).map(x=>type(x,file));
+    if (base.type || base.properties) parts.unshift(type(base,file));
+    return parts.length===1 ? parts[0] : "("+parts.join(" & ")+")";
+  }
   if (s.oneOf || s.anyOf) {
     const {oneOf,anyOf,...base}=s;
     const union='('+(oneOf || anyOf).map(x=>type(x,file)).join(' | ')+')';
@@ -40,8 +63,14 @@ function type(s, file) {
   }
   if(Array.isArray(s.type))return s.type.map(t=>type({...s,type:t},file)).join(' | ');
   if (s.type === 'object' || s.properties) {
+    // propertyNames only constrains string keys further; TypeScript keys stay strings.
+    if (s.propertyNames && Object.keys(s.propertyNames).some(k=>!['type','minLength','maxLength','pattern','$ref'].includes(k))) throw new Error(`Unhandled propertyNames in ${file}: ${JSON.stringify(s.propertyNames)}`);
     const props = Object.entries(s.properties || {}).map(([k,v]) => `${JSON.stringify(k)}${s.required?.includes(k)?'':'?'}: ${type(v,file)}`).join('; ');
-    if (s.additionalProperties && typeof s.additionalProperties === 'object') return `Record<string, ${type(s.additionalProperties,file)}>`;
+    if (s.additionalProperties && typeof s.additionalProperties === 'object') {
+      const record=`Record<string, ${type(s.additionalProperties,file)}>`;
+      // Named properties beside a typed map (e.g. required clips): both apply.
+      return props && s.required?.length ? `({ ${props} } & ${record})` : record;
+    }
     return props ? `{ ${props} }` : s.additionalProperties===false?'Record<string, never>':'Record<string, unknown>';
   }
   if (s.type === 'array') {
