@@ -1,6 +1,7 @@
 // Deliberately small, deterministic generator for the pinned schemas, not a
 // general JSON Schema compiler. Reject new constructs rather than erasing types.
 import {existsSync, readFileSync, readdirSync, writeFileSync} from 'node:fs';
+import {withHeader} from './readme-header.mjs';
 const names = ['common','ipc','world','extension','screen-type'];
 const docs = Object.fromEntries(names.map(n => [n, JSON.parse(readFileSync(`vendor/schema/v0/${n}.schema.json`))]));
 for (const name of ['common','world','ipc']) docs[name+'02']=JSON.parse(readFileSync(`vendor/schema/v0.2/${name}.schema.json`));
@@ -71,3 +72,4 @@ for (const [name,map] of ipcVersions.map(v => [docName(v), methodMaps[v]])) {
 output+='export interface ProtocolMethods {'+ipcVersions.map(v => `'${v}':${methodMaps[v]}`).join('; ')+'}\n';
 output+='export const PROTOCOLS = ['+ipcVersions.map(v => `'${v}'`).join(',')+'] as const;\n';
 writeFileSync('src/generated.ts',output);
+writeFileSync('README.md',withHeader(readFileSync('README.md','utf8')));
