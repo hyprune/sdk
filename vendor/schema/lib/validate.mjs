@@ -3,6 +3,8 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import parseSpdx from 'spdx-expression-parse';
 
 const names = ['common', 'world', 'extension', 'screen-type', 'ipc'];
+// Object, library and library release record schemas (RFC-0011) live in v0.N directories only.
+const manifestKinds = ['object', 'library', 'library-releases'];
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 const base = 'https://hyprune.com/schema/v0/';
 for (const name of names) {
@@ -14,7 +16,7 @@ const root = new URL('../', import.meta.url);
 const byVersion = (a, b) => { const [x, y] = [a, b].map(v => v.split('.').map(Number)); return x[0] - y[0] || x[1] - y[1]; };
 const versions = readdirSync(root).filter(d => /^v0\.\d+$/.test(d)).map(d => d.slice(1)).sort(byVersion);
 const has = (version, name) => existsSync(new URL(`v${version}/${name}.schema.json`, root));
-for (const v of versions) for (const name of ['common', 'world', 'ipc'])
+for (const v of versions) for (const name of ['common', 'world', 'ipc', ...manifestKinds])
   if (has(v, name)) ajv.addSchema(JSON.parse(readFileSync(new URL(`v${v}/${name}.schema.json`, root))));
 const validators = new Map();
 
@@ -31,6 +33,9 @@ export const worldFormats = ['0.1', ...versions.filter(v => has(v, 'world'))];
 // versions are all of them (AGENTS rule 6: no hand-kept version lists).
 export const ipcProtocols = ['0.1', ...versions.filter(v => has(v, 'ipc'))];
 export const contractVersions = ['0.1', ...versions];
+// Object manifest formats (RFC-0011): every v0.N directory with an object schema.
+// They share the world format numbering and start at 0.9.
+export const objectFormats = versions.filter(v => has(v, 'object'));
 // glTF extensions a package may require, by world format (RFC-0004).
 export function sceneExtensions(version) {
   const base = ['KHR_materials_unlit','KHR_texture_transform','KHR_materials_emissive_strength'];
@@ -39,8 +44,8 @@ export function sceneExtensions(version) {
 // World 0.8 object asset rules that need the asset's glTF (RFC-0004 "world 0.8"):
 // referenced node names exist once, animated subtrees do not nest, and the
 // collision proxy has a mesh and lies outside every animated subtree.
-function validateObjectAsset(gltf, asset, fail) {
-  const nodes = gltf.nodes || [], parents = new Map(), label = `objectAssets ${asset.id}`;
+function validateObjectAsset(gltf, asset, fail, label = `objectAssets ${asset.id}`) {
+  const nodes = gltf.nodes || [], parents = new Map();
   nodes.forEach((n, i) => { for (const c of n.children || []) parents.set(c, i); });
   const find = name => {
     const hits = nodes.flatMap((n, i) => n.name === name ? [i] : []);
@@ -60,13 +65,9 @@ function validateObjectAsset(gltf, asset, fail) {
     }
   }
 }
-// scene.gltf rules that depend on the world format: extensionsRequired, and
-// lightmap textures (world.lightmaps[].texture) stay PNG in every v0 format.
-// With options.asset, `gltf` is that world 0.8 object asset's glTF instead: the
-// same extension rules, the asset rules above, and no lightmaps (assets are never baked).
-function validateScene(gltf, version, world, assetId) {
-  const errors = [], fail = m => errors.push(m);
-  if (!worldFormats.includes(version)) throw new Error(`Unknown world format: ${version}`);
+// glTF extension rules shared by scene.gltf, 0.8 object assets and object manifests:
+// extensionsRequired within the format's list, KTX2 and meshopt listed when used.
+function sceneExtensionRules(gltf, version, fail) {
   const allowed = new Set(sceneExtensions(version)), required = new Set(gltf.extensionsRequired || []);
   for (const id of required) if (!allowed.has(id)) fail(`extensionsRequired: ${id} is not allowed in world ${version}`);
   const textures = gltf.textures || [], images = gltf.images || [];
@@ -81,6 +82,16 @@ function validateScene(gltf, version, world, assetId) {
   if ((gltf.bufferViews || []).some(v => v.extensions?.EXT_meshopt_compression) && !required.has('EXT_meshopt_compression'))
     fail(allowed.has('EXT_meshopt_compression') ? 'extensionsRequired: EXT_meshopt_compression must be listed when buffer views use it'
                                                 : 'bufferViews: EXT_meshopt_compression needs world 0.7');
+}
+// scene.gltf rules that depend on the world format: extensionsRequired, and
+// lightmap textures (world.lightmaps[].texture) stay PNG in every v0 format.
+// With options.asset, `gltf` is that world 0.8 object asset's glTF instead: the
+// same extension rules, the asset rules above, and no lightmaps (assets are never baked).
+function validateScene(gltf, version, world, assetId) {
+  const errors = [], fail = m => errors.push(m);
+  if (!worldFormats.includes(version)) throw new Error(`Unknown world format: ${version}`);
+  sceneExtensionRules(gltf, version, fail);
+  const textures = gltf.textures || [], images = gltf.images || [];
   if (assetId !== undefined) {
     const asset = atLeast(version, '0.8') ? (world?.objectAssets || []).find(a => a.id === assetId) : undefined;
     if (!asset) fail(`objectAssets: unknown asset ${assetId} for world ${version}`);
@@ -97,13 +108,425 @@ function validateScene(gltf, version, world, assetId) {
   return { valid: errors.length === 0, errors };
 }
 
+// Object manifests, libraries and library release records (RFC-0011). The
+// manifest-only rules always run; options add the rules that need more than
+// object.json: `gltf` (the parsed scene glTF, or a GLB's JSON chunk),
+// `directory` (its directory name), `files` ([{path, size}] of the directory),
+// `thumbnail` ({width, height, bytes}) and `measured` (values only a geometry
+// decoder knows: exact rest `bounds`, `maxTextureSize`, `gpuBytes`).
+// Directory and asset limits (RFC-0011 "Budgets and limits", provisional).
+export const objectLimits = Object.freeze({
+  files: 64, directoryBytes: 64 * 1048576, fileBytes: 32 * 1048576,
+  triangles: 50000, characterTriangles: 16000, itemTriangles: 2000,
+  textureSize: 2048, characterTextureSize: 1024, gpuBytes: 48 * 1048576, itemGpuBytes: 1048576,
+  collisionTriangles: 2000, thumbnailSize: 256, thumbnailBytes: 262144,
+  libraryFiles: 4000, libraryBytes: 512 * 1048576, boundsTolerance: 0.01, characterOriginTolerance: 0.05, slotMargin: 0.5,
+});
+// Which traits may share an asset (RFC-0011 "Allowed combinations"; machine per RFC-0013).
+const traitPairs = {
+  decorative: ['collidable', 'movable', 'seat', 'mover', 'machine'], collidable: ['decorative', 'movable', 'seat', 'machine'],
+  movable: ['decorative', 'collidable', 'seat', 'machine'], character: [], mover: ['decorative'],
+  seat: ['decorative', 'collidable', 'movable'], machine: ['decorative', 'collidable', 'movable'],
+};
+function reservedTraits(version) {
+  const reserved = { mount: 'reserved for props that hold a window (RFC-0011 P4)', interactive: 'reserved for use actions (RFC-0011 P4)' };
+  if (!atLeast(version, '0.10')) Object.assign(reserved, { mover: 'needs object format 0.10', machine: 'reserved for RFC-0013 live objects (object format 0.10)' });
+  return reserved;
+}
+const componentMax = { 5120: 127, 5121: 255, 5122: 32767, 5123: 65535 };
+function nodeMatrix(n) {
+  if (n.matrix) return n.matrix.slice();
+  const [x, y, z, w] = n.rotation || [0, 0, 0, 1], [sx, sy, sz] = n.scale || [1, 1, 1], t = n.translation || [0, 0, 0];
+  return [(1 - 2 * (y * y + z * z)) * sx, 2 * (x * y + z * w) * sx, 2 * (x * z - y * w) * sx, 0,
+    2 * (x * y - z * w) * sy, (1 - 2 * (x * x + z * z)) * sy, 2 * (y * z + x * w) * sy, 0,
+    2 * (x * z + y * w) * sz, 2 * (y * z - x * w) * sz, (1 - 2 * (x * x + y * y)) * sz, 0, t[0], t[1], t[2], 1];
+}
+const mul = (a, b) => Array.from({ length: 16 }, (_, i) => { const c = i >> 2, r = i & 3; return a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3]; });
+const apply = (m, p) => [0, 1, 2].map(r => m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r]);
+function primitiveTriangles(gltf, p) {
+  const count = gltf.accessors?.[p.indices ?? p.attributes?.POSITION]?.count || 0, mode = p.mode ?? 4;
+  return mode === 4 ? Math.floor(count / 3) : mode === 5 || mode === 6 ? Math.max(0, count - 2) : 0;
+}
+// The drawn scene graph: world matrix per reachable node (first visit wins; cycles stop).
+function sceneNodes(gltf) {
+  const nodes = gltf.nodes || [], scene = gltf.scenes?.[gltf.scene ?? 0], out = new Map();
+  const visit = (i, parent, depth) => {
+    if (out.has(i) || !nodes[i] || depth > 64) return;
+    const m = mul(parent, nodeMatrix(nodes[i])); out.set(i, m);
+    for (const c of nodes[i].children || []) visit(c, m, depth + 1);
+  };
+  for (const i of scene?.nodes || []) visit(i, nodeMatrix({}), 0);
+  return { scene, out };
+}
+// Rest-pose bounds from accessor min/max: exact when every mesh's world matrix is
+// axis-aligned, else a box that contains the true bounds. Skinned meshes: unknown.
+function accessorBounds(gltf, drawn) {
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  let exact = true, skinned = false;
+  for (const [i, m] of drawn) {
+    const node = gltf.nodes[i], mesh = gltf.meshes?.[node.mesh];
+    if (!mesh) continue;
+    if (node.skin !== undefined) { skinned = true; continue; }
+    for (let c = 0; c < 3; c++) if ([0, 1, 2].filter(r => Math.abs(m[c * 4 + r]) > 1e-6).length > 1) exact = false;
+    for (const p of mesh.primitives || []) {
+      const a = gltf.accessors?.[p.attributes?.POSITION];
+      if (!a?.min || !a?.max) { skinned = true; continue; }
+      const scale = a.normalized && [...a.min, ...a.max].some(v => Math.abs(v) > 1) ? componentMax[a.componentType] || 1 : 1;
+      const [mn, mx] = [a.min, a.max].map(v => v.map(x => Math.max(x / scale, a.normalized ? -1 : -Infinity)));
+      for (let k = 0; k < 8; k++) {
+        const w = apply(m, [k & 1 ? mx[0] : mn[0], k & 2 ? mx[1] : mn[1], k & 4 ? mx[2] : mn[2]]);
+        for (let j = 0; j < 3; j++) { lo[j] = Math.min(lo[j], w[j]); hi[j] = Math.max(hi[j], w[j]); }
+      }
+    }
+  }
+  return skinned || lo[0] === Infinity ? undefined : { min: lo, max: hi, exact };
+}
+function validateObjectGltf(value, version, gltf, options, fail, warn) {
+  const traits = value.traits, slots = value.slots || {}, nodes = gltf.nodes || [], materials = gltf.materials || [];
+  sceneExtensionRules(gltf, version, fail);
+  const { scene, out: drawn } = sceneNodes(gltf);
+  if (!scene) { fail('scene: the glTF has no scene'); return; }
+  const byName = new Map();
+  nodes.forEach((n, i) => { if (n.name !== undefined) byName.set(n.name, [...(byName.get(n.name) || []), i]); });
+  const node = (name, label, { inScene = true } = {}) => {
+    const hits = byName.get(name) || [];
+    if (hits.length !== 1) { fail(`${label}: node "${name}" ${hits.length ? 'is not unique' : 'not found'} in the glTF`); return undefined; }
+    if (inScene && !drawn.has(hits[0])) fail(`${label}: node "${name}" is not in the scene`);
+    return hits[0];
+  };
+  // The 0.8 asset rules: animation and collision node names, nesting, a static proxy mesh.
+  validateObjectAsset(gltf, { animations: traits.decorative?.animations, collision: traits.collidable }, fail, 'traits');
+  for (const a of traits.decorative?.animations || []) if ((byName.get(a.node) || []).length === 1 && !drawn.has(byName.get(a.node)[0])) fail(`traits.decorative: node "${a.node}" is not in the scene`);
+  // Slots: names exist once; a material or node belongs to one states slot; variants map to palette ids.
+  const materialIndex = name => {
+    const hits = materials.flatMap((m, i) => m.name === name ? [i] : []);
+    return hits.length === 1 ? hits[0] : undefined;
+  };
+  const owner = new Map(), slotPrimitives = new Map();
+  const subtree = i => { const seen = new Set(), stack = [i]; while (stack.length) { const n = stack.pop(); if (seen.has(n) || !nodes[n]) continue; seen.add(n); stack.push(...(nodes[n].children || [])); } return [...seen]; };
+  for (const slot of slots.states || []) {
+    const label = `slots.states ${slot.id}`, prims = [];
+    for (const name of slot.materials || []) {
+      const hits = materials.filter(m => m.name === name).length;
+      if (hits !== 1) { fail(`${label}: material "${name}" ${hits ? 'is not unique' : 'not found'} in the glTF`); continue; }
+      const i = materialIndex(name);
+      if (owner.has('m' + i)) fail(`${label}: material "${name}" is also in states slot ${owner.get('m' + i)}`); owner.set('m' + i, slot.id);
+      for (const [n] of drawn) for (const p of gltf.meshes?.[nodes[n].mesh]?.primitives || []) if (p.material === i) prims.push(p);
+      if (!prims.length) warn(`${label}: material "${name}" is not used by the scene`);
+    }
+    for (const name of slot.nodes || []) {
+      const i = node(name, label);
+      if (i === undefined) continue;
+      if (owner.has('n' + i)) fail(`${label}: node "${name}" is also in states slot ${owner.get('n' + i)}`); owner.set('n' + i, slot.id);
+      const meshes = subtree(i).filter(n => nodes[n].mesh !== undefined);
+      if (!meshes.length) fail(`${label}: node "${name}" has no mesh in its subtree`);
+      for (const n of meshes) prims.push(...(gltf.meshes?.[nodes[n].mesh]?.primitives || []));
+    }
+    slotPrimitives.set(slot.id, prims);
+  }
+  const variants = gltf.extensions?.KHR_materials_variants?.variants;
+  if (variants) {
+    const names = variants.map(v => v.name);
+    if (new Set(names).size !== names.length) fail('KHR_materials_variants: duplicate variant names');
+    (gltf.meshes || []).forEach((mesh, m) => (mesh.primitives || []).forEach((p, k) => {
+      const seen = new Set();
+      for (const mapping of p.extensions?.KHR_materials_variants?.mappings || []) {
+        if (!materials[mapping.material]) fail(`meshes/${m}/primitives/${k}: variant mapping to unknown material ${mapping.material}`);
+        for (const v of mapping.variants || []) {
+          if (!variants[v]) fail(`meshes/${m}/primitives/${k}: unknown variant ${v}`);
+          if (seen.has(v)) fail(`meshes/${m}/primitives/${k}: variant ${v} is mapped twice`); seen.add(v);
+        }
+      }
+    }));
+    for (const slot of slots.states || []) {
+      const palette = new Set(slot.palette.map(e => e.id));
+      for (const p of slotPrimitives.get(slot.id) || []) for (const mapping of p.extensions?.KHR_materials_variants?.mappings || [])
+        for (const v of mapping.variants || []) if (variants[v] && !palette.has(variants[v].name))
+          fail(`slots.states ${slot.id}: variant "${variants[v].name}" is not a palette id of the slot`);
+    }
+  }
+  for (const s of slots.stacks || []) node(s.node, `slots.stacks ${s.id}`);
+  for (const t of slots.toggles || []) for (const name of t.nodes) {
+    if (name === traits.collidable?.node) fail(`slots.toggles ${t.id}: the collision proxy can't be toggled`);
+    node(name, `slots.toggles ${t.id}`);
+  }
+  // Characters are skinned and carry their clips; other objects animate declaratively.
+  const clips = new Map((gltf.animations || []).map(a => [a.name, a]));
+  if (traits.character) {
+    if (!(gltf.skins || []).length) fail('traits.character: the glTF has no skin');
+    for (const [name, measured] of Object.entries(traits.character.clips)) {
+      const clip = clips.get(name);
+      if (!clip) { fail(`traits.character: clip "${name}" not found in the glTF`); continue; }
+      if (measured.speed !== undefined) {
+        const speed = clip.extras?.speed;
+        if (typeof speed !== 'number') fail(`traits.character: clip "${name}" has no extras.speed`);
+        else if (Math.abs(measured.speed - speed) > 0.02 * speed) fail(`traits.character: clip "${name}" speed ${measured.speed} differs from extras.speed ${speed} by more than 2%`);
+      }
+    }
+  } else {
+    if ((gltf.skins || []).length) fail('skins: only characters may be skinned');
+    if ((gltf.animations || []).length) warn('animations: glTF animations are ignored outside characters; use traits.decorative');
+  }
+  // Triangle budgets (drawn scene; proxy separately) and bounds.
+  let triangles = 0;
+  for (const [i] of drawn) for (const p of gltf.meshes?.[nodes[i].mesh]?.primitives || []) triangles += primitiveTriangles(gltf, p);
+  const item = traits.mover?.item === true;
+  const cap = traits.character ? objectLimits.characterTriangles : item ? objectLimits.itemTriangles : objectLimits.triangles;
+  if (triangles > cap) fail(`triangles: ${triangles} exceeds ${cap}`);
+  const proxy = traits.collidable && (byName.get(traits.collidable.node) || [])[0];
+  if (proxy !== undefined) {
+    const n = (gltf.meshes?.[nodes[proxy].mesh]?.primitives || []).reduce((s, p) => s + primitiveTriangles(gltf, p), 0);
+    if (n > objectLimits.collisionTriangles) fail(`traits.collidable: proxy has ${n} triangles, more than ${objectLimits.collisionTriangles}`);
+  }
+  if (!options.measured?.bounds) {
+    const b = accessorBounds(gltf, drawn), t = objectLimits.boundsTolerance;
+    if (!b) warn('bounds: not checked (skinned or unbounded geometry needs measured bounds)');
+    else for (let j = 0; j < 3; j++) {
+      const axis = 'xyz'[j];
+      if (b.exact ? Math.abs(value.bounds.min[j] - b.min[j]) > t : value.bounds.min[j] < b.min[j] - t) fail(`bounds: min ${axis} ${value.bounds.min[j]} does not match the scene (${+b.min[j].toFixed(4)})`);
+      if (b.exact ? Math.abs(value.bounds.max[j] - b.max[j]) > t : value.bounds.max[j] > b.max[j] + t) fail(`bounds: max ${axis} ${value.bounds.max[j]} does not match the scene (${+b.max[j].toFixed(4)})`);
+    }
+    if (b && !b.exact) warn('bounds: checked against a containing box only (rotated meshes); pass measured bounds for the 1 cm check');
+  }
+  return { triangles };
+}
+// Typed machine inputs, drives and recipes (RFC-0013, object format 0.10 draft).
+function validateMachine(value, fail) {
+  const machine = value.traits.machine, slots = value.slots || {}, label = 'traits.machine';
+  const inputs = new Map();
+  for (const input of machine.inputs) {
+    if (inputs.has(input.id)) fail(`${label}: duplicate input ${input.id}`); inputs.set(input.id, input);
+    const d = input.default, il = `${label} input ${input.id}`;
+    if (['int', 'number'].includes(input.type)) {
+      if (input.min >= input.max) fail(`${il}: min must be below max`);
+      if (input.type === 'int' && ![input.min, input.max].every(Number.isInteger)) fail(`${il}: int bounds must be integers`);
+    }
+    if (d === undefined) continue;
+    const ok = { enum: () => input.values.includes(d), int: () => Number.isInteger(d) && d >= input.min && d <= input.max,
+      number: () => typeof d === 'number' && d >= input.min && d <= input.max, bool: () => typeof d === 'boolean',
+      text: () => typeof d === 'string' && d.length <= (input.maxLength ?? 64), event: () => false, items: () => false }[input.type];
+    if (!ok()) fail(`${il}: default ${JSON.stringify(d)} is not a valid ${input.type} value`);
+  }
+  const count = machine.inputs.reduce((n, i) => n + (i.repeat || 1), 0);
+  if (count > 16) fail(`${label}: ${count} inputs counting repeats, more than 16`);
+  if (machine.primary !== undefined && !inputs.has(machine.primary)) fail(`${label}: primary names unknown input ${machine.primary}`);
+  const resolve = (ref, where) => {
+    const [id, n] = ref.split('.'), input = inputs.get(id);
+    if (!input) { fail(`${where}: unknown input ${ref}`); return undefined; }
+    if (input.repeat ? n === undefined || Number(n) > input.repeat : n !== undefined) { fail(`${where}: ${ref} ${input.repeat ? `needs an index 1-${input.repeat}` : 'takes no index'}`); return undefined; }
+    return input;
+  };
+  // What a mapping can produce from an input: a set of scalars, a numeric range, or a kind.
+  const outputs = (map, input) => {
+    if (!map || !Object.keys(map).length) {
+      if (input.type === 'enum') return { values: input.values };
+      if (input.type === 'bool') return { values: [true, false] };
+      if (input.type === 'int' || input.type === 'number') return { range: [input.min, input.max], integer: input.type === 'int' };
+      return { kind: input.type };
+    }
+    if (map.cases || map.thresholds) return { values: [...(map.cases || map.thresholds).map(c => c.to), ...('else' in map ? [map.else] : [])] };
+    if (map.scale) return map.clamp === false ? { kind: 'unbounded' } : { range: [Math.min(...map.scale.to), Math.max(...map.scale.to)], integer: !!map.round };
+    if ('becomes' in map || map.counter) return { kind: 'event' };
+    if (map.format) return { kind: 'text' };
+    return { kind: 'unknown' };
+  };
+  const animated = new Set((value.traits.decorative?.animations || []).map(a => a.node));
+  const positions = new Set((machine.positions || []).map(p => p.node));
+  const slotIds = kind => new Set((slots[kind] || []).map(s => s.id));
+  const palettes = new Map((slots.states || []).map(s => [s.id, new Set(s.palette.map(e => e.id))]));
+  const within = (o, lo, hi, where) => {
+    if (o.values) { if (o.values.some(v => typeof v !== 'number' || v < lo || v > hi)) fail(`${where}: outputs must be numbers ${lo}-${hi}`); }
+    else if (o.range) { if (o.range[0] < lo || o.range[1] > hi) fail(`${where}: range ${o.range.join('-')} exceeds ${lo}-${hi}`); }
+    else fail(`${where}: needs a numeric mapping`);
+  };
+  for (const drive of machine.drives) {
+    const where = `${label} drive ${drive.input} -> ${drive.target}`, input = resolve(drive.input, where);
+    const [kind, name] = [drive.target.slice(0, drive.target.indexOf(':')), drive.target.slice(drive.target.indexOf(':') + 1)];
+    const known = { animation: () => animated.has(name), position: () => positions.has(name), state: () => palettes.has(name), emission: () => palettes.has(name),
+      label: () => slotIds('labels').has(name), visible: () => slotIds('toggles').has(name), count: () => slotIds('stacks').has(name),
+      spawn: () => slotIds('spawns').has(name), effect: () => slotIds('effects').has(name) }[kind];
+    if (!known()) { fail(`${where}: unknown ${kind} target "${name}"`); continue; }
+    if (!input) continue;
+    const o = outputs(drive.map, input), event = o.kind === 'event' || (input.type === 'event' && !drive.map);
+    if (kind === 'state') {
+      if (!o.values) fail(`${where}: needs palette ids (an enum input or cases)`);
+      else for (const v of o.values) if (!palettes.get(name).has(v)) fail(`${where}: "${v}" is not a palette id of ${name}`);
+    } else if (kind === 'animation') within(o, 0, 10, where);
+    else if (kind === 'emission') within(o, 0, 16, where);
+    else if (kind === 'position') within(o, 0, 1, where);
+    else if (kind === 'count') { within(o, 0, Infinity, where); if (o.range && !o.integer) fail(`${where}: counts need an int input or a rounded scale`); }
+    else if (kind === 'visible') { if (!o.values || o.values.some(v => typeof v !== 'boolean')) fail(`${where}: needs boolean outputs`); }
+    else if (kind === 'spawn' || kind === 'effect') { if (!event) fail(`${where}: needs an event (an event input, counter or becomes)`); }
+    else if (kind === 'label' && event) fail(`${where}: events can't be shown as text`);
+  }
+  for (const p of machine.positions || []) {
+    if (!animated.has(p.node)) fail(`${label}: position "${p.node}" is not a decorative animation`);
+    if (p.range[0] >= p.range[1]) fail(`${label}: position "${p.node}" range must increase`);
+  }
+  for (const recipe of machine.recipes || []) {
+    for (const ref of Object.keys(recipe.fields)) resolve(ref, `${label} recipe ${recipe.name}`);
+    for (const [ref, map] of Object.entries(recipe.maps || {})) {
+      const input = resolve(ref, `${label} recipe ${recipe.name}`);
+      if (input?.type === 'enum') for (const v of outputs(map, { type: 'text' }).values || [])
+        if (!input.values.includes(v)) fail(`${label} recipe ${recipe.name}: ${ref} maps to "${v}", not a value of the input`);
+    }
+  }
+}
+function validateObjectManifest(value, version, options, fail, warn) {
+  const traits = value.traits, slots = value.slots || {}, names = Object.keys(traits), b = value.bounds;
+  if (options.directory !== undefined && options.directory !== value.id) fail(`id: "${value.id}" differs from its directory "${options.directory}"`);
+  for (const a of names) for (const c of names) if (a < c && !(traitPairs[a] || []).includes(c)) fail(`traits: ${a} and ${c} can't be combined`);
+  for (let j = 0; j < 3; j++) if (b.min[j] >= b.max[j]) fail(`bounds: min ${'xyz'[j]} must be below max`);
+  const t = objectLimits.boundsTolerance, surfaces = new Set(traits.movable ? traits.movable.surfaces || ['floor'] : []);
+  const one = surfaces.size === 1 ? [...surfaces][0] : undefined;
+  if (one === 'floor' && Math.abs(b.min[1]) > t) fail(`bounds: min y must be 0 (the base at the origin), is ${b.min[1]}`);
+  // A character's rest (bind) pose is not the pose it stands in, so its feet get a looser check.
+  if (traits.character && Math.abs(b.min[1]) > objectLimits.characterOriginTolerance) fail(`bounds: min y must be within ${objectLimits.characterOriginTolerance} m of 0 (the feet at the origin), is ${b.min[1]}`);
+  if (one === 'wall' && Math.abs(b.min[2]) > t) fail(`bounds: min z must be 0 (the back against the wall), is ${b.min[2]}`);
+  if (one === 'ceiling' && Math.abs(b.max[1]) > t) fail(`bounds: max y must be 0 (the top at the origin), is ${b.max[1]}`);
+  const m = objectLimits.slotMargin, inside = (p, where, grow = m) => {
+    if (p.some((v, j) => v < b.min[j] - grow || v > b.max[j] + grow)) fail(`${where}: lies outside the bounds grown by ${grow} m`);
+  };
+  const quat = (q, where) => { if (Math.abs(Math.hypot(...q) - 1) > 0.002) fail(`${where}: quaternion must be normalized`); };
+  const unique = (items, field, label) => { const ids = items.map(v => v[field]); if (new Set(ids).size !== ids.length) fail(`${label}: duplicate ${field}`); };
+  // Traits.
+  const animations = traits.decorative?.animations || [];
+  unique(animations, 'node', 'traits.decorative animations');
+  for (const n of animations) {
+    if (Math.abs(Math.hypot(...n.axis) - 1) > 0.001) fail(`traits.decorative: animation "${n.node}" axis must be a unit vector`);
+    if (n.type === 'bob' ? n.amplitude === undefined : n.pivot === undefined) fail(`traits.decorative: ${n.type} animation "${n.node}" needs ${n.type === 'bob' ? 'an amplitude' : 'a pivot'}`);
+    if (n.type === 'bob' ? n.pivot !== undefined : n.amplitude !== undefined) fail(`traits.decorative: ${n.type} animation "${n.node}" takes no ${n.type === 'bob' ? 'pivot' : 'amplitude'}`);
+  }
+  if (traits.collidable && animations.some(n => n.node === traits.collidable.node)) fail(`traits.collidable: node "${traits.collidable.node}" is animated`);
+  const scale = traits.movable?.scale;
+  if (scale && !(scale[0] <= 1 && 1 <= scale[1])) fail('traits.movable: scale must be [min, max] with min <= 1 <= max');
+  if (traits.character) unique(traits.character.interactions || [], 'id', 'traits.character interactions');
+  if (traits.seat) {
+    unique(traits.seat.anchors, 'id', 'traits.seat anchors');
+    if ((traits.seat.capacity ?? 0) > traits.seat.anchors.length) fail('traits.seat: capacity exceeds the number of anchors');
+    for (const a of traits.seat.anchors) inside(a.position, `traits.seat anchor ${a.id}`);
+  }
+  if (traits.mover?.offset) inside(traits.mover.offset, 'traits.mover offset');
+  // Slots: ids unique per kind, poses inside the grown bounds, palettes with unique ids.
+  for (const [kind, list] of Object.entries(slots)) {
+    unique(list, 'id', `slots.${kind}`);
+    for (const s of list) {
+      if (s.pose) { quat(s.pose.rotation, `slots.${kind} ${s.id}`); inside(s.pose.position, `slots.${kind} ${s.id}`); }
+      if (s.palette) unique(s.palette, 'id', `slots.${kind} ${s.id} palette`);
+    }
+  }
+  const tracks = new Map((slots.tracks || []).map(tr => [tr.id, tr]));
+  for (const tr of slots.tracks || []) tr.points.forEach((p, i) => {
+    inside(p.position, `slots.tracks ${tr.id} point ${i}`);
+    const prev = tr.points[i - 1]?.position;
+    if (p.type === 'arc' && prev && Math.hypot(p.position[0] - prev[0], p.position[2] - prev[2]) < 0.1) fail(`slots.tracks ${tr.id} point ${i}: an arc needs a horizontal chord of at least 0.1 m`);
+  });
+  for (const s of slots.spawns || []) if (s.track !== undefined && s.track !== 'port') {
+    const tr = tracks.get(s.track);
+    if (!tr) fail(`slots.spawns ${s.id}: unknown track ${s.track}`);
+    else for (const a of s.items || []) if (tr.items && !tr.items.assets.includes(a)) fail(`slots.spawns ${s.id}: item ${a} is not in track ${tr.id}'s items`);
+  }
+  for (const s of slots.stacks || []) {
+    if (s.cap > s.layout.grid.reduce((x, y) => x * y, 1)) fail(`slots.stacks ${s.id}: cap exceeds the layout grid`);
+    s.layout.grid.forEach((n, j) => { if (n > 1 && !(s.layout.spacing[j] > 0)) fail(`slots.stacks ${s.id}: spacing ${'xyz'[j]} must be positive for ${n} cells`); });
+  }
+  if (traits.machine) validateMachine(value, fail);
+  // Directory contents, thumbnail and measured values.
+  const files = options.files;
+  if (files) {
+    const total = files.reduce((n, f) => n + f.size, 0), paths = new Set(files.map(f => f.path));
+    if (files.length > objectLimits.files) fail(`directory: ${files.length} files, more than ${objectLimits.files}`);
+    if (total > objectLimits.directoryBytes) fail(`directory: ${total} bytes, more than ${objectLimits.directoryBytes}`);
+    for (const f of files) {
+      if (f.size > objectLimits.fileBytes) fail(`directory: ${f.path} exceeds ${objectLimits.fileBytes} bytes`);
+      if (!value.attribution.some(a => a.path === '.' || a.path === f.path || f.path.startsWith(a.path + '/'))) fail(`attribution: ${f.path} is not covered`);
+    }
+    for (const [field, path] of [['scene', value.scene], ['thumbnail', value.thumbnail]]) if (path !== undefined && !paths.has(path)) fail(`${field}: ${path} not found in the directory`);
+  }
+  if (options.thumbnail) {
+    const { width, height, bytes } = options.thumbnail, s = objectLimits.thumbnailSize;
+    if (width !== s || height !== s) fail(`thumbnail: ${width} x ${height}, must be ${s} x ${s}`);
+    if (bytes > objectLimits.thumbnailBytes) fail(`thumbnail: ${bytes} bytes, more than ${objectLimits.thumbnailBytes}`);
+  }
+  const measured = options.measured || {};
+  if (measured.bounds) for (const end of ['min', 'max']) for (let j = 0; j < 3; j++)
+    if (Math.abs(b[end][j] - measured.bounds[end][j]) > t) fail(`bounds: ${end} ${'xyz'[j]} ${b[end][j]} is more than 1 cm from the scene's ${+measured.bounds[end][j].toFixed(4)}`);
+  const texture = traits.character ? objectLimits.characterTextureSize : objectLimits.textureSize;
+  if (measured.maxTextureSize > texture) fail(`textures: ${measured.maxTextureSize} px exceeds ${texture} px`);
+  const gpu = traits.mover?.item ? objectLimits.itemGpuBytes : objectLimits.gpuBytes;
+  if (measured.gpuBytes > gpu) fail(`gpu: ${measured.gpuBytes} bytes exceeds ${gpu}`);
+  if (options.gltf) return validateObjectGltf(value, version, options.gltf, options, fail, warn);
+  return {};
+}
+// library.json: listed object directories, their formats and the library's own files.
+function validateLibraryManifest(value, options, fail) {
+  const objects = options.objects;
+  if (objects) {
+    for (const id of value.objects) {
+      const o = objects[id];
+      if (!o) { fail(`objects: ${id} has no objects/${id}/object.json`); continue; }
+      if (o.id !== id) fail(`objects: objects/${id}/object.json has id ${o.id}`);
+      if (typeof o.formatVersion !== 'string' || !/^0\.\d+$/.test(o.formatVersion) || !atLeast(value.formatVersion, o.formatVersion)) fail(`objects: ${id} uses object format ${o.formatVersion}, newer than the library's ${value.formatVersion}`);
+    }
+    for (const id of Object.keys(objects)) if (!value.objects.includes(id)) fail(`objects: objects/${id} is not listed`);
+  }
+  const files = options.files;
+  if (files) {
+    const total = files.reduce((n, f) => n + f.size, 0);
+    if (files.length > objectLimits.libraryFiles) fail(`library: ${files.length} files, more than ${objectLimits.libraryFiles}`);
+    if (total > objectLimits.libraryBytes) fail(`library: ${total} bytes, more than ${objectLimits.libraryBytes}`);
+    for (const required of ['library.json', 'LICENSE', 'ATTRIBUTION.md']) if (!files.some(f => f.path === required)) fail(`library: missing ${required}`);
+    for (const f of files) if (!f.path.startsWith('objects/') && !value.attribution.some(a => a.path === '.' || a.path === f.path || f.path.startsWith(a.path + '/'))) fail(`attribution: ${f.path} is not covered`);
+  }
+}
+// libraries/releases.json: one pinned archive per id@version.
+function validateLibraryReleases(value, fail) {
+  for (const [key, r] of Object.entries(value)) {
+    if (key !== `${r.id}@${r.version}`) fail(`${key}: key must be id@version (${r.id}@${r.version})`);
+    if (!objectFormats.includes(r.formatVersion)) fail(`${key}: formatVersion ${r.formatVersion} is not a known object format`);
+    if (!r.url.endsWith(`/${r.id}-${r.version}.tar.zst`)) fail(`${key}: url must end with /${r.id}-${r.version}.tar.zst`);
+    if (btoa(String.fromCharCode(...r.sha256.match(/../g).map(h => parseInt(h, 16)))) !== r.nixHash.slice(7)) fail(`${key}: nixHash does not encode sha256`);
+  }
+}
+
+// Object and library manifests default to their own formatVersion; the release
+// record to the newest directory that defines it. Results add `warnings`.
+function validateManifestKind(kind, value, method, version, options) {
+  if (method) throw new Error('Method context is only valid for IPC');
+  const formats = kind === 'library-releases' ? versions.filter(v => has(v, kind)) : objectFormats;
+  version ??= kind === 'library-releases' ? formats.at(-1) : formats.includes(value?.formatVersion) ? value.formatVersion : formats.at(-1);
+  if (!formats.includes(version)) throw new Error(`Unknown ${kind} format: ${version}`);
+  const key = `${version}:${kind}:`;
+  if (!validators.has(key)) validators.set(key, ajv.getSchema(`https://hyprune.com/schema/v${version}/${kind}.schema.json`));
+  const check = validators.get(key), errors = [], warnings = [], fail = m => errors.push(m), warn = m => warnings.push(m);
+  // Name reserved traits plainly; the schema alone would only say "must NOT be valid".
+  if (kind === 'object' && value?.traits && typeof value.traits === 'object')
+    for (const [name, why] of Object.entries(reservedTraits(version))) if (Object.hasOwn(value.traits, name)) fail(`traits.${name}: ${why}; rejected in object format ${version}`);
+  if (!check(value)) return { valid: false, errors: [...errors, ...check.errors.map(e => `${e.instancePath || '/'} ${e.message}`)], warnings };
+  const spdx = (text, label) => { try { parseSpdx(text); } catch { fail(`${label}: invalid SPDX expression`); } };
+  if (kind !== 'library-releases') {
+    const prerelease = value.version.split('+')[0].split('-').slice(1).join('-');
+    if (prerelease.split('.').some(p => /^0\d+$/.test(p))) fail('version: numeric prerelease identifiers cannot have leading zeros');
+    spdx(value.license, 'license');
+    const paths = value.attribution.map(a => a.path);
+    if (new Set(paths).size !== paths.length) fail('attribution: duplicate path');
+    for (const a of value.attribution) spdx(a.license, `attribution ${a.path}`);
+  }
+  let stats = {};
+  if (kind === 'object') stats = validateObjectManifest(value, version, options, fail, warn) || {};
+  if (kind === 'library') validateLibraryManifest(value, options, fail);
+  if (kind === 'library-releases') validateLibraryReleases(value, fail);
+  return { valid: errors.length === 0, errors, warnings, ...stats };
+}
 // The optional method binds a response to the caller's outstanding request.
 // An envelope alone cannot know whether a valid result belongs to that method.
-export function validate(kind, value, method, version = '0.1', options = {}) {
+export function validate(kind, value, method, version, options = {}) {
   if (kind === 'scene') {
     if (method) throw new Error('Method context is only valid for IPC');
-    return validateScene(value, version, options.world, options.asset);
+    return validateScene(value, version ?? '0.1', options.world, options.asset);
   }
+  if (manifestKinds.includes(kind)) return validateManifestKind(kind, value, method, version, options);
+  version ??= '0.1';
   if (!names.includes(kind) || kind === 'common') throw new Error(`Unknown schema: ${kind}`);
   if (!contractVersions.includes(version)) throw new Error(`Unknown contract: ${version}`);
   const key = `${version}:${kind}:${method || ''}`;

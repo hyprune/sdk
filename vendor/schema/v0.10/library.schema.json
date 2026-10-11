@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hyprune.com/schema/v0.10/library.schema.json",
+  "title": "Hyprune object library manifest 0.10 (library.json, RFC-0011) (DRAFT until world format 0.10)",
+  "type": "object",
+  "properties": {
+    "formatVersion": {
+      "const": "0.10"
+    },
+    "id": {
+      "$ref": "../v0.8/common.schema.json#/$defs/id"
+    },
+    "version": {
+      "$ref": "../v0.8/common.schema.json#/$defs/version"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "license": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "attribution": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "anyOf": [
+              {
+                "$ref": "../v0.8/common.schema.json#/$defs/path"
+              },
+              {
+                "const": "."
+              }
+            ]
+          },
+          "author": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "license": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "pattern": "^https://"
+          }
+        },
+        "required": [
+          "path",
+          "author",
+          "license"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 256
+    },
+    "objects": {
+      "type": "array",
+      "items": {
+        "$ref": "../v0.8/common.schema.json#/$defs/slug"
+      },
+      "minItems": 1,
+      "maxItems": 256,
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "formatVersion",
+    "id",
+    "version",
+    "name",
+    "license",
+    "attribution",
+    "objects"
+  ],
+  "additionalProperties": false
+}

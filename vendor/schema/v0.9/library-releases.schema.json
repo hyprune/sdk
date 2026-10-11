@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hyprune.com/schema/v0.9/library-releases.schema.json",
+  "title": "Hyprune library release record 0.9 (the meta repository's libraries/releases.json, RFC-0011): pinned archives keyed by id@version",
+  "type": "object",
+  "propertyNames": {
+    "type": "string",
+    "maxLength": 400,
+    "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+@(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$"
+  },
+  "additionalProperties": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "$ref": "../v0.8/common.schema.json#/$defs/id"
+      },
+      "version": {
+        "$ref": "../v0.8/common.schema.json#/$defs/version"
+      },
+      "formatVersion": {
+        "type": "string",
+        "pattern": "^0\\.(0|[1-9][0-9]*)$"
+      },
+      "url": {
+        "type": "string",
+        "maxLength": 2048,
+        "pattern": "^https://[^\\s]+\\.tar\\.zst$"
+      },
+      "sha256": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      },
+      "nixHash": {
+        "type": "string",
+        "pattern": "^sha256-[A-Za-z0-9+/]{43}=$"
+      },
+      "published": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "id",
+      "version",
+      "formatVersion",
+      "url",
+      "sha256",
+      "nixHash",
+      "published"
+    ],
+    "additionalProperties": false
+  },
+  "maxProperties": 1024
+}
