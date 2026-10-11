@@ -38,7 +38,7 @@ Pushing the tag afterwards is fine: the workflow sees the version is already on 
 
 ## Provenance
 
-npm can only attach provenance attestations to builds from **public** repositories. While hyprune/sdk is private, the workflow publishes with `--provenance=false`; once the repository is public it passes `--provenance` automatically (it reads the repository's visibility from the event). Nothing needs to change when the repository goes public. Local publishes never carry provenance.
+npm can only attach provenance attestations to builds from **public** repositories. hyprune/sdk is public, so tagged releases are published with `--provenance`, which links each version on npmjs.com to the exact commit and workflow run that built it. The workflow reads the repository's visibility from the event and falls back to `--provenance=false` only for a private fork. Local publishes, such as the first one, never carry provenance.
 
 ## Releasing a version
 
