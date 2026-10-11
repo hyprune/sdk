@@ -4,6 +4,8 @@
 TypeScript/JavaScript client, `hyprune-mock` development daemon, and `hyprune` author/debug CLI. MIT. **SDK `0.3.0`: typed clients for IPC 0.1–0.19 (`new HypruneClient({protocol:'0.19', ...})`); default clients and the mock speak IPC `0.2`.** World formats 0.1–0.7 are typed and validated; extension and screen manifests remain `0.1`. Schemas are vendored from [hyprune/schema at f76922b](https://github.com/hyprune/schema/tree/f76922b9e72cdaaadf86b70641dc0bd7f6afa382).
 <!-- /header -->
 
+> **Hyprune** is an explorable, world-driven desktop environment for Hyprland: your workspaces become places you can walk through, with live windows on the walls. This repository is the **SDK**: a TypeScript IPC client, the `hyprune` CLI for world and extension authors, and a mock daemon. Install Hyprune through the [hyprune](https://github.com/hyprune/hyprune) repository (starter kits, Nix, Arch); learn more at [hyprune.com](https://hyprune.com). Licence: MIT.
+
 ## Install
 
 ```sh
