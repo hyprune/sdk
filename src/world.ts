@@ -16,12 +16,16 @@ export function packagePath(root:string,path:string):string {
  for(const segment of path.split('/')) {part=join(part,segment);if(lstatSync(part).isSymbolicLink()) throw new Error('Symlink rejected: '+path);}
  return full;
 }
-function readAsset(root:string,path:string):Buffer {
+// A no-follow read of a regular package file of at most `limit` bytes.
+export function readAsset(root:string,path:string,limit=LIMITS.single):Buffer {
  const full=packagePath(root,path),fd=openSync(full,constants.O_RDONLY|constants.O_NOFOLLOW);
- try {const st=fstatSync(fd);if(!st.isFile() || st.size>LIMITS.single) throw new Error('Asset must be a regular file <=128 MiB: '+path);return readFileSync(fd);}finally{closeSync(fd);}
+ try {const st=fstatSync(fd);if(!st.isFile() || st.size>limit) throw new Error(`Asset must be a regular file <=${limit/1048576} MiB: `+path);return readFileSync(fd);}finally{closeSync(fd);}
 }
-export function inventory(root:string):Array<{path:string;size:number}> {
- root=resolve(root);const st=lstatSync(root);if(!st.isDirectory() || st.isSymbolicLink()) throw new Error('World root must be a plain directory');
+// Package directory caps: world packages by default; objects and libraries pass RFC-0011's.
+export interface InventoryLimits {files:number;single:number;total:number;label:string}
+const WORLD_INVENTORY:InventoryLimits={files:LIMITS.files,single:LIMITS.single,total:LIMITS.total,label:'World'};
+export function inventory(root:string,limits:InventoryLimits=WORLD_INVENTORY):Array<{path:string;size:number}> {
+ root=resolve(root);const st=lstatSync(root);if(!st.isDirectory() || st.isSymbolicLink()) throw new Error(limits.label+' root must be a plain directory');
  const files:Array<{path:string;size:number}>=[];let total=0;
  function walk(dir:string,depth:number) {
   if(depth>64) throw new Error('Package directory depth exceeds 64');
@@ -31,19 +35,47 @@ export function inventory(root:string):Array<{path:string;size:number}> {
    if(s.isDirectory()) walk(full,depth+1);
    else {
     packagePath(root,path);total+=s.size;
-    if(s.size>LIMITS.single || total>LIMITS.total || files.length>=LIMITS.files) throw new Error('Package exceeds size/file limits');
-    if(/\.(?:js|mjs|cjs|py|sh|lua|so|wasm|html|exe)$/i.test(path) || (s.mode&0o111)) throw new Error('Executable world content rejected: '+path);
+    if(s.size>limits.single || total>limits.total || files.length>=limits.files)
+     throw new Error(limits===WORLD_INVENTORY?'Package exceeds size/file limits':`${limits.label} directory exceeds ${limits.files} files, ${limits.total/1048576} MiB or ${limits.single/1048576} MiB per file: ${path}`);
+    if(/\.(?:js|mjs|cjs|py|sh|lua|so|wasm|html|exe)$/i.test(path) || (s.mode&0o111)) throw new Error(`Executable ${limits.label.toLowerCase()} content rejected: `+path);
     files.push({path,size:s.size});
    }
   }
  }
  walk(root,0);return files;
 }
-function gltfDocument(bytes:Buffer,path:string):any {
+export function gltfDocument(bytes:Buffer,path:string):any {
  if(extname(path)==='.gltf') return parseJson(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
  if(bytes.length<20 || bytes.readUInt32LE(0)!==0x46546c67 || bytes.readUInt32LE(4)!==2 || bytes.readUInt32LE(8)!==bytes.length || bytes.readUInt32LE(16)!==0x4e4f534a) throw new Error('Invalid GLB header/JSON chunk');
  const length=bytes.readUInt32LE(12);if(length>bytes.length-20) throw new Error('Invalid GLB chunk length');
  return parseJson(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(20,20+length)));
+}
+// A package glTF's external resources (scene.gltf, world 0.8 object assets, object
+// directories): every URI safe and present, then the Khronos validator, whose errors throw.
+export function gltfResourcePath(root:string,scene:string,uri:string):string {
+ const sceneDir=relative(root,dirname(join(root,scene)));
+ // Do not decode percent escapes: forbidden even if they encode benign text.
+ if(!uri || uri.startsWith('/') || /[\\:%?#\x00-\x1f]/.test(uri) || uri.split('/').some(p=>!p || p==='.' || p==='..')) throw new Error('Unsafe glTF URI: '+uri);
+ return sceneDir?sceneDir+'/'+uri:uri;
+}
+export async function gltfResources(root:string,scene:string,document:any,documentBytes:Buffer,label='',limit=LIMITS.single) {
+ const resource=(uri:string)=>gltfResourcePath(root,scene,uri);
+ for(const ref of [...(document.buffers || []),...(document.images || [])]) if(ref.uri!==undefined) readAsset(root,resource(ref.uri),limit);
+ const report=await validateBytes(new Uint8Array(documentBytes),{uri:scene,maxIssues:1000,writeTimestamp:false,externalResourceFunction:async uri=>new Uint8Array(readAsset(root,resource(uri),limit))});
+ if(report.issues.numErrors) throw new Error(label+'glTF validation failed: '+report.issues.messages.filter(m=>m.severity===0).map(m=>`${m.code} ${m.pointer || ''}: ${m.message}`).join('; '));
+ return report;
+}
+// The bundled glTF validator predates KHR_texture_basisu: its KTX2 complaints are noise
+// once KHR_texture_basisu is required (the format's extension rules validate it).
+export function ktx2Noise(gltf:any):(m:{code:string;message:string;pointer?:string})=>boolean {
+ const ktx2Image=(pointer:string|undefined)=>{const i=/^\/images\/(\d+)/.exec(pointer || '');return !!i && gltf.images?.[Number(i[1])]?.mimeType==='image/ktx2';};
+ return m=>(gltf.extensionsRequired || []).includes('KHR_texture_basisu') &&
+  ((m.code==='VALUE_NOT_IN_LIST' && /'image\/ktx2'/.test(m.message)) || (m.code==='IMAGE_UNRECOGNIZED_FORMAT' && ktx2Image(m.pointer)));
+}
+// SDK authoring digest: sorted path, size and bytes with NUL separators.
+export function packageDigest(root:string,files:Array<{path:string;size:number}>,limit=LIMITS.single):string {
+ const digest=createHash('sha256');for(const f of files) {digest.update(f.path+'\0'+f.size+'\0');digest.update(readAsset(root,f.path,limit));}
+ return digest.digest('hex');
 }
 export async function validateWorld(directory:string):Promise<{manifest:World_Document|World02_Document|World04_Document|World05_Document|World06_Document|World07_Document|World08_Document;files:Array<{path:string;size:number}>;digest:string;warnings:string[]}> {
  const root=resolve(directory),files=inventory(root),manifestBytes=readAsset(root,'world.json');
@@ -59,20 +91,7 @@ export async function validateWorld(directory:string):Promise<{manifest:World_Do
  // RFC-0004: required glTF extensions and PNG lightmaps, gated by world format (0.7 adds KTX2/meshopt/quantization).
  const sceneCheck=validateManifest('scene',gltf,undefined,manifest.formatVersion,{world:manifest});
  if(!sceneCheck.valid) throw new Error('Unsupported required glTF extension or lightmap for world '+manifest.formatVersion+': '+sceneCheck.errors.join('; '));
- // A package glTF's external resources (scene.gltf and world 0.8 object assets) and the Khronos validator.
- const gltfResources=async (scene:string,document:any,documentBytes:Buffer,label:string)=>{
-  const sceneDir=relative(root,dirname(join(root,scene)));
-  const resource=(uri:string)=>{
-   // Do not decode percent escapes: forbidden even if they encode benign text.
-   if(!uri || uri.startsWith('/') || /[\\:%?#\x00-\x1f]/.test(uri) || uri.split('/').some(p=>!p || p==='.' || p==='..')) throw new Error('Unsafe glTF URI: '+uri);
-   return sceneDir?sceneDir+'/'+uri:uri;
-  };
-  for(const ref of [...(document.buffers || []),...(document.images || [])]) if(ref.uri!==undefined) readAsset(root,resource(ref.uri));
-  const report=await validateBytes(new Uint8Array(documentBytes),{uri:scene,maxIssues:1000,writeTimestamp:false,externalResourceFunction:async uri=>new Uint8Array(readAsset(root,resource(uri)))});
-  if(report.issues.numErrors) throw new Error(label+'glTF validation failed: '+report.issues.messages.filter(m=>m.severity===0).map(m=>`${m.code} ${m.pointer || ''}: ${m.message}`).join('; '));
-  return report;
- };
- const report=await gltfResources(manifest.scene,gltf,bytes,'');
+ const report=await gltfResources(root,manifest.scene,gltf,bytes);
  // World 0.8 object assets: each glTF with the world format's extension rules and the
  // asset rules (node names, animation nesting, collision proxy); never lightmapped.
  const objectWarnings:string[]=[];
@@ -81,7 +100,7 @@ export async function validateWorld(directory:string):Promise<{manifest:World_Do
   const assetBytes=readAsset(root,asset.scene),assetGltf=gltfDocument(assetBytes,asset.scene);
   const check=validateManifest('scene',assetGltf,undefined,manifest.formatVersion,{world:manifest,asset:asset.id});
   if(!check.valid) throw new Error('Object asset '+asset.id+': '+check.errors.join('; '));
-  const assetReport=await gltfResources(asset.scene,assetGltf,assetBytes,'Object asset '+asset.id+': ');
+  const assetReport=await gltfResources(root,asset.scene,assetGltf,assetBytes,'Object asset '+asset.id+': ');
   for(const m of assetReport.issues.messages) if(m.severity===1) objectWarnings.push(`object asset ${asset.id}: ${m.code}: ${m.message}`);
   if((assetGltf.meshes || []).some((mesh:any)=>mesh.primitives.some((p:any)=>p.attributes?.TEXCOORD_1!==undefined)))
    objectWarnings.push(`object asset ${asset.id}: TEXCOORD_1 is unused; object assets are never lightmapped`);
@@ -135,16 +154,14 @@ export async function validateWorld(directory:string):Promise<{manifest:World_Do
  // Preliminary on-disk and buffer budget; decoded image/driver costs stay core-owned.
  const gpu=files.reduce((n,f)=>n+(/\.(png|jpg|jpeg|ktx2|bin|glb)$/i.test(f.path)?f.size:0),0)+(gltf.buffers || []).reduce((n:number,b:any)=>n+b.byteLength,0);
  if(gpu>LIMITS.gpu) throw new Error('World exceeds preliminary 512 MiB resource budget');
- const digest=createHash('sha256');for(const f of files) {digest.update(f.path+'\0'+f.size+'\0');digest.update(readAsset(root,f.path));}
- // The bundled glTF validator predates KHR_texture_basisu; the scene check above validates it.
- const ktx2Image=(pointer:string|undefined)=>{const i=/^\/images\/(\d+)/.exec(pointer || '');return !!i && gltf.images?.[Number(i[1])]?.mimeType==='image/ktx2';};
- const ktx2Noise=(m:any)=>sceneCheck.valid && (gltf.extensionsRequired || []).includes('KHR_texture_basisu') &&
-  ((m.code==='VALUE_NOT_IN_LIST' && /'image\/ktx2'/.test(m.message)) || (m.code==='IMAGE_UNRECOGNIZED_FORMAT' && ktx2Image(m.pointer)));
- const warnings=report.issues.messages.filter(m=>m.severity===1 && !ktx2Noise(m)).map(m=>`${m.code}: ${m.message}`);
+ const digest=packageDigest(root,files);
+ // The scene check above validates KHR_texture_basisu, so its validator noise is dropped.
+ const noise=ktx2Noise(gltf);
+ const warnings=report.issues.messages.filter(m=>m.severity===1 && !(sceneCheck.valid && noise(m))).map(m=>`${m.code}: ${m.message}`);
  warnings.push(...backdropWarnings,...objectWarnings);
  if(manifest.collision?.length || manifest.navigation) warnings.push('Collision/navigation and spawn clearance need authoritative core runtime validation.');
  warnings.push('GPU allocation and image decode budgets require core validation; this is an authoring check.');
- return {manifest,files,digest:digest.digest('hex'),warnings};
+ return {manifest,files,digest,warnings};
 }
 export async function packWorld(directory:string,output?:string):Promise<{path:string;sha256:string;packageDigest:string}> {
  const root=resolve(directory),checked=await validateWorld(root),destination=resolve(output || `${checked.manifest.id}-${checked.manifest.version}.tar.zst`);

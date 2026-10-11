@@ -24,3 +24,20 @@ Packing validates the source, copies regular files through no-follow reads into 
 Archive extraction/installation is not implemented. Do not extract untrusted packages with a generic tar command as a substitute for the future safe installer.
 
 `examples/world-minimal` is a public-domain synthetic empty glTF and valid spawn metadata. It is a lightweight test fixture, not a rendered room or claim of safe walking.
+
+## Objects and libraries
+
+```sh
+hyprune object check ./street-lantern [--measured measured.json]
+hyprune library check ./com.example.street
+```
+
+`object check` validates an RFC-0011 object directory: `object.json` next to its `.gltf`/`.glb`, an optional `thumbnail.png` and any files the scene references. The directory must be plain (no symlinks, devices or executable content) and within the object limits (64 files, 64 MiB, 32 MiB per file); these limits and the budgets below come from the pinned validator's `objectLimits`. The manifest is at most 1 MiB and its `id` must equal the directory name. Every external glTF URI follows the world package rules and must name a file of the directory; the Khronos glTF validator then runs on the scene.
+
+The SDK reads the thumbnail's PNG header (256 x 256, at most 256 KiB) and each texture's header (PNG IHDR, JPEG start-of-frame, KTX2 pixel size) for the largest texture dimension, and estimates GPU memory: PNG and JPEG textures at 4 bytes per pixel, KTX2 at 1 byte per pixel, each times 4/3 for mips, plus every glTF buffer's `byteLength`. The pinned validator then checks the manifest, traits, slots, attribution coverage, the glTF cross-references (node names, collision proxy, states-slot materials, variants, character skins and clips), triangle budgets and bounds. `--measured` takes a JSON object `{bounds, maxTextureSize, gpuBytes}` from an import tool that decoded the assets; its values replace the SDK's estimates and `bounds` enables the exact 1 cm check.
+
+Output is JSON with the manifest, sorted inventory, digest (as for worlds), warnings, the drawn `triangles` and the `measured` texture size and GPU bytes. Failure prints every error and exits 1.
+
+`library check` validates a library: `library.json`, `LICENSE`, `ATTRIBUTION.md` and one directory per object under `objects/`. Every object directory is checked as above; then the library rules apply: each listed id has `objects/<id>/object.json` with that id and a `formatVersion` no newer than the library's, every directory is listed, files outside `objects/` are covered by the library's attribution, and the library stays within 4,000 files and 512 MiB. Output lists the objects in catalog order with their versions, digests and triangles.
+
+Object formats follow the world format numbering: `0.9` is current, `0.10` is a draft (the `mover` and `machine` traits). The library API is `validateObject(dir, {measured})` and `validateLibrary(dir)` from `@hyprune/sdk`, with generated `Object09_Document`, `Object10_Document`, `Library09_Document` and `LibraryReleases09_Document` types.

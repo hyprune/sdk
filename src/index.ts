@@ -5,3 +5,4 @@ export * from './paths.js';
 export * from './validation.js';
 export type * from './generated.js';
 export * from './launch.js';
+export * from './object.js';

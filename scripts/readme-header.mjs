@@ -7,14 +7,22 @@ const minor = v => Number(v.split('.')[1]);
 const pins = file => ['0.1', ...readdirSync('vendor/schema').filter(d => /^v0\.\d+$/.test(d) && existsSync(`vendor/schema/${d}/${file}`))
   .map(d => d.slice(1))].filter((v, i, all) => all.indexOf(v) === i).sort((a, b) => minor(a) - minor(b));
 const range = list => list.length > 1 ? `${list[0]}–${list.at(-1)}` : list[0];
+// Object manifest formats (RFC-0011) start at 0.9; a schema titled DRAFT is advertised as one.
+const objectFormats = () => readdirSync('vendor/schema').filter(d => /^v0\.\d+$/.test(d) && existsSync(`vendor/schema/${d}/object.schema.json`))
+  .map(d => ({version: d.slice(1), draft: /DRAFT/.test(JSON.parse(readFileSync(`vendor/schema/${d}/object.schema.json`)).title || '')}))
+  .sort((a, b) => minor(a.version) - minor(b.version));
 
 export function header() {
   const ipc = pins('ipc.schema.json'), world = pins('world.schema.json');
+  const objects = objectFormats(), published = objects.filter(o => !o.draft).map(o => o.version), drafts = objects.filter(o => o.draft).map(o => o.version);
+  let objectRange = published.length ? range(published) : '';
+  if (drafts.length) objectRange = (objectRange ? `${objectRange} (draft ` : 'draft ') + drafts.join(', ') + (objectRange ? ')' : '');
+  const objectText = objects.length ? ` Object and library manifests ${objectRange} are typed and checked by \`hyprune object check\` and \`hyprune library check\`.` : '';
   const {version} = JSON.parse(readFileSync('package.json'));
   const {commit} = JSON.parse(readFileSync('vendor/schema/source.json'));
   return [BEGIN,
     `# Hyprune SDK · IPC ${range(ipc)}`, '',
-    `TypeScript/JavaScript client, \`hyprune-mock\` development daemon, and \`hyprune\` author/debug CLI. MIT. **SDK \`${version}\`: typed clients for IPC ${range(ipc)} (\`new HypruneClient({protocol:'${ipc.at(-1)}', ...})\`); default clients and the mock speak IPC \`0.2\`.** World formats ${range(world)} are typed and validated; extension and screen manifests remain \`0.1\`. Schemas are vendored from [hyprune/schema at ${commit.slice(0, 7)}](https://github.com/hyprune/schema/tree/${commit}).`,
+    `TypeScript/JavaScript client, \`hyprune-mock\` development daemon, and \`hyprune\` author/debug CLI. MIT. **SDK \`${version}\`: typed clients for IPC ${range(ipc)} (\`new HypruneClient({protocol:'${ipc.at(-1)}', ...})\`); default clients and the mock speak IPC \`0.2\`.** World formats ${range(world)} are typed and validated; extension and screen manifests remain \`0.1\`.${objectText} Schemas are vendored from [hyprune/schema at ${commit.slice(0, 7)}](https://github.com/hyprune/schema/tree/${commit}).`,
     END].join('\n');
 }
 
