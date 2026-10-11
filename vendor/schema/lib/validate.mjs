@@ -36,9 +36,35 @@ export function sceneExtensions(version) {
   const base = ['KHR_materials_unlit','KHR_texture_transform','KHR_materials_emissive_strength'];
   return atLeast(version, '0.7') ? [...base,'KHR_texture_basisu','EXT_meshopt_compression','KHR_mesh_quantization'] : base;
 }
+// World 0.8 object asset rules that need the asset's glTF (RFC-0004 "world 0.8"):
+// referenced node names exist once, animated subtrees do not nest, and the
+// collision proxy has a mesh and lies outside every animated subtree.
+function validateObjectAsset(gltf, asset, fail) {
+  const nodes = gltf.nodes || [], parents = new Map(), label = `objectAssets ${asset.id}`;
+  nodes.forEach((n, i) => { for (const c of n.children || []) parents.set(c, i); });
+  const find = name => {
+    const hits = nodes.flatMap((n, i) => n.name === name ? [i] : []);
+    if (hits.length !== 1) fail(`${label}: node "${name}" ${hits.length ? 'is not unique' : 'not found'} in the asset`);
+    return hits.length === 1 ? hits[0] : undefined;
+  };
+  const ancestors = node => { const out = []; for (let p = parents.get(node), n = 0; p !== undefined && n <= nodes.length; p = parents.get(p), n++) out.push(p); return out; };
+  const targets = new Map();
+  for (const a of asset.animations || []) { const i = find(a.node); if (i !== undefined) targets.set(i, a.node); }
+  for (const [node, name] of targets) for (const p of ancestors(node))
+    if (targets.has(p)) fail(`${label}: animation "${name}" is inside animated node "${targets.get(p)}"`);
+  if (asset.collision) {
+    const i = find(asset.collision.node);
+    if (i !== undefined) {
+      if (nodes[i].mesh === undefined) fail(`${label}: collision node "${asset.collision.node}" has no mesh`);
+      for (const p of [i, ...ancestors(i)]) if (targets.has(p)) fail(`${label}: collision node "${asset.collision.node}" is inside animated node "${targets.get(p)}"`);
+    }
+  }
+}
 // scene.gltf rules that depend on the world format: extensionsRequired, and
 // lightmap textures (world.lightmaps[].texture) stay PNG in every v0 format.
-function validateScene(gltf, version, world) {
+// With options.asset, `gltf` is that world 0.8 object asset's glTF instead: the
+// same extension rules, the asset rules above, and no lightmaps (assets are never baked).
+function validateScene(gltf, version, world, assetId) {
   const errors = [], fail = m => errors.push(m);
   if (!worldFormats.includes(version)) throw new Error(`Unknown world format: ${version}`);
   const allowed = new Set(sceneExtensions(version)), required = new Set(gltf.extensionsRequired || []);
@@ -55,6 +81,12 @@ function validateScene(gltf, version, world) {
   if ((gltf.bufferViews || []).some(v => v.extensions?.EXT_meshopt_compression) && !required.has('EXT_meshopt_compression'))
     fail(allowed.has('EXT_meshopt_compression') ? 'extensionsRequired: EXT_meshopt_compression must be listed when buffer views use it'
                                                 : 'bufferViews: EXT_meshopt_compression needs world 0.7');
+  if (assetId !== undefined) {
+    const asset = atLeast(version, '0.8') ? (world?.objectAssets || []).find(a => a.id === assetId) : undefined;
+    if (!asset) fail(`objectAssets: unknown asset ${assetId} for world ${version}`);
+    else validateObjectAsset(gltf, asset, fail);
+    return { valid: errors.length === 0, errors };
+  }
   for (const lightmap of world?.lightmaps || []) {
     const texture = textures[lightmap.texture];
     if (!texture) { fail(`lightmaps: texture ${lightmap.texture} missing from scene`); continue; }
@@ -70,7 +102,7 @@ function validateScene(gltf, version, world) {
 export function validate(kind, value, method, version = '0.1', options = {}) {
   if (kind === 'scene') {
     if (method) throw new Error('Method context is only valid for IPC');
-    return validateScene(value, version, options.world);
+    return validateScene(value, version, options.world, options.asset);
   }
   if (!names.includes(kind) || kind === 'common') throw new Error(`Unknown schema: ${kind}`);
   if (!contractVersions.includes(version)) throw new Error(`Unknown contract: ${version}`);
@@ -171,6 +203,26 @@ export function validate(kind, value, method, version = '0.1', options = {}) {
       if (length < .5 || length > 100 || axis[1]/length < .25) fail(`${c.id}: invalid ascending segment`);
       if (Math.abs(Math.hypot(...c.facing)-1) > .001 || Math.abs(axis.reduce((v,n,i)=>v+n*c.facing[i],0)/length) > .001) fail(`${c.id}: facing must be unit and perpendicular to segment`);
       for (const end of ['top','bottom']) if (Math.hypot(...c.exits[end].map((v,i)=>v-c[end][i])) > 3) fail(`${c.id}: exit too far from segment`);
+    }
+    if (atLeast(value.formatVersion, '0.8')) {
+      const assets = value.objectAssets || [], objects = value.objects || [];
+      unique(assets, 'id', 'objectAssets'); unique(objects, 'id', 'objects');
+      const ids = new Set(assets.map(a => a.id));
+      for (const a of assets) {
+        const label = `objectAssets ${a.id}`, animations = a.animations || [];
+        if (a.library !== undefined) fail(`${label}: library references are reserved for a later world format; use a package scene`);
+        unique(animations, 'node', `${label} animations`);
+        for (const n of animations) {
+          if (Math.abs(Math.hypot(...n.axis) - 1) > 0.001) fail(`${label}: animation "${n.node}" axis must be a unit vector`);
+          if (n.type === 'bob' ? n.amplitude === undefined : n.pivot === undefined) fail(`${label}: ${n.type} animation "${n.node}" needs ${n.type === 'bob' ? 'an amplitude' : 'a pivot'}`);
+          if (n.type === 'bob' ? n.pivot !== undefined : n.amplitude !== undefined) fail(`${label}: ${n.type} animation "${n.node}" takes no ${n.type === 'bob' ? 'pivot' : 'amplitude'}`);
+        }
+        if (a.collision && animations.some(n => n.node === a.collision.node)) fail(`${label}: collision node "${a.collision.node}" is animated`);
+      }
+      for (const o of objects) {
+        if (!ids.has(o.asset)) fail(`objects ${o.id}: unknown asset ${o.asset}`);
+        quat(o.pose.rotation, `objects ${o.id}`);
+      }
     }
     unique(value.attribution, 'path', 'attribution');
     for (const a of value.attribution) license(a.license, `attribution ${a.path}`);

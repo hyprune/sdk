@@ -113,6 +113,20 @@ void format07;
 // @ts-expect-error a 0.7 document is not labelled 0.6
 const format06as07:World07_Document['formatVersion']='0.6';
 
+// World 0.8 adds typed object assets and placed objects; 0.7 documents have neither.
+import type {World08_Document} from '../src/generated.js';
+const objectAssets:World08_Document['objectAssets']=[{id:'armillary',scene:'objects/armillary.gltf',
+  animations:[{node:'ring',type:'spin',axis:[1,0,0],pivot:[0,0,0],period:20},{node:'buoy',type:'bob',axis:[0,1,0],amplitude:.05,period:4}],
+  collision:{node:'proxy'},lighting:{mode:'probe'}}];
+const placed:World08_Document['objects']=[{id:'a',asset:'armillary',pose:{position:[0,0,0],rotation:[0,0,0,1]},speed:1,phase:.5,ambient:[.3,.3,.3]}];
+void objectAssets;void placed;
+// @ts-expect-error only spin, orbit and bob
+const wobble:World08_Document['objectAssets']=[{id:'a',scene:'a.gltf',animations:[{node:'n',type:'wobble',axis:[0,1,0],period:2}]}];
+// @ts-expect-error lighting is probe or unlit
+const baked:World08_Document['objectAssets']=[{id:'a',scene:'a.gltf',lighting:{mode:'baked'}}];
+// @ts-expect-error world 0.7 has no objects
+const old07:World07_Document['objects']=[];
+
 // IPC 0.16 adds a typed nullable upscaler choice and inherits 0.14 ink tiers.
 declare const upscalerClient: import('../src/client.js').HypruneClient<'0.16'>;
 upscalerClient.call('graphics.set', {patch:{upscaler:'fsr1',outline_quality:'fast'}});

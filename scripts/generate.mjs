@@ -14,6 +14,8 @@ const ipcVersions = ['0.1', ...readdirSync('vendor/schema').filter(d => /^v0\.\d
 const docName = v => v === '0.1' ? 'ipc' : 'ipc' + String(minor(v)).padStart(2, '0');
 for (const v of ipcVersions.filter(v => minor(v) >= 7)) docs[docName(v)] = JSON.parse(readFileSync(`vendor/schema/v${v}/ipc.schema.json`));
 docs.common07=JSON.parse(readFileSync('vendor/schema/v0.7/common.schema.json'));
+docs.common08=JSON.parse(readFileSync('vendor/schema/v0.8/common.schema.json'));
+docs.world08=JSON.parse(readFileSync('vendor/schema/v0.8/world.schema.json'));
 docs.world07=JSON.parse(readFileSync('vendor/schema/v0.7/world.schema.json'));
 docs.world06=JSON.parse(readFileSync('vendor/schema/v0.6/world.schema.json'));
 docs.world05=JSON.parse(readFileSync('vendor/schema/v0.5/world.schema.json'));

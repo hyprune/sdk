@@ -6,7 +6,7 @@ import {execFileSync} from 'node:child_process';
 import {validateBytes} from 'gltf-validator';
 import {parseJson} from './codec.js';
 import {validateManifest} from './validation.js';
-import type {World_Document,World02_Document,World04_Document,World05_Document,World06_Document,World07_Document} from './generated.js';
+import type {World_Document,World02_Document,World04_Document,World05_Document,World06_Document,World07_Document,World08_Document} from './generated.js';
 export const LIMITS={files:10_000,single:128*1024*1024,total:1024*1024*1024,gpu:512*1024*1024};
 export function packagePath(root:string,path:string):string {
  if(!path || path.startsWith('/') || /[\\:%?#\x00-\x1f]/.test(path) || path.split('/').some(p=>!p || p==='.' || p==='..')) throw new Error('Unsafe package path: '+path);
@@ -45,10 +45,10 @@ function gltfDocument(bytes:Buffer,path:string):any {
  const length=bytes.readUInt32LE(12);if(length>bytes.length-20) throw new Error('Invalid GLB chunk length');
  return parseJson(new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(20,20+length)));
 }
-export async function validateWorld(directory:string):Promise<{manifest:World_Document|World02_Document|World04_Document|World05_Document|World06_Document|World07_Document;files:Array<{path:string;size:number}>;digest:string;warnings:string[]}> {
+export async function validateWorld(directory:string):Promise<{manifest:World_Document|World02_Document|World04_Document|World05_Document|World06_Document|World07_Document|World08_Document;files:Array<{path:string;size:number}>;digest:string;warnings:string[]}> {
  const root=resolve(directory),files=inventory(root),manifestBytes=readAsset(root,'world.json');
  if(manifestBytes.length>1_048_576) throw new Error('Manifest exceeds 1 MiB');
- const manifest=parseJson(new TextDecoder('utf-8',{fatal:true}).decode(manifestBytes)) as World_Document|World02_Document|World04_Document|World05_Document|World06_Document|World07_Document;
+ const manifest=parseJson(new TextDecoder('utf-8',{fatal:true}).decode(manifestBytes)) as World_Document|World02_Document|World04_Document|World05_Document|World06_Document|World07_Document|World08_Document;
  const result=validateManifest('world',manifest,undefined,manifest.formatVersion);if(!result.valid) throw new Error(result.errors.join('\n'));
  if(manifest.requiredExtensions?.length) throw new Error('M0 validator supports no required Hyprune world extensions');
  const paths=[manifest.scene,manifest.preview,...(manifest.audio || []).map(a=>a.path),...manifest.attribution.filter(a=>a.path!=='.').map(a=>a.path)].filter((x):x is string=>!!x);
@@ -59,15 +59,33 @@ export async function validateWorld(directory:string):Promise<{manifest:World_Do
  // RFC-0004: required glTF extensions and PNG lightmaps, gated by world format (0.7 adds KTX2/meshopt/quantization).
  const sceneCheck=validateManifest('scene',gltf,undefined,manifest.formatVersion,{world:manifest});
  if(!sceneCheck.valid) throw new Error('Unsupported required glTF extension or lightmap for world '+manifest.formatVersion+': '+sceneCheck.errors.join('; '));
- const sceneDir=relative(root,dirname(join(root,manifest.scene)));
- const resource=(uri:string)=>{
-  // Do not decode percent escapes: forbidden even if they encode benign text.
-  if(!uri || uri.startsWith('/') || /[\\:%?#\x00-\x1f]/.test(uri) || uri.split('/').some(p=>!p || p==='.' || p==='..')) throw new Error('Unsafe glTF URI: '+uri);
-  return sceneDir?sceneDir+'/'+uri:uri;
+ // A package glTF's external resources (scene.gltf and world 0.8 object assets) and the Khronos validator.
+ const gltfResources=async (scene:string,document:any,documentBytes:Buffer,label:string)=>{
+  const sceneDir=relative(root,dirname(join(root,scene)));
+  const resource=(uri:string)=>{
+   // Do not decode percent escapes: forbidden even if they encode benign text.
+   if(!uri || uri.startsWith('/') || /[\\:%?#\x00-\x1f]/.test(uri) || uri.split('/').some(p=>!p || p==='.' || p==='..')) throw new Error('Unsafe glTF URI: '+uri);
+   return sceneDir?sceneDir+'/'+uri:uri;
+  };
+  for(const ref of [...(document.buffers || []),...(document.images || [])]) if(ref.uri!==undefined) readAsset(root,resource(ref.uri));
+  const report=await validateBytes(new Uint8Array(documentBytes),{uri:scene,maxIssues:1000,writeTimestamp:false,externalResourceFunction:async uri=>new Uint8Array(readAsset(root,resource(uri)))});
+  if(report.issues.numErrors) throw new Error(label+'glTF validation failed: '+report.issues.messages.filter(m=>m.severity===0).map(m=>`${m.code} ${m.pointer || ''}: ${m.message}`).join('; '));
+  return report;
  };
- for(const ref of [...(gltf.buffers || []),...(gltf.images || [])]) if(ref.uri!==undefined) readAsset(root,resource(ref.uri));
- const report=await validateBytes(new Uint8Array(bytes),{uri:manifest.scene,maxIssues:1000,writeTimestamp:false,externalResourceFunction:async uri=>new Uint8Array(readAsset(root,resource(uri)))});
- if(report.issues.numErrors) throw new Error('glTF validation failed: '+report.issues.messages.filter(m=>m.severity===0).map(m=>`${m.code} ${m.pointer || ''}: ${m.message}`).join('; '));
+ const report=await gltfResources(manifest.scene,gltf,bytes,'');
+ // World 0.8 object assets: each glTF with the world format's extension rules and the
+ // asset rules (node names, animation nesting, collision proxy); never lightmapped.
+ const objectWarnings:string[]=[];
+ if('objectAssets' in manifest && manifest.objectAssets) for(const asset of manifest.objectAssets) {
+  if(!asset.scene) continue; // library references are rejected by the manifest check above
+  const assetBytes=readAsset(root,asset.scene),assetGltf=gltfDocument(assetBytes,asset.scene);
+  const check=validateManifest('scene',assetGltf,undefined,manifest.formatVersion,{world:manifest,asset:asset.id});
+  if(!check.valid) throw new Error('Object asset '+asset.id+': '+check.errors.join('; '));
+  const assetReport=await gltfResources(asset.scene,assetGltf,assetBytes,'Object asset '+asset.id+': ');
+  for(const m of assetReport.issues.messages) if(m.severity===1) objectWarnings.push(`object asset ${asset.id}: ${m.code}: ${m.message}`);
+  if((assetGltf.meshes || []).some((mesh:any)=>mesh.primitives.some((p:any)=>p.attributes?.TEXCOORD_1!==undefined)))
+   objectWarnings.push(`object asset ${asset.id}: TEXCOORD_1 is unused; object assets are never lightmapped`);
+ }
  const nodes=gltf.nodes || [];
  const backdropWarnings:string[]=[];
  const node=(index:number,label:string)=>{if(!Number.isInteger(index) || index<0 || index>=nodes.length) throw new Error(label+': unknown node '+index);};
@@ -123,7 +141,7 @@ export async function validateWorld(directory:string):Promise<{manifest:World_Do
  const ktx2Noise=(m:any)=>sceneCheck.valid && (gltf.extensionsRequired || []).includes('KHR_texture_basisu') &&
   ((m.code==='VALUE_NOT_IN_LIST' && /'image\/ktx2'/.test(m.message)) || (m.code==='IMAGE_UNRECOGNIZED_FORMAT' && ktx2Image(m.pointer)));
  const warnings=report.issues.messages.filter(m=>m.severity===1 && !ktx2Noise(m)).map(m=>`${m.code}: ${m.message}`);
- warnings.push(...backdropWarnings);
+ warnings.push(...backdropWarnings,...objectWarnings);
  if(manifest.collision?.length || manifest.navigation) warnings.push('Collision/navigation and spawn clearance need authoritative core runtime validation.');
  warnings.push('GPU allocation and image decode budgets require core validation; this is an authoring check.');
  return {manifest,files,digest:digest.digest('hex'),warnings};

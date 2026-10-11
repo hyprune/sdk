@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm,cp,writeFile,readFile,symlink,chmod} from 'node:fs/promises';
+import {mkdtemp,mkdir,rm,cp,writeFile,readFile,symlink,chmod} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {execFileSync,spawn} from 'node:child_process';
@@ -131,4 +131,42 @@ test('world 0.7 manifests inherit 0.6',()=>{
  w.formatVersion='0.7';w.playable={volumes:[{type:'box',min:[-5,0,-5],max:[5,8,5]}]};
  assert.equal(validateManifest('world',w,undefined,'0.7').valid,true);
  assert.equal(validateManifest('world',w,undefined,'0.6').valid,false);
+});
+
+// World 0.8 (RFC-0004): placed world objects (object asset glTFs, instances).
+test('world 0.8 validates object assets and their glTF',async t=>{
+ const {world}=await fixture(t),positions=Buffer.alloc(60);
+ [0,0,0,1,0,0,0,1,0,0,0,1,0,0,1].forEach((n,i)=>positions.writeFloatLE(n,i*4));
+ await writeFile(join(world,'mesh.bin'),positions);await mkdir(join(world,'objects'));await writeFile(join(world,'objects','mesh.bin'),positions);
+ const mesh={buffers:[{uri:'mesh.bin',byteLength:60}],bufferViews:[{buffer:0,byteLength:36,target:34962},{buffer:0,byteOffset:36,byteLength:24,target:34962}],
+  accessors:[{bufferView:0,componentType:5126,count:3,type:'VEC3',min:[0,0,0],max:[1,1,0]},{bufferView:1,componentType:5126,count:3,type:'VEC2'}]};
+ await writeFile(join(world,'scene.gltf'),JSON.stringify({asset:{version:'2.0'},scene:0,scenes:[{nodes:[0]}],nodes:[{mesh:0}],meshes:[{primitives:[{attributes:{POSITION:0}}]}],...mesh}));
+ // base > {ring, moon}; proxy outside the scene graph.
+ const asset={asset:{version:'2.0'},scene:0,scenes:[{nodes:[0]}],nodes:[{name:'base',mesh:0,children:[1,2]},{name:'ring',mesh:0},{name:'moon',mesh:0,translation:[1,0,0]},{name:'proxy',mesh:0}],
+  meshes:[{primitives:[{attributes:{POSITION:0,TEXCOORD_0:1,TEXCOORD_1:1}}]}],...mesh};
+ const saveAsset=()=>writeFile(join(world,'objects','armillary.gltf'),JSON.stringify(asset));await saveAsset();
+ const assets=[{id:'armillary',scene:'objects/armillary.gltf',animations:[{node:'ring',type:'spin',axis:[1,0,0],pivot:[0,0,0],period:20},
+  {node:'moon',type:'orbit',axis:[0,1,0],pivot:[0,0,0],period:60,phase:.5}],collision:{node:'proxy'}}];
+ const objects=[{id:'west',asset:'armillary',pose:{position:[-3,0,-6],rotation:[0,0,0,1]}},{id:'east',asset:'armillary',pose:{position:[3,0,-6],rotation:[0,0,0,1]},phase:.5}];
+ await mutate(world,m=>{m.formatVersion='0.8';m.objectAssets=assets;m.objects=objects;});
+ const result=await validateWorld(world);
+ assert.ok(result.warnings.some(w=>w.includes('object asset armillary: TEXCOORD_1 is unused')),result.warnings);
+ await mutate(world,m=>m.formatVersion='0.7');await assert.rejects(validateWorld(world),/additional properties/);
+ await mutate(world,m=>{m.formatVersion='0.8';m.objects[1].asset='orrery';});await assert.rejects(validateWorld(world),/unknown asset orrery/);
+ await mutate(world,m=>{m.objects=objects;m.objectAssets=[{id:'armillary',library:'org.example.armillary@1.0.0'}];});await assert.rejects(validateWorld(world),/library references are reserved/);
+ await mutate(world,m=>m.objectAssets=assets);
+ asset.nodes[2].children=[3];await saveAsset();await assert.rejects(validateWorld(world),/Object asset armillary: .*collision node "proxy" is inside animated node "moon"/);
+ delete asset.nodes[2].children;asset.nodes[1].children=[2];asset.nodes[0].children=[1];await saveAsset();
+ await assert.rejects(validateWorld(world),/animation "moon" is inside animated node "ring"/);
+ asset.nodes[1].children=[];asset.nodes[0].children=[1,2];asset.nodes[2].name='ring';await saveAsset();await assert.rejects(validateWorld(world),/node "ring" is not unique/);
+ asset.nodes[2].name='moon';asset.extensionsUsed=asset.extensionsRequired=['KHR_draco_mesh_compression'];await saveAsset();
+ await assert.rejects(validateWorld(world),/KHR_draco_mesh_compression is not allowed in world 0.8/);
+ delete asset.extensionsUsed;delete asset.extensionsRequired;asset.buffers[0].uri='../mesh.bin';await saveAsset();await assert.rejects(validateWorld(world),/Unsafe glTF URI/);
+});
+test('world 0.8 manifests inherit 0.7',()=>{
+ const w=JSON.parse(execFileSync('cat',['examples/world-minimal/world.json'],{encoding:'utf8'}));
+ w.formatVersion='0.8';w.playable={volumes:[{type:'box',min:[-5,0,-5],max:[5,8,5]}]};
+ assert.equal(validateManifest('world',w,undefined,'0.8').valid,true);
+ assert.equal(validateManifest('world',{...w,objects:[],objectAssets:[]},undefined,'0.8').valid,true);
+ assert.equal(validateManifest('world',{...w,formatVersion:'0.7',objects:[]},undefined,'0.7').valid,false);
 });
