@@ -162,3 +162,13 @@ playerClient.call('player.set', {patch:{reticle_style:'square'}});
 playerClient.call('player.set', {patch:{run_multiplier:2}});
 // @ts-expect-error 0.18 sessions have no player settings
 offloadClient.call('player.get', {});
+
+// IPC 0.20 adds the pocket actions and blueprint map levels.
+declare const pocketClient: import('../src/client.js').HypruneClient<'0.20'>;
+pocketClient.call('surface.pocket', {surfaceId:'surface-1'}).then(r=>{const revision:number=r.revision;void revision;});
+pocketClient.call('surface.unpocket', {surfaceId:'surface-1'}).then(r=>{const placed:boolean=r.placed;void placed;});
+pocketClient.on('state', s=>{const level=s.state.spatial.map?.levels?.[0];const name:string|undefined=level?.name;void name;});
+// @ts-expect-error unpocket takes only a surface
+pocketClient.call('surface.unpocket', {surfaceId:'surface-1', anchorId:'desk'});
+// @ts-expect-error 0.19 sessions have no pocket actions
+playerClient.call('surface.pocket', {surfaceId:'surface-1'});

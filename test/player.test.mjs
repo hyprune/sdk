@@ -12,7 +12,7 @@ const settings={config:defaults,defaults,overrides:{},options:{view_bob:['off','
 const interaction={mode:'movement',tool:1,tools:['pointer','mount','path','position','placement'],noclip:false,cursor:'reticle',taggedSurfaceId:null};
 const delta=changes=>({jsonrpc:'2.0',method:'state.delta',params:{subscriptionId:'sub',sessionId:'session',baseRevision:1,revision:2,changes}});
 test('IPC 0.19 player settings, fov, overlay colours and reticle; 0.18 frozen',()=>{
- assert.equal(PROTOCOLS.at(-1),'0.19');
+ assert.ok(PROTOCOLS.includes('0.19'));
  validateWire(req('player.get',{}),'0.19');
  assert.throws(()=>validateWire(req('player.get',{}),'0.18'));
  for(const patch of [{walk_speed:6,run_speed:12},{reticle_colour:[0,1,0]},{reach_placement:null},{view_bob:'off',reticle_dynamic:false}]) {
