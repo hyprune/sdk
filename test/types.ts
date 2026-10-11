@@ -215,3 +215,28 @@ const library10:Library09_Document={...library,formatVersion:'0.10'};void librar
 const releases:LibraryReleases09_Document={'com.example.street@1.2.0':{id:'com.example.street',version:'1.2.0',formatVersion:'0.9',url:'https://example.com/com.example.street-1.2.0.tar.zst',sha256:'f0'.repeat(32),nixHash:'sha256-',published:false}};void releases;
 // @ts-expect-error release records say whether they are published
 const unpublished:LibraryReleases09_Document={'a.b@1.0.0':{id:'a.b',version:'1.0.0',formatVersion:'0.9',url:'https://example.com/a.b-1.0.0.tar.zst',sha256:'',nixHash:''}};void unpublished;
+
+// IPC 0.21 adds markers, personal quests and focus sessions.
+declare const questClient: import('../src/client.js').HypruneClient<'0.21'>;
+questClient.call('quests.create', {quest:{title:'Write the release notes',steps:[{title:'Draft',objectives:[{id:'focus',type:'focus',sessions:2}]}]}})
+ .then(r=>{const id:string=r.questRef.id;void id;});
+questClient.call('quests.track', {questRef:null});
+questClient.call('quests.mark', {questRef:{source:'personal',id:'notes'},stepId:'draft',objectiveId:'done'});
+questClient.call('focus.start', {target:{kind:'window',appClass:'org.example.Editor',workspaceId:21},overrides:{work_min:50,cycles:2}}).then(r=>{const s:string=r.sessionId;void s;});
+questClient.call('guidance.set', {patch:{'markers.reveal_ms':6000,'focus.calm':null}}).then(r=>{const ms:number=r.config['markers.reveal_ms'];void ms;});
+questClient.call('focus.history', {days:7}).then(r=>{const kind:string|undefined=r.intervals[0]?.targetKind;void kind;});
+questClient.on('state', s=>{
+ const phase:'idle'|'work'|'break'|'ready'|'paused'=s.state.focus.state;
+ const tier:number|undefined=s.state.markers.list[0]?.tier;
+ const tracked=s.state.quests.tracked?.id;void phase;void tier;void tracked;
+});
+questClient.on('quest.progress', e=>{const kind:'objective'|'step'|'completed'|'available'|'failed'=e.kind;void kind;});
+questClient.on('focus.phase', e=>{const id:string=e.focusSessionId;void id;});
+// @ts-expect-error a focus objective needs its sessions
+questClient.call('quests.create', {quest:{title:'x',steps:[{title:'y',objectives:[{id:'f',type:'focus'}]}]}});
+// @ts-expect-error a window target needs its workspace
+questClient.call('focus.start', {target:{kind:'window',appClass:'org.example.Editor'}});
+// @ts-expect-error 0.20 sessions have no quests
+pocketClient.call('quests.list', {});
+// @ts-expect-error 0.20 sessions have no focus events
+pocketClient.on('focus.phase', ()=>{});

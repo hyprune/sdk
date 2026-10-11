@@ -1,6 +1,8 @@
-import {validate as upstream,objectFormats,objectLimits} from '../vendor/schema/lib/validate.mjs';
+import {validate as upstream,objectFormats,objectLimits,atLeast} from '../vendor/schema/lib/validate.mjs';
 // objectFormats and objectLimits (RFC-0011) come from the vendored validator's directories and constants.
 export {upstream as validateManifest,objectFormats,objectLimits};
+/** The shared contract-version comparison (numeric, never a hand-kept list). */
+export {atLeast};
 // The only runtime list of negotiable protocols, generated from the vendored IPC
 // pins and their method maps (scripts/generate.mjs); the type follows from it.
 import {PROTOCOLS} from './generated.js';

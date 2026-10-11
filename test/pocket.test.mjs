@@ -6,7 +6,7 @@ const res=(result,method)=>({jsonrpc:'2.0',id:'p1',result});
 const map={svg:'<svg/>',sha256:'a'.repeat(64),bounds:[0,0,1,1],worldToMap:[1,0,0,1,0,0]};
 const level={id:'ground',name:'Ground',minY:-2,maxY:4.5,svg:'<svg/>',sha256:'b'.repeat(64)};
 test('IPC 0.20 pocket methods and blueprint levels; 0.19 frozen',()=>{
- assert.equal(PROTOCOLS.at(-1),'0.20');
+ assert.ok(PROTOCOLS.includes('0.20'));
  for(const m of ['surface.pocket','surface.unpocket']){
   validateWire(req(m,{surfaceId:'surface-3'}),'0.20');
   assert.throws(()=>validateWire(req(m,{surfaceId:'surface-3'}),'0.19'));
