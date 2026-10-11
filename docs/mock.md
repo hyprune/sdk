@@ -37,6 +37,33 @@ UI open/close requires an owned lease/output. Nonexclusive leases match M1; excl
 
 Data publishing enforces the separate grant, namespace, connection ownership, increasing sequence, scalar/map/aggregate bounds, 10 Hz rate and TTL. Removal, expiry and disconnect replace `integrations` state. Only subscribed 0.2 readers get hints; publishers do not need read access. See [client details](ipc-client.md).
 
+## Quests and focus sessions (IPC 0.21)
+
+`--protocol 0.21` (or `new MockDaemon({protocol:'0.21'})`) also negotiates IPC 0.21 next
+to 0.2 and 0.1. 0.21 peers get the 0.2 keys, fixed neutral values for keys the mock does
+not model (spatial, workspaces, mounts, presentation, interaction, apps, keymap, editor)
+and the `markers`, `quests` and `focus` keys; 0.2 and 0.1 peers keep their exact
+projections and never see the new methods or events. Developer grants may include
+`quest.control` (`QUEST_GRANTS`).
+
+- Personal quests live in memory (nothing is written to disk): create (id derived from
+  the title, `-2`, `-3`… on collisions), update (progress kept for surviving ids),
+  delete, track/untrack, accept/abandon/resume, mark (manual objectives of a current
+  step), expiry to `failed`, at most 64. The first active quest is tracked automatically.
+  Errors follow the contract: -32003 unknown, -32004 illegal transition, -32007
+  non-personal, -32008 over limits.
+- `guidance.get`/`guidance.set` keep in-memory overrides over the RFC defaults (`path` is
+  empty).
+- `markers.reveal` sets `markers.reveal` for `durationMs` (default `markers.reveal_ms`) plus
+  a 600 ms fade; in `toggle` mode a second call hides it. Markers come from the waypoint,
+  the current steps of active quests (tier 1 when tracked, else 2), the scenario zones
+  (tier 4 places) and a workspace focus target. Zone targets resolve; areas, places and
+  workspace homes do not exist in the mock, so their position is null.
+- Focus sessions run on the real clock with pause/resume/skip/stop, short and long
+  breaks, `auto_start_breaks`/`auto_start_work`, `focus.phase` events and an in-memory
+  history. Every work second credits (wall mode); a completed interval with enough
+  credit advances matching `focus` objectives and emits `quest.progress`.
+
 ## Scenario files
 
 `observatory.json` provides surfaces, zones, waypoint, a looping pose path and timed notices. `surface-lifecycle.json` removes/re-adds surfaces. `warp.json` demonstrates navigation and world loading using real methods.

@@ -75,6 +75,35 @@ hyprune-mock --socket "$XDG_RUNTIME_DIR/hyprune/sdk-test/control.sock" \
 
 World validation combines the upstream schema/semantic validator with file, provenance and Khronos glTF checks. `object check` and `library check` apply the same file and glTF checks to RFC-0011 object directories and libraries, plus thumbnail, texture and GPU-budget measurements (docs/world-tools.md). Packing produces a deterministic single-root `.tar.zst`; GNU tar and zstd are required. Runtime collision/spawn clearance and final GPU allocation remain core checks.
 
+### Personal quests and focus sessions (IPC 0.21)
+
+```sh
+hyprune quest add "Write the release notes" --step Draft --focus 2 --step Review
+hyprune quest list                       # * marks the tracked quest
+hyprune quest track write-the-release-notes
+hyprune quest done write-the-release-notes step-1 [objectiveId]
+hyprune quest rm write-the-release-notes
+hyprune focus start --work 50 --break 10 --cycles 2 --workspace 21
+hyprune focus pause|resume|skip|stop|status
+```
+
+One `--step` per step (ids default to `step-1`, `step-2`, …; a quest without `--step`
+gets one step named after it). `--focus N` gives the step named by the `--step` before
+it a focus objective of N sessions; without any `--step` it applies to the quest's single
+step. Steps without `--focus` get a manual objective (`done`), marked with `quest done`.
+Also: `quest show <id>`, `quest untrack`, `quest abandon|resume <id>`, `--summary`,
+`--expires YYYY-MM-DDTHH:MM`, `--any-order` (non-sequential), `--state <state>` for
+`list`, and `focus start --app CLASS` (with `--workspace`: that window class on that
+workspace), `--long-break MIN`, `--quest <id> [--objective <id>]`. `--json` prints the
+raw results. These commands speak IPC 0.21 unless `--protocol`/`HYPRUNE_PROTOCOL` names
+a newer pin, and request `state.read` plus the `quest.control` grant.
+To try them against the mock:
+
+```sh
+hyprune-mock --protocol 0.21 --socket "$XDG_RUNTIME_DIR/hyprune/sdk-test/control.sock" \
+  --capabilities state.read,quest.control --launch hyprune quest list
+```
+
 Tokens are passed through a one-use inherited FD, never command arguments or logs. The mock supervisor approves `--capabilities`; the CLI independently requests its `--capabilities`. Debug commands accept `--protocol 0.1` for a legacy daemon; default is `0.2`. An unauthenticated connection may hello/ping only.
 
 ## Library
@@ -223,3 +252,15 @@ and take it out again (`{revision, placed}`; `placed: false` leaves it selected 
 the Placement tool). Pocket membership is `state.editor.unplaced.windows`.
 `state.spatial.map.levels` (optional) carries the world's blueprint levels
 `{id, name, minY, maxY, svg, sha256}`. Vendored schema `d5db513`.
+
+IPC **0.21** (`HypruneClient<'0.21'>`, RFC-0012 P1) adds markers, personal quests and
+focus sessions. State gains `markers` (reveal, persistent mode, calm, `coreDraw`, up to
+64 resolved markers), `quests` (tracked, up to 16 active, counts) and `focus` (phase,
+monotonic phase times, credit, cycles, target). Methods: `markers.reveal`
+(shell.control), `guidance.get`/`guidance.set`, `quests.list/get/track/accept/abandon/
+resume/create/update/delete/mark` and `focus.start/pause/resume/skip/stop/history`;
+mutations need the new `quest.control` grant. Events `quest.progress` and `focus.phase`.
+The world keymap gains `markers.reveal`, the overlay style `questColor`, projection
+markers an optional `markerId`. `hyprune-mock --protocol 0.21` simulates them in memory
+(see [mock](docs/mock.md)), and the CLI has `quest` and `focus` commands (above).
+Vendored schema `669a259`.
