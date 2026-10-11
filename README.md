@@ -19,7 +19,6 @@ the SDK mock. See core/docs/FIRST-SESSION.md for reproduction and evidence.
 ## Run the mock
 
 ```sh
-cd /home/rick/workspace/hyprune/sdk
 npm ci
 npm test
 npm run mock -- --socket "$XDG_RUNTIME_DIR/hyprune/sdk-demo/control.sock" --demo

@@ -4,6 +4,14 @@
   "type": "module",
   "license": "MIT",
   "description": "Experimental Hyprune IPC client, mock and author tools",
+  "homepage": "https://hyprune.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hyprune/sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hyprune/sdk/issues"
+  },
   "engines": {
     "node": ">=22.12.0"
   },
