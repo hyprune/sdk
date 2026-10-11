@@ -108,8 +108,9 @@ function validateScene(gltf, version, world, assetId) {
   return { valid: errors.length === 0, errors };
 }
 
-// Object manifests, libraries and library release records (RFC-0011). The
-// manifest-only rules always run; options add the rules that need more than
+// Object manifests, libraries and library release records (RFC-0011). Origin
+// conventions: floor, wall and ceiling objects within 1 cm, a character's
+// rest-pose feet within 5 cm. The manifest-only rules always run; options add the rules that need more than
 // object.json: `gltf` (the parsed scene glTF, or a GLB's JSON chunk),
 // `directory` (its directory name), `files` ([{path, size}] of the directory),
 // `thumbnail` ({width, height, bytes}) and `measured` (values only a geometry
@@ -466,7 +467,8 @@ function validateLibraryManifest(value, options, fail) {
       const o = objects[id];
       if (!o) { fail(`objects: ${id} has no objects/${id}/object.json`); continue; }
       if (o.id !== id) fail(`objects: objects/${id}/object.json has id ${o.id}`);
-      if (typeof o.formatVersion !== 'string' || !/^0\.\d+$/.test(o.formatVersion) || !atLeast(value.formatVersion, o.formatVersion)) fail(`objects: ${id} uses object format ${o.formatVersion}, newer than the library's ${value.formatVersion}`);
+      if (typeof o.formatVersion !== 'string' || !objectFormats.includes(o.formatVersion)) fail(`objects: ${id} has no known object formatVersion (${JSON.stringify(o.formatVersion)})`);
+      else if (!atLeast(value.formatVersion, o.formatVersion)) fail(`objects: ${id} uses object format ${o.formatVersion}, newer than the library's ${value.formatVersion}`);
     }
     for (const id of Object.keys(objects)) if (!value.objects.includes(id)) fail(`objects: objects/${id} is not listed`);
   }
@@ -499,10 +501,19 @@ function validateManifestKind(kind, value, method, version, options) {
   const key = `${version}:${kind}:`;
   if (!validators.has(key)) validators.set(key, ajv.getSchema(`https://hyprune.com/schema/v${version}/${kind}.schema.json`));
   const check = validators.get(key), errors = [], warnings = [], fail = m => errors.push(m), warn = m => warnings.push(m);
-  // Name reserved traits plainly; the schema alone would only say "must NOT be valid".
-  if (kind === 'object' && value?.traits && typeof value.traits === 'object')
-    for (const [name, why] of Object.entries(reservedTraits(version))) if (Object.hasOwn(value.traits, name)) fail(`traits.${name}: ${why}; rejected in object format ${version}`);
-  if (!check(value)) return { valid: false, errors: [...errors, ...check.errors.map(e => `${e.instancePath || '/'} ${e.message}`)], warnings };
+  // Name reserved traits and unknown formats plainly; the schema alone would only say
+  // "must NOT be valid" or "must be equal to constant".
+  const reserved = kind === 'object' && value?.traits && typeof value.traits === 'object'
+    ? Object.entries(reservedTraits(version)).filter(([name]) => Object.hasOwn(value.traits, name)) : [];
+  for (const [name, why] of reserved) fail(`traits.${name}: ${why}; rejected in object format ${version}`);
+  if (kind !== 'library-releases' && value?.formatVersion !== version)
+    fail(`formatVersion: ${JSON.stringify(value?.formatVersion)} is not ${formats.includes(value?.formatVersion) ? `the requested ${version}` : `an object format (${formats.join(', ')})`}`);
+  if (!check(value)) {
+    const said = new Set(reserved.map(([name]) => `/traits/${name}`));
+    const schemaErrors = check.errors.filter(e => !(e.keyword === 'not' && said.has(e.instancePath)) && !(e.keyword === 'const' && e.instancePath === '/formatVersion'));
+    return { valid: false, errors: [...errors, ...schemaErrors.map(e => `${e.instancePath || '/'} ${e.message}`)], warnings };
+  }
+  if (errors.length) return { valid: false, errors, warnings };
   const spdx = (text, label) => { try { parseSpdx(text); } catch { fail(`${label}: invalid SPDX expression`); } };
   if (kind !== 'library-releases') {
     const prerelease = value.version.split('+')[0].split('-').slice(1).join('-');
