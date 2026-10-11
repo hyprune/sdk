@@ -1,0 +1,81 @@
+# Publish to npm when a vX.Y.Z tag is pushed (or by hand, as a dry run by default).
+#
+# Authentication, in order:
+#   1. npm trusted publishing (OIDC): no stored token. Needs npm >= 11.5.1 and a
+#      trusted publisher configured on npmjs.com for this repository and this
+#      workflow file (release.yml). npm only allows that on a package that
+#      already exists, so the very first publish uses 2. See RELEASING.md.
+#   2. Fallback: a granular automation token in the NPM_TOKEN secret, if set.
+#      Delete the secret once trusted publishing works.
+# Provenance: npm can only attest builds from public repositories, so
+# --provenance is passed only when this repository is public.
+name: Release
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Pack and run every check, but don't publish
+        type: boolean
+        default: true
+permissions:
+  contents: read
+  id-token: write # OIDC for trusted publishing and provenance
+concurrency:
+  group: npm-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: npm with trusted publishing support
+        run: npm install -g npm@^11.5.1 && npm --version
+      - run: sudo apt-get update && sudo apt-get install -y zstd
+      - run: npm ci
+      - run: npm test
+      - name: Tag matches package.json
+        if: github.ref_type == 'tag'
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+      - name: Skip versions already on npm
+        id: published
+        run: |
+          spec=$(node -p "const p=require('./package.json'); p.name+'@'+p.version")
+          if npm view "$spec" version >/dev/null 2>&1; then
+            echo "::notice::$spec is already published; nothing to do"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Inspect package contents
+        run: npm pack --dry-run
+      - name: Publish
+        if: steps.published.outputs.exists != 'true'
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          REPO_PRIVATE: ${{ github.event.repository.private }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          args=(--access public)
+          if [ "$REPO_PRIVATE" = "false" ]; then
+            args+=(--provenance)
+          else
+            echo "::notice::repository is private: publishing without provenance"
+            args+=(--provenance=false)
+          fi
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "::notice::NPM_TOKEN is set: publishing with the token (first-publish fallback)"
+            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$HOME/.npmrc"
+          else
+            echo "Publishing with npm trusted publishing (OIDC)"
+          fi
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          npm publish "${args[@]}"
