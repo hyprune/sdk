@@ -3,6 +3,18 @@
 
 TypeScript/JavaScript client, `hyprune-mock` development daemon, and `hyprune` author/debug CLI. MIT. **SDK `0.3.0`: typed clients for IPC 0.1–0.19 (`new HypruneClient({protocol:'0.19', ...})`); default clients and the mock speak IPC `0.2`.** World formats 0.1–0.7 are typed and validated; extension and screen manifests remain `0.1`. Schemas are vendored from [hyprune/schema at f76922b](https://github.com/hyprune/schema/tree/f76922b9e72cdaaadf86b70641dc0bd7f6afa382).
 <!-- /header -->
+
+## Install
+
+```sh
+npm i -g @hyprune/sdk                  # or npx @hyprune/sdk ... / a project devDependency
+hyprune world validate path/to/world   # schema, files, glTF and provenance checks
+hyprune world pack path/to/world       # deterministic .tar.zst (needs GNU tar and zstd)
+hyprune ext new widget my-widget       # scaffold an extension
+hyprune-mock --demo                    # development daemon with a moving observatory
+```
+
+As a library: `import { HypruneClient } from '@hyprune/sdk'` (Node >= 22.12 or Bun). The schemas and validator alone are published as [`@hyprune/schema`](https://github.com/hyprune/schema).
 RFC-0007 chooses JavaScript as the first reference client. TypeScript supplies generated types and compiles to JavaScript for **Node >=22.12 and Bun**; Python is used only by the core test harness. Quickshell needs its own native socket bridge; Node modules cannot be imported directly into QML.
 
 Schemas and their Node validator are vendored unchanged (`vendor/schema/source.json`), with SHA-256 verification. Builds neither follow sibling repositories nor fetch schemas. `npm run generate` derives method, result, event, state and manifest types for every vendored protocol, and this README's header from the same pins. The former `0.1-mock.1` contract has been removed.
@@ -78,7 +90,7 @@ client.close();
 
 `HypruneClient` validates against the negotiated schema, reduces whole-key deltas, resyncs gaps and reconnects with exponential backoff and a fresh-token callback. It takes a fresh snapshot after reconnect and **never retries mutations**. The inherited-FD helper disables reconnect; long-lived callers must supply a supervisor callback and enable reconnect. Presentation events are hints; revisioned state is authoritative.
 
-System-pulse now uses the real `data.publish` grant/method, increasing sequences and TTL. The widget reads `state.integrations.sources`. The extension manifest schema cannot yet declare `data.publish`: the demo uses a separate, explicitly trusted `launch.json`. This is documented in [the remaining RFC gaps](NOTES-rfc-gaps.md), alongside the sandbox metrics broker and production supervisor work.
+System-pulse now uses the real `data.publish` grant/method, increasing sequences and TTL. The widget reads `state.integrations.sources`. The extension manifest schema cannot yet declare `data.publish`: the demo uses a separate, explicitly trusted `launch.json`. This is documented in [the remaining RFC gaps](https://github.com/hyprune/sdk/blob/main/NOTES-rfc-gaps.md), alongside the sandbox metrics broker and production supervisor work.
 
 ## Verification and documentation
 
@@ -95,7 +107,7 @@ Local verification: **52/52 Node tests with built core**, **50/50 Bun tests**, a
 - [World validation and packing](docs/world-tools.md)
 - [Extension scaffolds and examples](docs/extensions.md)
 - [Tests, conformance and schema updates](docs/testing.md)
-- [RFC gaps and proposed fixes](NOTES-rfc-gaps.md)
+- [RFC gaps and proposed fixes](https://github.com/hyprune/sdk/blob/main/NOTES-rfc-gaps.md)
 
 ## M3A hands-on desktop contract
 

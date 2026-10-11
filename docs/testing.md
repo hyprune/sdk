@@ -26,7 +26,7 @@ Two optional tests launch the **actual built `hypruned`** through a private SOCK
 
 Requirements: Python 3, a C++23 compiler, core source/headers/static library and generated atrium fixture. `HYPRUNE_CORE_DIR` can override source location when it differs from the binary's parent build tree. Without `HYPRUNE_CORE_BINARY`, both tests explicitly skip; independent SDK CI needs no sibling checkout.
 
-The test host substitutes plugin scheduling/output publication, not successful method replies. It uses a scratch runtime directory and unique instance; no Wayland, GL or compositor is started, and the owner's session is untouched. These tests do not cover full plugin input routing, render/upload ordering or Wayland-client association. Any subsequent nested run must use core's controller and `flock /tmp/worldshell-nested.lock`; no nested run was needed for this verification.
+The test host substitutes plugin scheduling/output publication, not successful method replies. It uses a scratch runtime directory and unique instance; no Wayland, GL or compositor is started, and no desktop session is touched. These tests do not cover full plugin input routing, render/upload ordering or Wayland-client association. Any nested run goes through core's nested controller and its exclusive session lock; none was needed for this verification.
 
 ## Schema pin and CI
 
