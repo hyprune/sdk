@@ -1,6 +1,6 @@
 # Mock daemon and shell development
 
-Build with `npm ci`, then `npm run mock`. The default is real IPC **0.2**, with all 26 methods filtered by grants, seven-key snapshots/deltas and subscribed-reader UI/data/location hints. The same listener accepts 0.1 with frozen method discovery and five-key projections; `--protocol 0.1` makes it legacy-only; `--protocol 0.21`, `0.22` and `0.23` add the quest, object and character projections below. `0.1-mock.1` and `--experimental` have been retired.
+Build with `npm ci`, then `npm run mock`. The default is real IPC **0.2**, with all 26 methods filtered by grants, seven-key snapshots/deltas and subscribed-reader UI/data/location hints. The same listener accepts 0.1 with frozen method discovery and five-key projections; `--protocol 0.1` makes it legacy-only; `--protocol 0.21`, `0.22`, `0.23` and `0.24` add the quest, object, character and live machine projections below. `0.1-mock.1` and `--experimental` have been retired.
 
 Use a private development socket:
 
@@ -178,6 +178,26 @@ notices (`npc.*`, `path.*`) reach 0.23 peers only. No new grant: `NPC_GRANTS` eq
   for a standing spot); -32008 rule `budget` with an `npc.budget` notice; -32602 stop
   indices, `reverse` without a path, spawn or bind on a non-route draw.
 
+## Live machines (IPC 0.24)
+
+`--protocol 0.24` negotiates 0.24 next to every older version. 0.24 peers get the 0.23
+projection plus the `live` key, and `objects.catalog` entries carry `machine` (the
+fixture `server-rack` declares `health` (enum, repeat 4) and `load` (number 0–1);
+manifests from the user folder or installed libraries keep their `traits.machine`
+inputs; every other entry has `machine: null`). Peers below 0.24 see neither. No new
+grant: `LIVE_GRANTS` equals `NPC_GRANTS`.
+
+Every active user placement of a machine entry is bound by default, at most 64: input
+`<id>` reads source `com.hyprune.sources.<instance id>`, key `<id>` (`<id>.N` for a
+repeated input), from the mock's integrations state, so a client with id
+`com.hyprune.sources` and `data.publish` can feed it. A value whose type fits passes
+through (numbers clamped to `min`/`max`, text cut to `maxLength`) as `fresh`; a mismatch
+is `error` and shows the input's default; no value is `missing` with the default, `raw`
+and `publishedAt` null. `_status` and `_error` become the instance's `status` and `error`
+(`_status: "error"` makes every published input `error`); `stale` is true while any
+input is in error. The mock has no stale threshold and applies no mappings.
+`publishedAt` is the publication's wall-clock time.
+
 ## Scenario files
 
 `observatory.json` provides surfaces, zones, waypoint, a looping pose path and timed notices. `surface-lifecycle.json` removes/re-adds surfaces. `warp.json` demonstrates navigation and world loading using real methods.
@@ -196,4 +216,4 @@ notices (`npc.*`, `path.*`) reach 0.23 peers only. No new grant: `NPC_GRANTS` eq
 
 Starting state, targets, transactions, commands and timing are checked before listening. Deltas coalesce to at most 30 Hz, retain each peer's baseline and replace complete keys. Snapshot/subscribe responses precede later deltas. Oversized resource creation rejects before commit.
 
-Programmatic harnesses can use `commit`, `runAction`, `objects` (the 0.22 engine), `npcs` (the 0.23 engine), `project(snapshot, protocol)`, `hold`, `escape`, `use`, `drawPoint`, `setPowerProfile`, `disconnectClients`, `revokeClients`, `stop`. Restart creates a new session. Scenarios use real timers, not deterministic physics replay. No scenario action installs an extension, loads arbitrary code or injects input into the owner's compositor.
+Programmatic harnesses can use `commit`, `runAction`, `objects` (the 0.22 engine), `npcs` (the 0.23 engine), `project(snapshot, protocol)` (0.24: `liveView`), `hold`, `escape`, `use`, `drawPoint`, `setPowerProfile`, `disconnectClients`, `revokeClients`, `stop`. Restart creates a new session. Scenarios use real timers, not deterministic physics replay. No scenario action installs an extension, loads arbitrary code or injects input into the owner's compositor.

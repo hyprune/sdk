@@ -368,3 +368,13 @@ characters are refused by `objects.transform/configure/pocket` and `objects.plac
 Notices use new codes (`npc.spawned`, `path.unwalkable`, …). `hyprune-mock --protocol
 0.23` simulates it in memory (see [mock](docs/mock.md)), and the CLI has `npc` and `path`
 commands (above). Peers below 0.23 keep their exact shapes. Vendored schema `50d7271`.
+
+IPC **0.24** (`HypruneClient<'0.24'>`, RFC-0013) adds live machine state.
+`objects.catalog` entries gain `machine`: null, or `{primary, inputs}` with the machine
+trait's input declarations as authored (repeat not expanded). State gains the required
+`live` key: at most 64 bound machine instances `{id, asset, ref, source, status, error,
+stale, inputs}`, each input (repeated ones expanded, `health.1`) with its `source` and
+`key`, mapped `value`, published `raw`, `condition` (`fresh|stale|missing|error`) and
+`publishedAt` (wall-clock Unix ms, or null), published on change. No new method, grant or
+event. `hyprune-mock --protocol 0.24` simulates it (see [mock](docs/mock.md)). Peers
+below 0.24 keep their exact shapes. Vendored schema `15466e1`.
