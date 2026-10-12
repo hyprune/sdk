@@ -53,6 +53,8 @@ test('/proc integration calculates CPU deltas, RAM and network counters',()=>{
  const first=readPulse(undefined,p=>files[p]);assert.equal(first.values.cpuPercent,0);assert.equal(first.values.ramUsedBytes,600*1024);assert.equal(first.values.netTxBytes,200);
  files['/proc/stat']='cpu 40 0 20 140 0 0 0 0\n';assert.equal(readPulse(first.cpu,p=>files[p]).values.cpuPercent,30.000000000000004);
 });
+// Runs until stdout matches, then stops it with SIGINT (the CLI's graceful stop); `--duration` only caps a stuck run.
+function commandUntil(args,pattern) {return new Promise((resolve,reject)=>{const child=spawn(process.execPath,args);let out='',err='',sent=false;child.stdout.on('data',b=>{out+=b;if(!sent && pattern.test(out)){sent=true;child.kill('SIGINT');}});child.stderr.on('data',b=>err+=b);child.on('error',reject);child.on('close',code=>code===0?resolve({out,err}):reject(new Error(`${code}: ${err}`)));});}
 function command(args,env={}) {return new Promise((resolve,reject)=>{const child=spawn(process.execPath,args,{env:{...process.env,...env}});let out='',err='';child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);child.on('error',reject);child.on('close',code=>code===0?resolve({out,err}):reject(new Error(`${code}: ${err}`)));});}
 test('CLI launcher transfers token by FD; call, subscribe and doctor work',async t=>{
  const {root}=await fixture(t),socket=join(root,'ipc','control.sock');
@@ -64,7 +66,7 @@ test('CLI launcher transfers token by FD; call, subscribe and doctor work',async
 test('both example manifests are valid and mock demo publishes /proc values',async t=>{
  for(const name of ['system-pulse','pulse-widget']) assert.equal(validateManifest('extension',JSON.parse(await readFile(`examples/${name}/extension.json`))).valid,true);
  const pulse=JSON.parse(await readFile('examples/system-pulse/extension.json'));pulse.capabilities=['data.publish'];assert.equal(validateManifest('extension',pulse).valid,false,'publishing grant still requires an upstream manifest update');
- const {root}=await fixture(t),demo=await command(['dist/src/mock-cli.js','--socket',join(root,'demo','control.sock'),'--demo','--duration','2.5']);assert.match(demo.out,/CPU .*RAM .*net RX/);assert.doesNotMatch(demo.err,/system-pulse:|pulse-widget:/,'publishers finish cleanup before the socket closes');
+ const {root}=await fixture(t),demo=await commandUntil(['dist/src/mock-cli.js','--socket',join(root,'demo','control.sock'),'--demo','--duration','30'],/CPU .*RAM .*net RX/);assert.match(demo.out,/CPU .*RAM .*net RX/);assert.doesNotMatch(demo.err,/system-pulse:|pulse-widget:/,'publishers finish cleanup before the socket closes');
 });
 test('world rejects unsupported required glTF extensions',async t=>{
  const {world}=await fixture(t),path=join(world,'scene.gltf'),gltf=JSON.parse(await readFile(path));gltf.extensionsRequired=['VENDOR_unknown'];gltf.extensionsUsed=['VENDOR_unknown'];await writeFile(path,JSON.stringify(gltf));await assert.rejects(validateWorld(world),/Unsupported required glTF/);
