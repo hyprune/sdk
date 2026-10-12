@@ -257,6 +257,17 @@ function validateObjectGltf(value, version, gltf, options, fail, warn) {
     }
   }
   for (const s of slots.stacks || []) node(s.node, `slots.stacks ${s.id}`);
+  const levelNodes = new Map();
+  for (const l of slots.levels || []) {
+    const where = `slots.levels ${l.id}`;
+    for (const name of [l.node, l.surface]) {
+      if (name === undefined) continue;
+      if (name === traits.collidable?.node) { fail(`${where}: the collision proxy can't be moved`); continue; }
+      if (levelNodes.has(name)) fail(`${where}: node "${name}" is also moved by levels slot ${levelNodes.get(name)}`); else levelNodes.set(name, l.id);
+    }
+    const i = node(l.node, where), j = l.surface === undefined ? undefined : node(l.surface, where);
+    if (i !== undefined && j !== undefined && subtree(i).includes(j)) fail(`${where}: surface "${l.surface}" must not be inside the fill node's subtree`);
+  }
   for (const t of slots.toggles || []) for (const name of t.nodes) {
     if (name === traits.collidable?.node) fail(`slots.toggles ${t.id}: the collision proxy can't be toggled`);
     node(name, `slots.toggles ${t.id}`);
@@ -328,7 +339,18 @@ function validateMachine(value, fail) {
     return input;
   };
   // What a mapping can produce from an input: a set of scalars, a numeric range, or a kind.
+  const numeric = input => input?.type === 'int' || input?.type === 'number';
   const outputs = (map, input) => {
+    if (map?.average) {
+      // The form applies to the running average (or the override's value): an int input's
+      // average is fractional, and an override widens a direct range.
+      const {average, ...form} = map, o = outputs(form, input);
+      if (Object.keys(form).length) return o;
+      const over = average.override === undefined ? undefined : inputs.get(average.override.split('.')[0]);
+      if (o.range && numeric(over)) o.range = [Math.min(o.range[0], over.min), Math.max(o.range[1], over.max)];
+      else if (over && !numeric(over)) return { kind: over.type };
+      return o.range ? { ...o, integer: false } : o;
+    }
     if (!map || !Object.keys(map).length) {
       if (input.type === 'enum') return { values: input.values };
       if (input.type === 'bool') return { values: [true, false] };
@@ -355,16 +377,25 @@ function validateMachine(value, fail) {
     const [kind, name] = [drive.target.slice(0, drive.target.indexOf(':')), drive.target.slice(drive.target.indexOf(':') + 1)];
     const known = { animation: () => animated.has(name), position: () => positions.has(name), state: () => palettes.has(name), emission: () => palettes.has(name),
       label: () => slotIds('labels').has(name), visible: () => slotIds('toggles').has(name), count: () => slotIds('stacks').has(name),
-      spawn: () => slotIds('spawns').has(name), effect: () => slotIds('effects').has(name) }[kind];
+      spawn: () => slotIds('spawns').has(name), effect: () => slotIds('effects').has(name), level: () => slotIds('levels').has(name) }[kind];
     if (!known()) { fail(`${where}: unknown ${kind} target "${name}"`); continue; }
     if (!input) continue;
+    if (drive.map?.average) {
+      const ref = drive.map.average.override;
+      if (!numeric(input)) { fail(`${where}: average needs an int or number input`); continue; }
+      if (ref !== undefined) {
+        const over = resolve(ref, `${where} average override`);
+        if (ref === drive.input) fail(`${where}: average override must name another input`);
+        else if (over && (over.type === 'event' || over.type === 'items')) fail(`${where}: average override ${ref} must be a value input, not ${over.type}`);
+      }
+    }
     const o = outputs(drive.map, input), event = o.kind === 'event' || (input.type === 'event' && !drive.map);
     if (kind === 'state') {
       if (!o.values) fail(`${where}: needs palette ids (an enum input or cases)`);
       else for (const v of o.values) if (!palettes.get(name).has(v)) fail(`${where}: "${v}" is not a palette id of ${name}`);
     } else if (kind === 'animation') within(o, 0, 10, where);
     else if (kind === 'emission') within(o, 0, 16, where);
-    else if (kind === 'position') within(o, 0, 1, where);
+    else if (kind === 'position' || kind === 'level') within(o, 0, 1, where);
     else if (kind === 'count') { within(o, 0, Infinity, where); if (o.range && !o.integer) fail(`${where}: counts need an int input or a rounded scale`); }
     else if (kind === 'visible') { if (!o.values || o.values.some(v => typeof v !== 'boolean')) fail(`${where}: needs boolean outputs`); }
     else if (kind === 'spawn' || kind === 'effect') { if (!event) fail(`${where}: needs an event (an event input, counter or becomes)`); }
@@ -378,6 +409,8 @@ function validateMachine(value, fail) {
     for (const ref of Object.keys(recipe.fields)) resolve(ref, `${label} recipe ${recipe.name}`);
     for (const [ref, map] of Object.entries(recipe.maps || {})) {
       const input = resolve(ref, `${label} recipe ${recipe.name}`);
+      if (map.average && input && !numeric(input)) fail(`${label} recipe ${recipe.name}: ${ref} average needs an int or number input`);
+      if (map.average?.override !== undefined) fail(`${label} recipe ${recipe.name}: ${ref} average override is for drives only`);
       if (input?.type === 'enum') for (const v of outputs(map, { type: 'text' }).values || [])
         if (!input.values.includes(v)) fail(`${label} recipe ${recipe.name}: ${ref} maps to "${v}", not a value of the input`);
     }
@@ -430,6 +463,7 @@ function objectTraitRules(traits, slots, fail, inside = () => {}) {
     if (!tr) fail(`slots.spawns ${s.id}: unknown track ${s.track}`);
     else for (const a of s.items || []) if (tr.items && !tr.items.assets.includes(a)) fail(`slots.spawns ${s.id}: item ${a} is not in track ${tr.id}'s items`);
   }
+  for (const l of slots.levels || []) if (l.axis && Math.abs(Math.hypot(...l.axis) - 1) > 0.001) fail(`slots.levels ${l.id}: axis must be a unit vector`);
   for (const s of slots.stacks || []) {
     if (s.cap > s.layout.grid.reduce((x, y) => x * y, 1)) fail(`slots.stacks ${s.id}: cap exceeds the layout grid`);
     s.layout.grid.forEach((n, j) => { if (n > 1 && !(s.layout.spacing[j] > 0)) fail(`slots.stacks ${s.id}: spacing ${'xyz'[j]} must be positive for ${n} cells`); });
