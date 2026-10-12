@@ -240,3 +240,39 @@ questClient.call('focus.start', {target:{kind:'window',appClass:'org.example.Edi
 pocketClient.call('quests.list', {});
 // @ts-expect-error 0.20 sessions have no focus events
 pocketClient.on('focus.phase', ()=>{});
+
+// IPC 0.22 adds the object catalog, user placements, libraries and objects.control.
+declare const objectsClient: import('../src/client.js').HypruneClient<'0.22'>;
+new HypruneClient({protocol:'0.22',capabilities:['state.read','objects.control']});
+objectsClient.call('objects.catalog', {}).then(r=>{
+ const e=r.entries[0];const placeable:boolean|undefined=e?.placeable;const source:'package'|'library'|'user'|undefined=e?.source;
+ const thumb:string|null|undefined=e?.thumbnail;void placeable;void source;void thumb;
+});
+objectsClient.call('objects.place', {ref:'library/com.hyprune.starter@0.1.0/server-rack',pose:{position:[1,0,-2],rotation:[0,0,0,1]},scale:1.2}).then(r=>{const id:string=r.id;void id;});
+objectsClient.call('objects.place', {ref:'user/lamp'});
+objectsClient.call('objects.pocket', {ref:'user/lamp'}).then(r=>{const item:string=r.itemId;void item;});
+objectsClient.call('objects.transform', {id:'u-1a2b3c',pose:{position:[0,0,0],rotation:[0,0,0,1]}});
+objectsClient.call('objects.remove', {all:true});
+objectsClient.call('objects.reset', {id:'armillary'});
+objectsClient.call('objects.hide', {id:'armillary',hidden:true});
+objectsClient.call('objects.configure', {id:'u-1a2b3c',patch:{locked:true}});
+objectsClient.call('libraries.install', {archive:'/tmp/com.example.kit-1.0.0.tar.zst',sha256:'0'.repeat(64)}).then(r=>{const v:string=r.version;void v;});
+objectsClient.call('libraries.list', {}).then(r=>{const root:'user'|'system'|undefined=r.libraries[0]?.root;void root;});
+objectsClient.call('libraries.remove', {id:'com.example.kit',version:'1.0.0'});
+objectsClient.on('state', s=>{
+ const o=s.state.objects;const rev:number=o.catalogRevision;const state:'active'|'hidden'|'missing'|'blocked'|'loading'|'suspended'|undefined=o.instances[0]?.state;
+ const path:null|undefined=o.instances[0]?.path;const gizmo:'world'|'local'=s.state.editor.gizmo.space;const items=s.state.editor.unplaced.objects.length;
+ void rev;void state;void path;void gizmo;void items;
+});
+// @ts-expect-error the P1 configure patch only knows locked
+objectsClient.call('objects.configure', {id:'u-1a2b3c',patch:{speed:2}});
+// @ts-expect-error a transform needs its pose
+objectsClient.call('objects.transform', {id:'u-1a2b3c'});
+// @ts-expect-error 0.21 sessions have no object catalog
+questClient.call('objects.catalog', {});
+// @ts-expect-error objects.control is new in 0.22
+new HypruneClient({protocol:'0.21',capabilities:['objects.control']});
+questClient.on('state', s=>{
+ // @ts-expect-error 0.21 state has no objects key
+ void s.state.objects;
+});
