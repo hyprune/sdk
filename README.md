@@ -127,20 +127,50 @@ and renamed into place, so core's folder watch never sees a half-written object;
 failing check writes nothing, and a bare `.glb` reports its first failure. An existing
 `<id>/` needs `--replace`. The folder holds at most 256 objects.
 
-`library install` never downloads: a local archive is hashed and handed to core as
-`libraries.install {archive, sha256}` (core re-hashes, extracts and validates it);
-`id@version` looks up a `library-releases` record (`--releases`, the meta repository's
-`libraries/releases.json` format) and uses `--archive` or the archive named by the
-record's URL (or `<id>-<version>.tar.zst`) next to the record, which must match the
-pinned hash. `object list`, `library list|install|remove` speak IPC 0.22 unless
-`--protocol`/`HYPRUNE_PROTOCOL` names a newer pin; `list` requests `state.read`,
-install/remove also the `objects.control` grant. To try them against the mock:
+`library install` is an alias of `library add` (below) and keeps these forms without a
+confirmation step: a local archive is hashed, checked by the safe extractor and validated,
+then handed to core as `libraries.install {archive, sha256}` when a session grants
+`objects.control` (core re-hashes, extracts and validates it), else committed into
+`$XDG_DATA_HOME/hyprune/libraries/<id>@<version>/` by the CLI; `id@version` looks up a
+`library-releases` record (`--releases`, the meta repository's `libraries/releases.json`
+format) and uses `--archive` or the archive named by the record's URL (or
+`<id>-<version>.tar.zst`) next to the record, which must match the pinned hash.
+`object list` and `library list` (with a session) speak IPC 0.22 unless
+`--protocol`/`HYPRUNE_PROTOCOL` names a newer pin; `list` requests `state.read`; library
+install/remove ask for `objects.control`. To try them against the mock:
 
 ```sh
 hyprune-mock --protocol 0.22 --object-dir "$HOME/.local/share/hyprune/objects" \
   --socket "$XDG_RUNTIME_DIR/hyprune/sdk-test/control.sock" \
   --capabilities state.read,objects.control --launch hyprune object list
 ```
+
+### Sources, installs and releases (RFC-0015)
+
+```sh
+hyprune source add github:ada/tidepool-world --label "Ada's worlds"   # or an index URL, an archive URL + --sha256, a .release.json URL
+hyprune source list|refresh [--json]                                  # Official, Community registry, Custom: <label>
+hyprune browse [TEXT] [--type world|library] [--json]                 # cached indexes only
+hyprune world add io.github.ada.tidepool[@v1.2.0] [--from SOURCE] [--pin] [--yes]
+hyprune world add github:ada/tidepool-world@v1.2.0 | https://…/x.release.json | ./x.tar.zst
+hyprune installed [--json]                                            # = hyprune content list
+hyprune update <id>… | --all      hyprune rollback|pin|unpin|remove <id>
+hyprune world pack ./tidepool --release --thumbnail cover.png        # archive, .sha256, .release.json
+hyprune registry entry ./release-dir | github:ada/tidepool-world@v1.2.0
+hyprune registry check io.github.ada.tidepool.json --author ada
+```
+
+Every install, whatever the source, runs resolve → plan → confirm → download → verify →
+extract → validate → commit: archives are pinned by sha256, fetched over HTTPS only,
+extracted by the safe extractor (data only, no executables, size and zstd window limits)
+and validated like `world validate`/`library check`. Worlds go to the world root
+(`$HYPRUNE_WORLD_DIR`, else `$XDG_DATA_HOME/hyprune/worlds`) with the replaced install in
+`.previous/<id>/`; libraries to `<id>@<version>/`, through core's `libraries.install` when
+a session grants `objects.control`. Records live in `$XDG_STATE_HOME/hyprune/content.json`.
+Jobs take `--json` (JSON lines: `stage`, `plan`, `progress`, `done`, `error`), `--plan` and
+`--yes`; exit codes are 0, 1 (failure), 2 (usage) and 3 (refused by a rule). The API is
+exported as `registry` (`import {registry} from '@hyprune/sdk'`), including the registry
+checks for the registry CI. Details: [docs/registry.md](docs/registry.md).
 
 ### Characters and paths (IPC 0.23)
 
@@ -193,6 +223,7 @@ Local verification: **52/52 Node tests with built core**, **50/50 Bun tests**, a
 - [Client and authentication](docs/ipc-client.md)
 - [Mock, scenarios and shell development](docs/mock.md)
 - [World validation and packing](docs/world-tools.md)
+- [Registry: sources, installs, releases and checks](docs/registry.md)
 - [Extension scaffolds and examples](docs/extensions.md)
 - [Tests, conformance and schema updates](docs/testing.md)
 - [RFC gaps and proposed fixes](https://github.com/hyprune/sdk/blob/main/NOTES-rfc-gaps.md)
