@@ -94,10 +94,15 @@ test('levels slots: fields, glTF nodes and the surface',async t=>{
  await rejects(t,m=>m.slots.levels[0].surface='lid',/slots\.levels liquid: node "lid" not found in the glTF/);
  await rejects(t,g=>{g.nodes[2].children=[3];g.scenes[0].nodes=[0,2,4,5];},/surface "liquid-surface" must not be inside the fill node's subtree/,'object.gltf');
 });
-test('stacks: cap up to 100 and a rate up to 1000 copies per second',async t=>{
+test('stacks: cap up to 100, a rate up to 1000 copies per second, signed spacing',async t=>{
  await rejects(t,m=>{m.slots.stacks[0].cap=101;m.slots.stacks[0].layout.grid=[11,10,1];},/cap must be <= 100/);
  await rejects(t,m=>m.slots.stacks[0].rate=1001,/rate must be <= 1000/);
  await rejects(t,m=>m.slots.stacks[0].rate=-1,/rate must be >= 0/);
+ // Spacing may be negative (rest beads fill top-down, right to left); zero only on a one-cell axis.
+ await rejects(t,m=>m.slots.stacks[0].layout.spacing=[0.02,0,0],/slots\.stacks beads: spacing y must be non-zero for 10 cells/);
+ const dir=await gauge(t);
+ await edit(join(dir,'object.json'),m=>m.slots.stacks[0].layout.spacing=[0.02,-0.02,0]);
+ await validateObject(dir);
 });
 test('CLI object check reports gauge errors and exits 1',async t=>{
  const dir=await gauge(t);
