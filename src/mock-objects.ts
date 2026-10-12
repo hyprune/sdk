@@ -12,7 +12,8 @@ import {RpcError} from './client.js';
 import {validateObject,validateLibrary,USER_FOLDER_OBJECTS,type ObjectManifest} from './object.js';
 import {objectFormats} from './validation.js';
 import type {Ipc22_CatalogEntry,Ipc22_ObjectBounds,Ipc22_LibraryRecord,Ipc22_ObjectPocketItem,Ipc22_ObjectPose,Ipc22_ObjectRule,
- Ipc22_ObjectsState,Ipc22_ObjectTraitName,Ipc23_ObjectInstance,Ipc23_ObjectsState,Ipc23_NpcActivity,World09_InstanceInteraction} from './generated.js';
+ Ipc22_ObjectsState,Ipc22_ObjectTraitName,Ipc23_ObjectInstance,Ipc23_ObjectsState,Ipc23_NpcActivity,Ipc24_CatalogEntry,Ipc24_CatalogMachine,World09_InstanceInteraction} from './generated.js';
+import {machineOf} from './mock-live.js';
 
 /** Grant per 0.22 method (RFC-0011 P1): reads need state.read, every change objects.control. */
 export const OBJECT_REQUIREMENTS={
@@ -31,7 +32,8 @@ export const REASONS={
 } as const;
 const POCKET_MAX=16,SCAN_MS=1000;
 
-type Entry=Ipc22_CatalogEntry;
+/** A catalog entry; machine entries keep their 0.24 machine field, which older projections drop (mock.ts). */
+type Entry=Ipc22_CatalogEntry & {machine?:Ipc24_CatalogMachine};
 type Pose=Ipc22_ObjectPose;
 type Vec3=[number,number,number];
 type Box={min:number[];max:number[]};
@@ -62,8 +64,13 @@ export function manifestEntry(m:ObjectManifest,ref:string,source:'library'|'user
  const traits=m.traits as Record<string,any>,movable=traits.movable;
  return entry({ref,source,id:m.id,version:m.version,formatVersion:m.formatVersion,name:m.name,description:m.description ?? null,category:m.category,tags:m.tags || [],
   traits:Object.keys(traits) as Ipc22_ObjectTraitName[],surfaces:movable?movable.surfaces || ['floor']:null,scale:movable?movable.scale || [1,1]:null,
-  bounds:structuredClone(m.bounds),license:m.license,...extra});
+  bounds:structuredClone(m.bounds),license:m.license,...machineField(traits),...extra});
 }
+const machineField=(traits:Record<string,unknown>)=>{const machine=machineOf(traits);return machine?{machine}:{};};
+/** An entry as a 0.24 peer sees it: machine is null for entries without the machine trait. */
+export const catalogEntry24=(e:Entry):Ipc24_CatalogEntry=>({...e,machine:e.machine ?? null});
+/** An entry as a 0.22/0.23 peer sees it: no machine field. */
+export const catalogEntry22=({machine,...e}:Entry):Ipc22_CatalogEntry=>e;
 
 // ---- fixtures ----
 const lib='com.hyprune.starter',libVersion='0.1.0',libKey=`${lib}@${libVersion}`;
@@ -72,7 +79,9 @@ const starter=(id:string,name:string,e:Partial<Entry>)=>entry({ref:`library/${li
  license:'CC0-1.0',library:libKey,...e});
 const FIXTURE_LIBRARY:Entry[]=[
  starter('server-rack','Server rack',{category:'machines',formatVersion:'0.10',tags:['rack'],traits:['decorative','collidable','movable','machine'],surfaces:['floor'],scale:[1,1],
-  bounds:box(1.24,2.16,1.3),triangles:4210,gpuBytes:1_048_576,collisionTriangles:12}),
+  bounds:box(1.24,2.16,1.3),triangles:4210,gpuBytes:1_048_576,collisionTriangles:12,
+  machine:{primary:'health',inputs:[{id:'health',type:'enum',values:['ok','warn','fail'],repeat:4,label:'Server health',explain:'One lamp per server: green ok, amber warn, red fail.'},
+   {id:'load',type:'number',min:0,max:1,default:0,label:'Load',explain:'How fast the fans spin.'}]}}),
  starter('street-lantern','Street lantern',{category:'lighting',tags:['lamp','street'],traits:['decorative','collidable','movable'],surfaces:['floor'],scale:[0.75,1.5],
   bounds:box(0.5,2.4,0.5),triangles:1800,gpuBytes:786_432,collisionTriangles:12}),
  starter('wall-clock','Wall clock',{category:'decor',traits:['decorative','movable'],surfaces:['wall'],scale:[0.5,2],bounds:box(0.4,0.4,0.06,true),triangles:640,gpuBytes:262_144}),
@@ -174,6 +183,12 @@ export class ObjectEngine {
  authoredOf(worldId:string|null):Authored[] {
   if(!worldId) return [];
   return [...(FIXTURE_WORLDS[worldId]?.objects || []),...(this.options.characters?FIXTURE_CHARACTERS[worldId]?.objects || []:[])];
+ }
+ /** Active user placements of machine entries in the loaded world, in placement order (the 0.24 live key). */
+ machinePlacements():Array<{id:string;asset:string;ref:string;machine:Ipc24_CatalogMachine}> {
+  const w=this.world();if(!w.id) return [];
+  return (this.placements.get(w.id) || []).flatMap(p=>{const e=this.resolve(p.ref);
+   return e?.state==='ready' && e.machine && !p.npc?[{id:p.id,asset:e.id,ref:p.ref,machine:structuredClone(e.machine)}]:[];});
  }
  /** User placements (and user characters) of a world; the array is live. */
  placementsOf(worldId:string):Placement[] {let list=this.placements.get(worldId);if(!list) this.placements.set(worldId,list=[]);return list;}

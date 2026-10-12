@@ -9,11 +9,13 @@ import {RpcError} from './client.js';
 import type {State,Snapshot} from './state.js';
 import type {Common02_Capability,Ipc02_Target,Ipc02_Transition,MethodMap} from './generated.js';
 import {QuestEngine,QUEST_REQUIREMENTS,QUEST_EVENTS,BASELINE_021} from './mock-quests.js';
-import {ObjectEngine,OBJECT_REQUIREMENTS,type Notice} from './mock-objects.js';
+import {ObjectEngine,OBJECT_REQUIREMENTS,catalogEntry22,catalogEntry24,type Notice} from './mock-objects.js';
+import {liveState} from './mock-live.js';
 import {NpcEngine,NPC_REQUIREMENTS,type NpcCall,type PowerProfile} from './mock-npcs.js';
 export {QuestEngine,QUEST_REQUIREMENTS,QUEST_EVENTS,BASELINE_021,GUIDANCE_DEFAULTS,slugify} from './mock-quests.js';
 export {ObjectEngine,OBJECT_REQUIREMENTS,OBJECT_LIMITS,PLACEABLE_TRAITS,REASONS,PROTECTED,FIXTURE_CHARACTERS,placeability,manifestEntry,compareVersions,listArchive} from './mock-objects.js';
 export {NpcEngine,NPC_REQUIREMENTS,NPC_LIMITS,GRAPHICS_DEFAULTS,WALK_SPEED,USE_DISTANCE,samplePath,type PowerProfile} from './mock-npcs.js';
+export {LIVE_LIMIT,defaultSource,machineOf,liveState} from './mock-live.js';
 export type Capability=Common02_Capability|'quest.control'|'objects.control';
 export const GRANTS:Capability[]=['state.read','world.control','surface.control','movement.control','shell.control','runtime.control','data.publish'];
 /** IPC 0.21 adds quest.control (quest and focus mutations, guidance.set). */
@@ -24,11 +26,13 @@ export const QUEST_PROTOCOL='0.21' satisfies Protocol;
 export const OBJECTS_PROTOCOL='0.22' satisfies Protocol;
 /** Characters, paths and interactions (RFC-0011 P2): the npcs state key, npcs/paths/interaction methods, graphics npc_motion. */
 export const NPCS_PROTOCOL='0.23' satisfies Protocol;
+/** Live machines (RFC-0013): catalog entries carry machine, the live state key. */
+export const LIVE_PROTOCOL='0.24' satisfies Protocol;
 /**
  * The projections the mock serves: 0.1, 0.2 and the feature versions it models. A listener
  * started at version V negotiates every one of these up to V (compared with atLeast).
  */
-export const MOCK_PROTOCOLS=['0.1','0.2',QUEST_PROTOCOL,OBJECTS_PROTOCOL,NPCS_PROTOCOL] as const;
+export const MOCK_PROTOCOLS=['0.1','0.2',QUEST_PROTOCOL,OBJECTS_PROTOCOL,NPCS_PROTOCOL,LIVE_PROTOCOL] as const;
 export type MockProtocol=typeof MOCK_PROTOCOLS[number];
 /** Developer grants a listener at `protocol` can hand out. */
 export function grantsFor(protocol:Protocol):Capability[] {
@@ -38,6 +42,8 @@ export function grantsFor(protocol:Protocol):Capability[] {
 export const OBJECT_GRANTS:Capability[]=grantsFor(OBJECTS_PROTOCOL);
 /** IPC 0.23 adds no grant: characters and paths use objects.control, interactions world.control. */
 export const NPC_GRANTS:Capability[]=grantsFor(NPCS_PROTOCOL);
+/** IPC 0.24 adds no grant: live reads with state.read. */
+export const LIVE_GRANTS:Capability[]=grantsFor(LIVE_PROTOCOL);
 export const REQUIREMENTS:Record<string,Capability|undefined>={
  'session.hello':undefined,'session.ping':undefined,'state.subscribe':'state.read','state.snapshot':'state.read','state.unsubscribe':'state.read',
  'world.load':'world.control','surface.focus':'surface.control','movement.set':'movement.control','shell.claim':'shell.control','shell.release':'shell.control','shell.overlay':'shell.control','runtime.exit':'runtime.control',
@@ -74,7 +80,9 @@ type Grant={token:string;clientId:string;capabilities:Capability[];expires:numbe
 type Peer={socket?:Socket;decoder:FrameDecoder;hello:boolean;protocol:Protocol;clientId:string;grants:Capability[];methods:string[];ids:Set<string>;subscription?:string;baseline:number;leases:Set<string>;timer?:NodeJS.Timeout;closing:boolean;outstanding:number};
 type Hint={method:string;params:unknown};
 export class MockDaemon {
- readonly sessionId=randomUUID(); revision=0; state:State; readonly scenario:Scenario;readonly protocol:Protocol;readonly path:string;
+ readonly sessionId=randomUUID(); revision=0;
+ /** Wall-clock Unix ms at performance.now() 0, fixed so live publishedAt values are stable. */
+ private readonly wallOffset=Date.now()-performance.now(); state:State; readonly scenario:Scenario;readonly protocol:Protocol;readonly path:string;
  /** Markers, personal quests and focus sessions, served to 0.21 peers. */
  /** Object catalog, user placements and libraries, served to 0.22 peers. */
  readonly objects:ObjectEngine;
@@ -116,8 +124,15 @@ export class MockDaemon {
  /** The snapshot as a peer at `protocol` (0.2 or newer) sees it: no key of a newer version ever reaches an older peer. */
  project(snapshot:Snapshot,protocol:Protocol):Snapshot<Protocol> {
   if(!atLeast(protocol,QUEST_PROTOCOL))return snapshot;
+  if(atLeast(protocol,LIVE_PROTOCOL))return this.liveView(snapshot);
   if(atLeast(protocol,NPCS_PROTOCOL))return this.npcsView(snapshot);
   return atLeast(protocol,OBJECTS_PROTOCOL)?this.objectsView(snapshot):this.questView(snapshot);
+ }
+ /** The 0.24 projection: the 0.23 one plus the live key from the placed machines and published sources. */
+ liveView(snapshot:Snapshot):Snapshot<typeof LIVE_PROTOCOL> {
+  const base=this.npcsView(snapshot);
+  const live=liveState(this.objects.machinePlacements(),snapshot.state.integrations.sources,this.wallOffset);
+  return {...base,state:{...base.state,live}} as Snapshot<typeof LIVE_PROTOCOL>;
  }
  /** The 0.23 projection: the 0.22 one with the 0.23 instance and editor path fields, the npcs key and reticle interact. */
  npcsView(snapshot:Snapshot):Snapshot<typeof NPCS_PROTOCOL> {
@@ -279,7 +294,7 @@ export class MockDaemon {
    case 'data.publish':case 'data.remove':this.publish(p,method,params);break;
    case 'runtime.exit':{this.load?.cancel();const hints=this.stopMotion();this.hideUI(hints);this.commit({runtime:{...this.state.runtime,active:false},shell:{leases:[]},location:{...this.state.location,autodrive:false}},hints);for(const peer of [...this.peers,this.supervisor])peer.leases.clear();break;}
    default:{
-    if(method in OBJECT_REQUIREMENTS)return this.objectCall(method,params);
+    if(method in OBJECT_REQUIREMENTS)return this.objectCall(method,params,p.protocol);
     if(this.npcs && method in NPC_REQUIREMENTS)return this.npcCall(method,params);
     if(!(method in QUEST_REQUIREMENTS))throw new RpcError(-32601,'Unimplemented');
     const {result,hints,changed}=this.quests.execute(method,params);
@@ -291,8 +306,10 @@ export class MockDaemon {
   return {revision:this.revision};
  }
  /** 0.22 object and library methods: results carry the state revision (the catalog revision for objects.catalog). */
- private async objectCall(method:string,params:unknown):Promise<Record<string,unknown>> {
+ private async objectCall(method:string,params:unknown,protocol:Protocol):Promise<Record<string,unknown>> {
   const call=await this.objects.execute(method,params);
+  // Catalog entries carry machine from 0.24 on (null for non-machines).
+  if(method==='objects.catalog' && call.result)call.result={...call.result,entries:(call.result.entries as Parameters<typeof catalogEntry24>[0][]).map(atLeast(protocol,LIVE_PROTOCOL)?catalogEntry24:catalogEntry22)};
   if(call.changed)this.extendedCommit([]);
   this.notify(call.notices);
   return {...(call.revision==='none'?{}:{revision:call.revision==='catalog'?this.objects.catalogRevision:this.revision}),...call.result};

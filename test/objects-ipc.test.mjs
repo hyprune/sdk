@@ -34,7 +34,7 @@ const rejects=(promise,code,rule)=>assert.rejects(promise,e=>e.code===code && (r
 test('IPC 0.22 is a vendored pin; object methods validate only from 0.22',()=>{
  assert.ok(PROTOCOLS.includes('0.22'));assert.equal(OBJECTS_PROTOCOL,'0.22');
  assert.ok(atLeast('0.22',OBJECTS_PROTOCOL) && !atLeast('0.21',OBJECTS_PROTOCOL));
- assert.deepEqual([...MOCK_PROTOCOLS],['0.1','0.2','0.21','0.22','0.23']);
+ assert.deepEqual([...MOCK_PROTOCOLS],['0.1','0.2','0.21','0.22','0.23','0.24']);
  assert.ok(OBJECT_GRANTS.includes('objects.control') && OBJECT_GRANTS.includes('quest.control'));
  assert.ok(!grantsFor('0.21').includes('objects.control'));
  for(const [m,p] of [['objects.catalog',{}],['objects.place',{ref:rack}],['objects.remove',{all:true}],['libraries.remove',{id:'com.example.kit',version:'1.0.0'}]]){
