@@ -23,6 +23,8 @@ Packing validates the source, copies regular files through no-follow reads into 
 
 Archive extraction/installation is not implemented. Do not extract untrusted packages with a generic tar command as a substitute for the future safe installer.
 
+World format 0.9 adds characters, paths, seats and `keepClear` (RFC-0004 "world 0.9"). An object asset has exactly one source: inline (`scene`, with optional `traits` and `slots`), `dir` (a package directory holding `object.json` and its scene) or `library` + `object`. `world validate` checks each `dir` asset like `hyprune object check` (without the id-equals-directory rule, which applies to libraries and the user folder) and passes its `object.json` to the validator as `options.assets`, so character-only fields (`path`, `seat`, `accent`, `interactions`), seat anchors and `locked` are checked against its traits. `library` assets resolve against the installed libraries when core activates the world; the SDK has no library roots, so it reports them as a warning. Inline assets keep the 0.8 glTF checks, including a character trait's skin and clips. Route walkability, seat reachability and stops outside `keepClear` need collision and navigation data: core and `hyprune-world-check` own them.
+
 `examples/world-minimal` is a public-domain synthetic empty glTF and valid spawn metadata. It is a lightweight test fixture, not a rendered room or claim of safe walking.
 
 ## Objects and libraries

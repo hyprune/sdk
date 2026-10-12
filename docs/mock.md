@@ -1,6 +1,6 @@
 # Mock daemon and shell development
 
-Build with `npm ci`, then `npm run mock`. The default is real IPC **0.2**, with all 26 methods filtered by grants, seven-key snapshots/deltas and subscribed-reader UI/data/location hints. The same listener accepts 0.1 with frozen method discovery and five-key projections; `--protocol 0.1` makes it legacy-only; `--protocol 0.21` and `0.22` add the quest and object projections below. `0.1-mock.1` and `--experimental` have been retired.
+Build with `npm ci`, then `npm run mock`. The default is real IPC **0.2**, with all 26 methods filtered by grants, seven-key snapshots/deltas and subscribed-reader UI/data/location hints. The same listener accepts 0.1 with frozen method discovery and five-key projections; `--protocol 0.1` makes it legacy-only; `--protocol 0.21`, `0.22` and `0.23` add the quest, object and character projections below. `0.1-mock.1` and `--experimental` have been retired.
 
 Use a private development socket:
 
@@ -108,6 +108,76 @@ Developer grants may include `objects.control` (`OBJECT_GRANTS`, `grantsFor(prot
   of the removed version move to the highest installed version with the same major
   (`object.substituted`) or read `missing` (`object.missing`).
 
+## Characters, paths and interactions (IPC 0.23)
+
+`--protocol 0.23` (or `new MockDaemon({protocol:'0.23'})`) negotiates 0.23 next to every
+older version. 0.23 peers get the 0.22 projection plus the `npcs` key, the 0.23 object
+instance fields (`character`, `accent`, `path`, `activity`, `seat`), the 0.23
+`editor.paths` (user paths with `use`, `name`, `speed`, `stops`) and the reticle action
+`interact` on an aimed character. 0.22 peers of a 0.23 listener see the characters as
+plain instances (null `path`, `activity` and `seat`, no `character` or `accent`) and a
+`click` reticle; 0.21 peers see user paths in their editor shape. Character and path
+notices (`npc.*`, `path.*`) reach 0.23 peers only. No new grant: `NPC_GRANTS` equals
+`OBJECT_GRANTS`. A 0.22 listener keeps its 0.22 world (no characters).
+
+- **Fixtures.** The observatory gains the package character assets `keeper` and
+  `astronomer`, the authored characters `keeper` (walking the closed package route
+  `gallery-loop` with the interactions `chat` (`say`, three lines) and `desk`
+  (`waypoint` to the work zone)) and `astronomer` (standing in the work zone with
+  `hello`, a two-line `say`), and the generic package path `survey-line`. The starter
+  library's `guide` is the user-spawnable character.
+- **Characters.** `npcs.spawn` takes a character ref and a route (`path`; a bare id is
+  `package/<id>`), a standing spot (`pose`, checked by the 0.22 box rules) or neither (in
+  front of the player). User characters are placements (`u-xxxxxx`, scale 1, not
+  movable) and count against the 0.22 object budgets and the 8 user characters per world;
+  a path carries at most 8 characters. `npcs.bind` changes a user character's route,
+  standing spot, phase, speed, accent or direction; `npcs.disable` hides authored and
+  user characters (`objects.hide` on an authored character does the same);
+  `npcs.remove` removes user characters (`{all:true}` leaves other placements;
+  `objects.remove` on a user character does the same). `objects.place` with a character
+  refuses (`use npcs.spawn`); `objects.transform`, `configure`, `pocket` and a user
+  `reset` refuse characters (`characters are protected`).
+- **Routes and motion.** Paths are sampled with the world 0.9 segment geometry (24
+  samples per segment: `line`, the Hermite `curve`, the bowed `arc`; `samplePath`). A
+  route is walkable when it has at least 2 points and every sample lies inside a zone,
+  within 0.35 m above its floor and clear of the scenario obstacles (grown by 0.35 m);
+  `problems` name the first failures with their positions. There is no collision mesh,
+  navmesh, keepClear or seat check. While `npcs.state` is `animating`, route characters
+  walk at 1.2 m/s (or the path's `speed`) times their own speed, turning at the ends of
+  open routes; positions publish at most twice a second. Stops and seats are listed but
+  not acted out.
+- **Paths.** `paths.list` returns the package and user paths of the world with
+  `walkable` (null when not a route), `problems` and `bound`. `paths.set` creates
+  `path-<n>` or replaces a user path, checking stop indices, track and generic stop rules
+  and walkability (`-32007` rule `walkable`); package ids are protected (`-32005`) and a
+  bound path must stay a walkable route. `paths.remove` refuses package paths and, unless
+  `unbind`, paths with characters (they then stand where they are). `paths.draw`
+  creates an empty user path, selects tool 3 (`editor.tool`, `interaction.tool`) and shows
+  `npcs.drawing`; `drawPoint(position, type)` simulates a tool-3 click. `paths.finish`
+  saves it and, for a `spawn` or `bind` draw, places the character on it, or keeps the
+  path and sends `path.unwalkable` when it is too short or unwalkable. A second draw
+  replaces the first (an empty earlier path goes away).
+- **Interactions.** `aimed` is the nearest active character with interactions within
+  3 m of the player (the mock has no reticle ray); `use()` simulates E: it advances a
+  running `say`, runs a single interaction or offers the `choose` list.
+  `interaction.choose` runs `say` (each call shows the next line; past the last one the
+  interaction ends), `waypoint` (sets `location.waypoint`), `guide` and `panel` (shown
+  until ended), and `interactionId: null` ends it. The character's activity is
+  `interacting` (or `guiding`) meanwhile. Disabled characters and `npc_motion: off`
+  offer none (`-32005`).
+- **Graphics and power.** `graphics.get/set` (state.read/world.control; 0.23 peers of the
+  mock only) return a fixed configuration with `npc_motion` (default `auto`) and
+  `reduced_motion` honoured. `npcs.state` is `none` without active characters, `off` or
+  `still` from the setting, `paused` with reason `inactive` when world mode is off,
+  `reduced motion`, or the power profile under `auto`: `setPowerProfile(profile)`
+  simulates the offload power profile (`full-ac` and `limited-ac` animate; `battery`,
+  `usb-c` and `unknown` pause with `battery`, `usb-c power`, `power unknown`).
+- **Errors.** -32004 unknown ref, id, path or interaction; -32005 not a character,
+  authored characters (bind, remove), package paths, bound paths without `unbind`,
+  disabled characters or no world; -32007 with rule `walkable` (or a 0.22 placement rule
+  for a standing spot); -32008 rule `budget` with an `npc.budget` notice; -32602 stop
+  indices, `reverse` without a path, spawn or bind on a non-route draw.
+
 ## Scenario files
 
 `observatory.json` provides surfaces, zones, waypoint, a looping pose path and timed notices. `surface-lifecycle.json` removes/re-adds surfaces. `warp.json` demonstrates navigation and world loading using real methods.
@@ -126,4 +196,4 @@ Developer grants may include `objects.control` (`OBJECT_GRANTS`, `grantsFor(prot
 
 Starting state, targets, transactions, commands and timing are checked before listening. Deltas coalesce to at most 30 Hz, retain each peer's baseline and replace complete keys. Snapshot/subscribe responses precede later deltas. Oversized resource creation rejects before commit.
 
-Programmatic harnesses can use `commit`, `runAction`, `objects` (the 0.22 engine), `project(snapshot, protocol)`, `hold`, `escape`, `disconnectClients`, `revokeClients`, `stop`. Restart creates a new session. Scenarios use real timers, not deterministic physics replay. No scenario action installs an extension, loads arbitrary code or injects input into the owner's compositor.
+Programmatic harnesses can use `commit`, `runAction`, `objects` (the 0.22 engine), `npcs` (the 0.23 engine), `project(snapshot, protocol)`, `hold`, `escape`, `use`, `drawPoint`, `setPowerProfile`, `disconnectClients`, `revokeClients`, `stop`. Restart creates a new session. Scenarios use real timers, not deterministic physics replay. No scenario action installs an extension, loads arbitrary code or injects input into the owner's compositor.

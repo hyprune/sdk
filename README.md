@@ -142,6 +142,23 @@ hyprune-mock --protocol 0.22 --object-dir "$HOME/.local/share/hyprune/objects" \
   --capabilities state.read,objects.control --launch hyprune object list
 ```
 
+### Characters and paths (IPC 0.23)
+
+```sh
+hyprune npc list [--json]                            # character instances (+ npcs state with --json)
+hyprune npc spawn library/com.hyprune.starter@0.1.0/resident-blue --path gallery-loop [--phase 0.5] [--speed 1.2] [--accent 0.9,0.4,0.1] [--reverse]
+hyprune npc spawn user/my-character                  # standing in front of the player
+hyprune npc disable|enable <id>                      # authored and user characters
+hyprune npc remove <id> | --all                      # user characters
+hyprune path list [--json]                           # package and user paths, walkability, bound characters
+```
+
+`--path` is a `route` (`package/<id>` or `user/<id>`; a bare id means `package/<id>`).
+The commands speak IPC 0.23 unless `--protocol`/`HYPRUNE_PROTOCOL` names a newer pin;
+`list` requests `state.read`, the others also `objects.control`. Drawing a route with
+tool 3 (`paths.draw`/`paths.finish`) is a shell flow; the mock simulates it (see
+[mock](docs/mock.md)).
+
 Tokens are passed through a one-use inherited FD, never command arguments or logs. The mock supervisor approves `--capabilities`; the CLI independently requests its `--capabilities`. Debug commands accept `--protocol 0.1` for a legacy daemon; default is `0.2`. An unauthenticated connection may hello/ping only.
 
 ## Library
@@ -257,6 +274,20 @@ animation nesting, collision proxy); `library` references are reserved and
 rejected. Core stays authoritative for rendering, probe lighting and proxies
 (RFC-0004 "world 0.8").
 
+World format **0.9** (`World09_Document`, RFC-0004 "world 0.9", RFC-0011 P2) adds
+characters, paths, seats and `keepClear`. Object assets take exactly one source: inline
+(`scene` plus optional `traits` and `slots`; `animations` and `collision` stay as
+shorthand), `dir` (a package object directory) or `library` + `object`
+(`<reverse-domain id>@<semver>`). Instances gain `path` (a `route` path, instead of
+`pose`), `reverse`, `seat`, `accent`, `interactions` (`say`, `waypoint`, `guide`,
+`panel`) and `locked`; top-level `paths` (`route`, `track` or `generic`, `line`/`curve`/
+`arc` points, stops), `seats` and `keepClear` are new. `validateWorld` checks `dir`
+assets as object directories and passes their `object.json` to the shared validator
+(`options.assets`) for the character, seat and movable rules; `library` assets are
+resolved by core against installed libraries and only reported. Route walkability and
+seat reachability stay with core and `hyprune-world-check` (see
+[world tools](docs/world-tools.md)).
+
 IPC **0.16** (`HypruneClient<'0.16'>`) adds the typed `upscaler` graphics setting
 (`'fsr1' | 'bilinear' | null`). `PROTOCOLS` in `validation.ts` is the single runtime
 list of negotiable protocols; `Protocol` is derived from it. Vendored schema `1ae2ed1`.
@@ -320,3 +351,20 @@ placement is `-32007` with `error.data.rule` (`playable`, `walls`, `support`, `w
 `library.installed`, …). `hyprune-mock --protocol 0.22` simulates all of it (see
 [mock](docs/mock.md)), and the CLI has `object add|list` and `library
 install|list|remove` (above). Vendored schema `ce517ea`.
+
+IPC **0.23** (`HypruneClient<'0.23'>`, RFC-0010/RFC-0011 P2) adds characters, paths and
+interactions. State gains the required `npcs` key (`motion` setting, effective `state`
+and pause `reason`, authored/user `usage` and `limits` 16/8, the `drawing` in progress,
+the `aimed` character and the running `interaction` or choice list); object instances
+gain `character` and `accent`, and `path` (`package/<id>` or `user/<id>`), `activity`
+and `seat` carry values; `editor.paths` gain `use`, `name`, `speed` and `stops`; the
+reticle action may be `interact`; `graphics.get/set` gain `npc_motion`
+(`auto|always|still|off`). Methods: `npcs.spawn/bind/disable/remove`,
+`paths.set/remove/draw/finish` (objects.control), `paths.list` (state.read) and
+`interaction.choose` (world.control); there is no new grant or event. Refusals: -32004
+unknown id/ref/path, -32005 protected, authored or not a character, -32007 rule
+`walkable` (or a placement rule), -32008 rule `budget` (8 user characters per world);
+characters are refused by `objects.transform/configure/pocket` and `objects.place`.
+Notices use new codes (`npc.spawned`, `path.unwalkable`, …). `hyprune-mock --protocol
+0.23` simulates it in memory (see [mock](docs/mock.md)), and the CLI has `npc` and `path`
+commands (above). Peers below 0.23 keep their exact shapes. Vendored schema `50d7271`.
