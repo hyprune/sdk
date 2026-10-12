@@ -5,8 +5,10 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {validateBytes} from 'gltf-validator';
 import {parseJson} from './codec.js';
-import {validateManifest} from './validation.js';
-import type {World_Document,World02_Document,World04_Document,World05_Document,World06_Document,World07_Document,World08_Document} from './generated.js';
+import {validateObject} from './object.js';
+import {validateManifest,atLeast} from './validation.js';
+import type {World_Document,World02_Document,World04_Document,World05_Document,World06_Document,World07_Document,World08_Document,World09_Document} from './generated.js';
+export type WorldManifest=World_Document|World02_Document|World04_Document|World05_Document|World06_Document|World07_Document|World08_Document|World09_Document;
 export const LIMITS={files:10_000,single:128*1024*1024,total:1024*1024*1024,gpu:512*1024*1024};
 export function packagePath(root:string,path:string):string {
  if(!path || path.startsWith('/') || /[\\:%?#\x00-\x1f]/.test(path) || path.split('/').some(p=>!p || p==='.' || p==='..')) throw new Error('Unsafe package path: '+path);
@@ -77,11 +79,35 @@ export function packageDigest(root:string,files:Array<{path:string;size:number}>
  const digest=createHash('sha256');for(const f of files) {digest.update(f.path+'\0'+f.size+'\0');digest.update(readAsset(root,f.path,limit));}
  return digest.digest('hex');
 }
-export async function validateWorld(directory:string):Promise<{manifest:World_Document|World02_Document|World04_Document|World05_Document|World06_Document|World07_Document|World08_Document;files:Array<{path:string;size:number}>;digest:string;warnings:string[]}> {
+export async function validateWorld(directory:string):Promise<{manifest:WorldManifest;files:Array<{path:string;size:number}>;digest:string;warnings:string[]}> {
  const root=resolve(directory),files=inventory(root),manifestBytes=readAsset(root,'world.json');
  if(manifestBytes.length>1_048_576) throw new Error('Manifest exceeds 1 MiB');
- const manifest=parseJson(new TextDecoder('utf-8',{fatal:true}).decode(manifestBytes)) as World_Document|World02_Document|World04_Document|World05_Document|World06_Document|World07_Document|World08_Document;
+ const manifest=parseJson(new TextDecoder('utf-8',{fatal:true}).decode(manifestBytes)) as WorldManifest;
  const result=validateManifest('world',manifest,undefined,manifest.formatVersion);if(!result.valid) throw new Error(result.errors.join('\n'));
+ // World 0.9 dir assets: each object directory is checked like `hyprune object check` (its id
+ // need not match the directory name inside a world package), and its object.json goes back to
+ // the validator as options.assets so traits (character, seat, movable) are known. Library
+ // assets resolve against installed libraries at activation; the SDK has no library roots.
+ const objectWarnings:string[]=[];
+ if(atLeast(manifest.formatVersion,'0.9') && 'objectAssets' in manifest && manifest.objectAssets) {
+  const assets:Record<string,unknown>={};
+  for(const asset of manifest.objectAssets as NonNullable<World09_Document['objectAssets']>) {
+   if('dir' in asset) {
+    let checked;
+    try {
+     if(!existsSync(join(root,asset.dir))) throw new Error('no such directory in the package');
+     packagePath(root,asset.dir);checked=await validateObject(join(root,asset.dir),{directoryName:false});
+    }
+    catch(e:any) {throw new Error(`Object asset ${asset.id} (${asset.dir}): `+e.message.split('\n').join(`\nObject asset ${asset.id} (${asset.dir}): `));}
+    assets[asset.id]=checked.manifest;
+    objectWarnings.push(...checked.warnings.map(w=>`object asset ${asset.id}: ${w}`));
+   } else if('library' in asset) objectWarnings.push(`object asset ${asset.id}: ${asset.library} ${asset.object} resolves against the installed libraries at activation (not checked here)`);
+  }
+  if(Object.keys(assets).length) {
+   const withAssets=validateManifest('world',manifest,undefined,manifest.formatVersion,{assets});
+   if(!withAssets.valid) throw new Error(withAssets.errors.join('\n'));
+  }
+ }
  if(manifest.requiredExtensions?.length) throw new Error('M0 validator supports no required Hyprune world extensions');
  const paths=[manifest.scene,manifest.preview,...(manifest.audio || []).map(a=>a.path),...manifest.attribution.filter(a=>a.path!=='.').map(a=>a.path)].filter((x):x is string=>!!x);
  for(const p of paths) packagePath(root,p);
@@ -92,11 +118,11 @@ export async function validateWorld(directory:string):Promise<{manifest:World_Do
  const sceneCheck=validateManifest('scene',gltf,undefined,manifest.formatVersion,{world:manifest});
  if(!sceneCheck.valid) throw new Error('Unsupported required glTF extension or lightmap for world '+manifest.formatVersion+': '+sceneCheck.errors.join('; '));
  const report=await gltfResources(root,manifest.scene,gltf,bytes);
- // World 0.8 object assets: each glTF with the world format's extension rules and the
- // asset rules (node names, animation nesting, collision proxy); never lightmapped.
- const objectWarnings:string[]=[];
+ // World 0.8+ inline object assets: each glTF with the world format's extension rules and the
+ // asset rules (node names, animation nesting, collision proxy; 0.9 character skin and clips);
+ // never lightmapped. Dir and library assets were handled above.
  if('objectAssets' in manifest && manifest.objectAssets) for(const asset of manifest.objectAssets) {
-  if(!asset.scene) continue; // library references are rejected by the manifest check above
+  if(!('scene' in asset) || !asset.scene) continue;
   const assetBytes=readAsset(root,asset.scene),assetGltf=gltfDocument(assetBytes,asset.scene);
   const check=validateManifest('scene',assetGltf,undefined,manifest.formatVersion,{world:manifest,asset:asset.id});
   if(!check.valid) throw new Error('Object asset '+asset.id+': '+check.errors.join('; '));

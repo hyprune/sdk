@@ -57,9 +57,10 @@ export function imageHeader(bytes:Buffer):{format:'png'|'jpeg'|'ktx2';width:numb
  * GPU bytes are an estimate: PNG and JPEG textures at 4 B/px, KTX2 at 1 B/px (block
  * compressed after transcoding), each x4/3 for mips, plus every glTF buffer's byteLength.
  * `options.measured` replaces these values (and adds exact rest bounds) when an import
- * tool has decoded the assets.
+ * tool has decoded the assets. `directoryName: false` drops the id-equals-directory rule
+ * (it binds libraries and the user folder; a world package's dir assets may be named freely).
  */
-export async function validateObject(directory:string,options:{measured?:ObjectMeasured}={}):Promise<ObjectCheck> {
+export async function validateObject(directory:string,options:{measured?:ObjectMeasured;directoryName?:boolean}={}):Promise<ObjectCheck> {
  const root=resolve(directory),label='Object';
  const files=inventory(root,{files:objectLimits.files,single:objectLimits.fileBytes,total:objectLimits.directoryBytes,label});
  const manifest=readManifest(root,'object.json',objectLimits.fileBytes);
@@ -111,7 +112,7 @@ export async function validateObject(directory:string,options:{measured?:ObjectM
   else thumbnail={width:header.width,height:header.height,bytes:bytes.length};
  }
  const measured={maxTextureSize,gpuBytes,...options.measured};
- const result=validateManifest('object',manifest,undefined,undefined,{gltf,directory:basename(root),files,thumbnail,measured}) as Result;
+ const result=validateManifest('object',manifest,undefined,undefined,{gltf,...(options.directoryName===false?{}:{directory:basename(root)}),files,thumbnail,measured}) as Result;
  errors.unshift(...result.errors);warnings.unshift(...(result.warnings || []));
  if(errors.length) throw new Error(errors.join('\n'));
  return {manifest:manifest as ObjectManifest,files,digest:packageDigest(root,files,objectLimits.fileBytes),warnings,

@@ -8,6 +8,7 @@ import {validateWorld,packWorld,packagePath} from '../dist/src/world.js';
 import {scaffold,EXTENSION_TYPES} from '../dist/src/scaffold.js';
 import {validateManifest} from '../dist/src/validation.js';
 import {readPulse} from '../examples/system-pulse/metrics.mjs';
+import {writeObject} from './object-fixtures.mjs';
 async function fixture(t) {const root=await mkdtemp(join(tmpdir(),'hyprune-world-'));const world=join(root,'world');await cp('examples/world-minimal',world,{recursive:true});t.after(()=>rm(root,{recursive:true,force:true}));return {root,world};}
 async function mutate(world,fn) {const path=join(world,'world.json'),v=JSON.parse(await readFile(path));fn(v);await writeFile(path,JSON.stringify(v));}
 test('offline schema semantics plus glTF validation and deterministic archive',async t=>{
@@ -171,4 +172,41 @@ test('world 0.8 manifests inherit 0.7',()=>{
  assert.equal(validateManifest('world',w,undefined,'0.8').valid,true);
  assert.equal(validateManifest('world',{...w,objects:[],objectAssets:[]},undefined,'0.8').valid,true);
  assert.equal(validateManifest('world',{...w,formatVersion:'0.7',objects:[]},undefined,'0.7').valid,false);
+});
+test('world 0.9 checks dir assets as object directories and passes their object.json to the validator',async t=>{
+ const {world}=await fixture(t);
+ // The directory name need not match the object id inside a world package.
+ await writeObject(join(world,'objects','lamp'),'street-lantern');
+ const pose={position:[0,0,-3],rotation:[0,0,0,1]};
+ const paths=[{id:'loop',use:'route',closed:true,points:[{position:[0,0,0],type:'line'},{position:[2,0,0],type:'curve'},{position:[2,0,2],type:'arc'}],stops:[{point:1,seconds:4,clip:'wave'}]}];
+ await mutate(world,m=>{m.formatVersion='0.9';m.objectAssets=[{id:'lamp',dir:'objects/lamp'},{id:'bench',library:'com.example.street@1.2.0',object:'bench'}];
+  m.objects=[{id:'lamp-1',asset:'lamp',pose,locked:true},{id:'bench-1',asset:'bench',pose}];m.paths=paths;
+  m.seats=[{id:'stool',pose,height:.45}];m.keepClear=[{id:'door',min:[0,0,0],max:[1,2,1]}];});
+ const result=await validateWorld(world);
+ assert.equal(result.manifest.formatVersion,'0.9');
+ assert.ok(result.warnings.some(w=>/object asset bench: com.example.street@1.2.0 bench resolves against the installed libraries/.test(w)),result.warnings);
+ // Character-only fields are refused once the dir asset's traits are known (not a character).
+ await mutate(world,m=>m.objects[0].accent=[1,0,0]);
+ await assert.rejects(validateWorld(world),/objects lamp-1: accent is for characters; asset lamp is not a character/);
+ await mutate(world,m=>{delete m.objects[0].accent;m.objects[0].seat='lamp-1';m.objects[1].seat='lamp-1';});
+ await assert.rejects(validateWorld(world),/object lamp-1 is not a seat/);
+ await mutate(world,m=>{delete m.objects[0].seat;delete m.objects[1].seat;});
+ // A broken object directory is reported with the asset id and directory.
+ await writeFile(join(world,'objects','lamp','object.json'),JSON.stringify({formatVersion:'0.9',id:'street-lantern'}));
+ await assert.rejects(validateWorld(world),/Object asset lamp \(objects\/lamp\): /);
+ await rm(join(world,'objects','lamp'),{recursive:true});
+ await assert.rejects(validateWorld(world),/Object asset lamp \(objects\/lamp\): /);
+ await writeObject(join(world,'objects','lamp'),'street-lantern');
+ // Validator semantics: unknown routes, pose/path exclusivity; 0.8 rejects every 0.9 field.
+ await mutate(world,m=>m.objects[1].path='nowhere');
+ await assert.rejects(validateWorld(world),/pose and path are exclusive|unknown path nowhere/);
+ await mutate(world,m=>{delete m.objects[1].path;m.formatVersion='0.8';});
+ await assert.rejects(validateWorld(world),/additional properties|must match/);
+});
+test('world 0.9 manifests inherit 0.8',()=>{
+ const w=JSON.parse(execFileSync('cat',['examples/world-minimal/world.json'],{encoding:'utf8'}));
+ w.formatVersion='0.9';w.playable={volumes:[{type:'box',min:[-5,0,-5],max:[5,8,5]}]};
+ assert.equal(validateManifest('world',w,undefined,'0.9').valid,true);
+ assert.equal(validateManifest('world',{...w,objects:[],objectAssets:[],paths:[],seats:[],keepClear:[]},undefined,'0.9').valid,true);
+ assert.equal(validateManifest('world',{...w,formatVersion:'0.8',paths:[]},undefined,'0.8').valid,false);
 });
