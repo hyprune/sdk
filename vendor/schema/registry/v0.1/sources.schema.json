@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hyprune.com/schema/registry/v0.1/sources.schema.json",
+  "title": "Hyprune sources configuration 0.1 (RFC-0015): sources.json and the read-only files of HYPRUNE_SOURCES_FILES",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "$ref": "index.schema.json#/$defs/https"
+    },
+    "version": {
+      "const": 1
+    },
+    "builtin": {
+      "description": "Switches for the built-in sources; they can be disabled, never removed or relabelled.",
+      "type": "object",
+      "properties": {
+        "official": {
+          "$ref": "#/$defs/switch"
+        },
+        "community": {
+          "$ref": "#/$defs/switch"
+        }
+      },
+      "additionalProperties": false
+    },
+    "custom": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "switch": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "description": "A custom source: an index URL, a GitHub repository (owner/repo, or owner/repo/name for one package of a multi-package repository) or a package URL (an archive with its sha256, or a release record).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 48,
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 48,
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+        },
+        "kind": {
+          "enum": [
+            "index",
+            "github",
+            "url"
+          ]
+        },
+        "url": {
+          "$ref": "index.schema.json#/$defs/https"
+        },
+        "repo": {
+          "type": "string",
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}(/[a-z0-9]+(-[a-z0-9]+)*)?$"
+        },
+        "sha256": {
+          "$ref": "index.schema.json#/$defs/sha256"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "added": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "kind",
+        "enabled"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "github"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "repo": true
+            },
+            "required": [
+              "repo"
+            ]
+          },
+          "else": {
+            "properties": {
+              "url": true
+            },
+            "required": [
+              "url"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

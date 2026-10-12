@@ -26,7 +26,12 @@ docs.world04=JSON.parse(readFileSync('vendor/schema/v0.4/world.schema.json'));
 // they share the world format numbering (object09 = v0.9/object.schema.json).
 for (const kind of ['object','library','library-releases']) for (const d of readdirSync('vendor/schema').filter(d => /^v0\.\d+$/.test(d) && existsSync(`vendor/schema/${d}/${kind}.schema.json`)).sort((a, b) => minor(a.slice(1)) - minor(b.slice(1))))
   docs[kind + String(minor(d.slice(1))).padStart(2, '0')] = JSON.parse(readFileSync(`vendor/schema/${d}/${kind}.schema.json`));
-const ident = s => s.split(/[^A-Za-z0-9]+/).map(p=>p[0]?.toUpperCase()+p.slice(1)).join('');
+// Registry documents (RFC-0015) are versioned on their own under registry/v0.N/; keys keep the
+// cross-file $ref names (index01 = registry/v0.1/index.schema.json).
+for (const d of existsSync('vendor/schema/registry') ? readdirSync('vendor/schema/registry').filter(d => /^v0\.\d+$/.test(d)).sort((a, b) => minor(a.slice(1)) - minor(b.slice(1))) : [])
+  for (const kind of ['index','release-record','sources']) if (existsSync(`vendor/schema/registry/${d}/${kind}.schema.json`))
+    docs[kind + String(minor(d.slice(1))).padStart(2, '0')] = JSON.parse(readFileSync(`vendor/schema/registry/${d}/${kind}.schema.json`));
+const ident = s => s.split(/[^A-Za-z0-9]+/).filter(Boolean).map(p=>p[0]?.toUpperCase()+p.slice(1)).join('');
 const refName = (file, def) => ident(file)+'_'+ident(def || 'Document');
 function type(s, file) {
   if (s.$ref) {

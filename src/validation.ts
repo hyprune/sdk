@@ -1,6 +1,9 @@
-import {validate as upstream,objectFormats,objectLimits,atLeast} from '../vendor/schema/lib/validate.mjs';
+import {validate as upstream,objectFormats,objectLimits,atLeast,worldFormats} from '../vendor/schema/lib/validate.mjs';
+import {validateRegistry,registryVersions,registryLimits,parseSemver,compareSemver,tagVersion} from '../vendor/schema/lib/validate.mjs';
 // objectFormats and objectLimits (RFC-0011) come from the vendored validator's directories and constants.
-export {upstream as validateManifest,objectFormats,objectLimits};
+export {upstream as validateManifest,objectFormats,objectLimits,worldFormats};
+// RFC-0015 registry documents (index, entry, release record, sources.json) and SemVer helpers.
+export {validateRegistry,registryVersions,registryLimits,parseSemver,compareSemver,tagVersion};
 /** The shared contract-version comparison (numeric, never a hand-kept list). */
 export {atLeast};
 // The only runtime list of negotiable protocols, generated from the vendored IPC

@@ -903,3 +903,140 @@ export function validate(kind, value, method, version, options = {}) {
   }
   return { valid: errors.length === 0, errors };
 }
+
+// Registry documents (RFC-0015), versioned on their own under registry/v0.N/: the index
+// (and one entry of it, the shape of a registry entry file), the release record and
+// sources.json. Discovered from the directories like every other contract.
+const registryRoot = new URL('../registry/', import.meta.url);
+export const registryVersions = existsSync(registryRoot)
+  ? readdirSync(registryRoot).filter(d => /^v0\.\d+$/.test(d)).map(d => d.slice(1)).sort(byVersion) : [];
+const registrySchemas = { 'registry-index': 'index', 'registry-entry': 'index', 'release-record': 'release-record', sources: 'sources' };
+for (const v of registryVersions) for (const name of new Set(Object.values(registrySchemas)))
+  if (existsSync(new URL(`v${v}/${name}.schema.json`, registryRoot))) ajv.addSchema(JSON.parse(readFileSync(new URL(`v${v}/${name}.schema.json`, registryRoot))));
+/** RFC-0015 archive limits per package type (compressed bytes, expanded bytes, files, single file). */
+export const registryLimits = Object.freeze({
+  world: Object.freeze({ bytes: 512 * 1048576, expandedBytes: 1024 * 1048576, files: 10000, fileBytes: 128 * 1048576 }),
+  library: Object.freeze({ bytes: 256 * 1048576, expandedBytes: 512 * 1048576, files: 4000, fileBytes: 32 * 1048576 }),
+  index: Object.freeze({ bytes: 16 * 1048576, entries: 20000, versions: 64, thumbnails: 4, custom: 32 }),
+});
+const SEMVER_PARTS = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+/** SemVer 2.0 parse; undefined when invalid (including numeric pre-release identifiers with leading zeros). */
+export function parseSemver(text) {
+  const m = typeof text === 'string' ? SEMVER_PARTS.exec(text) : null;
+  if (!m) return undefined;
+  const pre = m[4] === undefined ? [] : m[4].split('.');
+  if (pre.some(p => /^0\d+$/.test(p))) return undefined;
+  return { major: Number(m[1]), minor: Number(m[2]), patch: Number(m[3]), prerelease: pre, build: m[5] ?? null };
+}
+/** SemVer precedence: negative when a < b, 0 when equal (build metadata ignored), positive when a > b. Throws on invalid versions. */
+export function compareSemver(a, b) {
+  const x = parseSemver(a), y = parseSemver(b);
+  if (!x || !y) throw new Error(`Invalid SemVer: ${!x ? a : b}`);
+  for (const k of ['major', 'minor', 'patch']) if (x[k] !== y[k]) return x[k] < y[k] ? -1 : 1;
+  if (!x.prerelease.length || !y.prerelease.length) return Math.sign(y.prerelease.length - x.prerelease.length);
+  for (let i = 0; i < Math.max(x.prerelease.length, y.prerelease.length); i++) {
+    const p = x.prerelease[i], q = y.prerelease[i];
+    if (p === undefined) return -1;
+    if (q === undefined) return 1;
+    const pn = /^\d+$/.test(p), qn = /^\d+$/.test(q);
+    if (pn && qn) { const d = BigInt(p) - BigInt(q); if (d) return d < 0n ? -1 : 1; }
+    else if (pn !== qn) return pn ? -1 : 1;
+    else if (p !== q) return p < q ? -1 : 1;
+  }
+  return 0;
+}
+/**
+ * The version a tag names by the RFC-0015 tag convention: `v<version>` for a repository
+ * with one package, `<name>-v<version>` (name a lowercase slug) for one of several.
+ * Returns {name|null, version} or undefined when the tag follows neither form.
+ */
+export function tagVersion(tag) {
+  if (typeof tag !== 'string') return undefined;
+  const m = /^(?:([a-z0-9]+(?:-[a-z0-9]+)*)-)?v(\d[0-9A-Za-z.+-]*)$/.exec(tag);
+  if (!m || !parseSemver(m[2])) return undefined;
+  return { name: m[1] ?? null, version: m[2] };
+}
+const spdxValid = text => { try { parseSpdx(text); return true; } catch { return false; } };
+// Semantic rules of one index entry (shared by kinds registry-index and registry-entry).
+function registryEntryRules(entry, label, fail) {
+  const limits = registryLimits[entry.type];
+  const tags = new Set(), versions = new Set();
+  entry.versions.forEach((v, i) => {
+    const at = `${label}versions/${i} (${v.tag})`;
+    if (tags.has(v.tag)) fail(`${at}: duplicate tag`); tags.add(v.tag);
+    if (versions.has(v.version)) fail(`${at}: duplicate version ${v.version}`); versions.add(v.version);
+    if (!parseSemver(v.version)) fail(`${at}: version ${v.version} is not SemVer (numeric pre-release identifiers can't have leading zeros)`);
+    const named = tagVersion(v.tag);
+    if (!named || named.version !== v.version) fail(`${at}: tag must name version ${v.version} (v${v.version} or <name>-v${v.version})`);
+    if (i > 0 && parseSemver(v.version) && parseSemver(entry.versions[i - 1].version) && compareSemver(entry.versions[i - 1].version, v.version) <= 0)
+      fail(`${at}: versions must be newest first (${entry.versions[i - 1].version} before ${v.version})`);
+    if (!spdxValid(v.license)) fail(`${at}: license: invalid SPDX expression`);
+    if (v.bytes > limits.bytes) fail(`${at}: bytes ${v.bytes} exceed the ${entry.type} archive limit ${limits.bytes}`);
+    if (v.expandedBytes > limits.expandedBytes) fail(`${at}: expandedBytes ${v.expandedBytes} exceed the ${entry.type} limit ${limits.expandedBytes}`);
+    if (v.files > limits.files) fail(`${at}: files ${v.files} exceed the ${entry.type} limit ${limits.files}`);
+    if (entry.type === 'library' && v.requires?.libraries?.length) fail(`${at}: a library requires no libraries`);
+    if ((v.requires?.libraries || []).some(r => r.startsWith(entry.id + '@'))) fail(`${at}: requires itself`);
+  });
+}
+function releaseRecordRules(r, fail) {
+  const limits = registryLimits[r.type], stem = `${r.id}-${r.version}`;
+  if (!parseSemver(r.version)) fail(`version: ${r.version} is not SemVer (numeric pre-release identifiers can't have leading zeros)`);
+  if (!spdxValid(r.license)) fail('license: invalid SPDX expression');
+  const named = tagVersion(r.source.tag);
+  if (!named || named.version !== r.version) fail(`source.tag: ${r.source.tag} must name version ${r.version} (v${r.version} or <name>-v${r.version})`);
+  if (r.archive.name !== `${stem}.tar.zst`) fail(`archive.name: must be ${stem}.tar.zst`);
+  if (r.archive.bytes > limits.bytes) fail(`archive.bytes: ${r.archive.bytes} exceed the ${r.type} archive limit ${limits.bytes}`);
+  if (r.archive.expandedBytes > limits.expandedBytes) fail(`archive.expandedBytes: ${r.archive.expandedBytes} exceed the ${r.type} limit ${limits.expandedBytes}`);
+  if (r.archive.files > limits.files) fail(`archive.files: ${r.archive.files} exceed the ${r.type} limit ${limits.files}`);
+  if (r.type === 'library' && r.requires?.libraries?.length) fail('requires.libraries: a library requires no libraries');
+  const names = (r.thumbnails || []).map(t => t.name);
+  names.forEach((name, i) => { if (!name.startsWith(`${stem}.thumb-${i + 1}.`)) fail(`thumbnails/${i}: name must be ${stem}.thumb-${i + 1}.png or .jpg`); });
+}
+function sourcesRules(doc, fail) {
+  const ids = new Set();
+  (doc.custom || []).forEach((s, i) => {
+    const at = `custom/${i} (${s.id})`;
+    if (ids.has(s.id)) fail(`${at}: duplicate id`); ids.add(s.id);
+    if (['official', 'community'].includes(s.id)) fail(`${at}: id is reserved for a built-in source`);
+    if (s.label.trim() !== s.label) fail(`${at}: label has leading or trailing spaces`);
+    const extra = { index: ['repo', 'sha256'], github: ['url', 'sha256'], url: ['repo'] }[s.kind].filter(k => s[k] !== undefined);
+    if (extra.length) fail(`${at}: kind ${s.kind} takes no ${extra.join(', ')}`);
+    if (s.kind === 'url') {
+      const path = new URL(s.url).pathname;
+      if (path.endsWith('.tar.zst') && !s.sha256) fail(`${at}: an archive URL needs its sha256`);
+      if (!path.endsWith('.tar.zst') && !path.endsWith('.json')) fail(`${at}: a package URL is a .tar.zst archive or a .release.json record`);
+      if (path.endsWith('.json') && s.sha256) fail(`${at}: a release record URL supplies its own hash`);
+    }
+  });
+}
+/**
+ * Validate a registry document (RFC-0015). Kinds: `registry-index` (an index document),
+ * `registry-entry` (one entry, e.g. a registry entry file, which may carry `$schema`),
+ * `release-record` and `sources`. Adds the rules a schema can't express: unique ids,
+ * versions unique and newest first by SemVer, the tag naming the version, SPDX
+ * expressions, per-type archive limits.
+ * @param version registry format (default: the newest registry/v0.N)
+ * @throws on an unknown kind or version
+ */
+export function validateRegistry(kind, value, version = registryVersions.at(-1)) {
+  if (!Object.hasOwn(registrySchemas, kind)) throw new Error(`Unknown registry kind: ${kind}`);
+  if (!registryVersions.includes(version)) throw new Error(`Unknown registry version: ${version}`);
+  const id = `https://hyprune.com/schema/registry/v${version}/${registrySchemas[kind]}.schema.json${kind === 'registry-entry' ? '#/$defs/entry' : ''}`;
+  const key = `registry:${version}:${kind}`;
+  if (!validators.has(key)) validators.set(key, ajv.getSchema(id));
+  const check = validators.get(key);
+  if (!check(value)) return { valid: false, errors: check.errors.map(e => `${e.instancePath || '/'} ${e.message}`) };
+  const errors = [], fail = m => errors.push(m);
+  if (kind === 'registry-entry') registryEntryRules(value, '', fail);
+  if (kind === 'registry-index') {
+    const ids = new Set();
+    value.entries.forEach((entry, i) => {
+      if (ids.has(entry.id)) fail(`entries/${i}: duplicate id ${entry.id}`); ids.add(entry.id);
+      if (entry.$schema !== undefined) fail(`entries/${i}: $schema belongs to entry files, not index entries`);
+      registryEntryRules(entry, `entries/${i} ${entry.id}: `, fail);
+    });
+  }
+  if (kind === 'release-record') releaseRecordRules(value, fail);
+  if (kind === 'sources') sourcesRules(value, fail);
+  return { valid: errors.length === 0, errors };
+}
