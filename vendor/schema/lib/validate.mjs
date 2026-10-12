@@ -466,7 +466,7 @@ function objectTraitRules(traits, slots, fail, inside = () => {}) {
   for (const l of slots.levels || []) if (l.axis && Math.abs(Math.hypot(...l.axis) - 1) > 0.001) fail(`slots.levels ${l.id}: axis must be a unit vector`);
   for (const s of slots.stacks || []) {
     if (s.cap > s.layout.grid.reduce((x, y) => x * y, 1)) fail(`slots.stacks ${s.id}: cap exceeds the layout grid`);
-    s.layout.grid.forEach((n, j) => { if (n > 1 && !(s.layout.spacing[j] > 0)) fail(`slots.stacks ${s.id}: spacing ${'xyz'[j]} must be positive for ${n} cells`); });
+    s.layout.grid.forEach((n, j) => { if (n > 1 && !(Number.isFinite(s.layout.spacing[j]) && s.layout.spacing[j] !== 0)) fail(`slots.stacks ${s.id}: spacing ${'xyz'[j]} must be non-zero for ${n} cells`); });
   }
 }
 function validateObjectManifest(value, version, options, fail, warn) {

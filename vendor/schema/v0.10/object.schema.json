@@ -1025,10 +1025,11 @@
                     "items": {
                       "type": "number",
                       "maximum": 10,
-                      "minimum": 0
+                      "minimum": -10
                     },
                     "minItems": 3,
-                    "maxItems": 3
+                    "maxItems": 3,
+                    "description": "Metres between copies per axis; a negative component fills from the node towards -axis. Non-zero where that axis's grid is above 1."
                   },
                   "fill": {
                     "enum": [
