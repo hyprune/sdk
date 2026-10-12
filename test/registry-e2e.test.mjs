@@ -278,6 +278,15 @@ test('index source: labels, requirements, world update and rollback, hash and id
  assert.deepEqual([...new Set(report.results.map(x=>x.check))],[1,2,3,4,5,6,7,8,9,10,11,12,13,14]);
  r=await c.run('registry','check',join(c.root,'org.example.harbour.json'),'--json','--author','mallory');
  assert.equal(r.code,1);assert.match(JSON.stringify(JSON.parse(r.out).results.find(x=>x.check===2).errors),/no write access/);
+ // A token without push access gets 403 on collaborator permissions: the repository owner
+ // and whoever created every new release still count as maintainers; nobody else does.
+ const restricted=c.fake.repo('example-org','worlds');restricted.restricted=true;
+ const check2=async(author)=>{const x=await c.run('registry','check',join(c.root,'org.example.harbour.json'),'--json','--author',author);return JSON.parse(x.out).results.find(y=>y.check===2);};
+ assert.equal((await check2('example-org')).ok,true);
+ assert.match(JSON.stringify((await check2('frank')).errors),/no write access/);
+ for(const rel of restricted.releases) rel.author='frank';
+ assert.equal((await check2('frank')).ok,true,'the release author');
+ restricted.restricted=false;
 });
 
 test('library installs are handed to core with a session (libraries.install), else committed by the CLI',async t=>{

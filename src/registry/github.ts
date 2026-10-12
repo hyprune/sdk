@@ -7,14 +7,14 @@ import {parseRecord,checkIndex,type IndexDocument,type IndexEntry,type IndexVers
 import {tagVersion,isPrerelease,compareSemver} from './semver.js';
 
 export interface GithubAsset {name:string;size:number;browser_download_url:string;updated_at?:string}
-export interface GithubRelease {tag_name:string;draft:boolean;prerelease:boolean;published_at:string|null;assets:GithubAsset[]}
+export interface GithubRelease {tag_name:string;draft:boolean;prerelease:boolean;published_at:string|null;assets:GithubAsset[];author?:{login:string}|null}
 export type Permission='admin'|'maintain'|'write'|'triage'|'read'|'none';
 /** The GitHub API calls registry code needs; tests and the registry CI inject their own. */
 export interface GithubClient {
  releases(owner:string,repo:string):Promise<GithubRelease[]>;
  /** The commit a tag points to (annotated tags peeled), or null when the tag doesn't exist. */
  tagCommit(owner:string,repo:string,tag:string):Promise<string|null>;
- /** A user's permission on a repository, or null when unknown. */
+ /** A user's permission on a repository, or null when unknown (GitHub answers 403 to tokens without push access). */
  permission(owner:string,repo:string,user:string):Promise<Permission|null>;
  /** The repository's owner login, full name and topics, or null when it doesn't exist. */
  repository(owner:string,repo:string):Promise<{owner:string;fullName:string;topics:string[]}|null>;
@@ -32,9 +32,12 @@ export const githubRepoUrl=(s:GithubSpec)=>`https://github.com/${s.owner}/${s.re
 
 /** The HTTP implementation (HYPRUNE_GITHUB_API, GITHUB_TOKEN to the API host only). */
 export function githubClient(ctx:FetchContext={}):GithubClient {
- const api=githubApi(ctx.env),json=async(path:string,allow404=false)=>{
+ const api=githubApi(ctx.env),json=async(path:string,allow404=false,allow403=false)=>{
   try {return decodeJson(await fetchBytes(api+path,FETCH_LIMITS.apiPage,{...ctx,accept:'application/vnd.github+json'}),path) as any;}
-  catch(e) {if(allow404 && e instanceof RegistryError && / HTTP 404$/.test(e.message)) return null;throw e;}
+  catch(e) {
+   if(e instanceof RegistryError && (allow404 && / HTTP 404$/.test(e.message) || allow403 && / HTTP 403$/.test(e.message))) return null;
+   throw e;
+  }
  };
  const seg=encodeURIComponent;
  return {
@@ -56,7 +59,7 @@ export function githubClient(ctx:FetchContext={}):GithubClient {
    return annotated?.object?.type==='commit'?annotated.object.sha:null;
   },
   async permission(owner,repo,user) {
-   const r=await json(`/repos/${seg(owner)}/${seg(repo)}/collaborators/${seg(user)}/permission`,true);
+   const r=await json(`/repos/${seg(owner)}/${seg(repo)}/collaborators/${seg(user)}/permission`,true,true);
    return r?.role_name==='maintain'?'maintain':(r?.permission ?? null);
   },
   async repository(owner,repo) {

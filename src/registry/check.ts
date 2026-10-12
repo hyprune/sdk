@@ -61,7 +61,11 @@ export function checkSchema(entry:unknown,o:Pick<CheckOptions,'fileName'|'otherC
  for(const other of o.otherChanges ?? []) err(r,`the change also touches ${other}; one entry per pull request`);
  return r;
 }
-/** Check 2: reserved and owner-bound ids, write access of the author, ids held by another repository. */
+/**
+ * Check 2: reserved and owner-bound ids, write access of the author, ids held by another repository.
+ * GitHub only shows collaborator permissions to tokens with push access, so the author also
+ * counts as a maintainer when they own the repository or created the release of every new version.
+ */
 export async function checkOwnership(entry:IndexEntry,o:CheckOptions):Promise<CheckResult> {
  const r=result(2,'id and ownership'),repo=githubRepo(entry.repo),tier=o.tier ?? 'community';
  if(tier==='community' && entry.id.startsWith('com.hyprune.')) err(r,'com.hyprune.* ids are reserved for official entries');
@@ -72,8 +76,13 @@ export async function checkOwnership(entry:IndexEntry,o:CheckOptions):Promise<Ch
  const info=await o.github.repository(repo.owner,repo.repo);
  if(!info) err(r,`${repo.owner}/${repo.repo} does not exist`);
  if(o.author) {
-  const p=await o.github.permission(repo.owner,repo.repo,o.author);
-  if(!p || !['admin','maintain','write'].includes(p)) err(r,`${o.author} has no write access to ${repo.owner}/${repo.repo} (only its maintainers can list it)`);
+  const author=o.author.toLowerCase(),p=await o.github.permission(repo.owner,repo.repo,o.author);
+  let maintainer=!!p && ['admin','maintain','write'].includes(p) || info?.owner?.toLowerCase()===author;
+  if(!maintainer) {
+   const fresh=entry.versions.filter(v=>!o.existing?.versions.some(old=>old.tag===v.tag)),releases=fresh.length?await o.github.releases(repo.owner,repo.repo):[];
+   maintainer=fresh.length>0 && fresh.every(v=>releases.find(x=>x.tag_name===v.tag)?.author?.login?.toLowerCase()===author);
+  }
+  if(!maintainer) err(r,`${o.author} has no write access to ${repo.owner}/${repo.repo} (only its maintainers can list it: the owner, a collaborator with write access, or whoever created each new release)`);
  } else if(tier==='community') r.warnings.push('no pull request author given: write access not checked');
  for(const index of o.indexes ?? []) for(const other of index.entries) {
   if(other.id===entry.id && other.repo && entry.repo && githubRepo(other.repo)?.owner.toLowerCase()+'/'+githubRepo(other.repo)?.repo.toLowerCase()!==repo.owner.toLowerCase()+'/'+repo.repo.toLowerCase())

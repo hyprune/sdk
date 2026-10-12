@@ -10,7 +10,7 @@ import {createHash} from 'node:crypto';
 /**
  * Start the server. State is plain data the test can change at any time:
  * - repos: Map "owner/repo" → {topics, collaborators: {login: permission}, tags: {tag: {commit, annotated}},
- *   releases: [{tag_name, draft, prerelease, published_at, assets: [{name, bytes: Buffer}]}]}
+ *   releases: [{tag_name, draft, prerelease, published_at, author, assets: [{name, bytes: Buffer}]}]}
  * - indexes: Map name → Buffer|object served at /index/<name>.json
  * Every request is logged in `requests` ({method, path, headers}).
  */
@@ -38,6 +38,7 @@ export async function startFakeGithub() {
    if(kind==='releases') {
     const per=Number(url.searchParams.get('per_page') || 30),page=Number(url.searchParams.get('page') || 1);
     const list=state.releases.slice((page-1)*per,page*per).map(rel=>({tag_name:rel.tag_name,draft:!!rel.draft,prerelease:!!rel.prerelease,published_at:rel.published_at ?? '2026-10-12T10:00:00Z',
+     author:{login:rel.author ?? state.owner},
      assets:rel.assets.map(a=>assetJson(state.owner,state.name,rel.tag_name,a))}));
     return send(res,200,list);
    }
@@ -51,6 +52,8 @@ export async function startFakeGithub() {
     return t?send(res,200,{object:{type:'commit',sha:t.commit}}):send(res,404,{message:'Not Found'});
    }
    if(kind==='collaborators' && rest[1]==='permission') {
+    // Like GitHub: tokens without push access get 403; `restricted` simulates that.
+    if(state.restricted) return send(res,403,{message:'Must have push access to view collaborator permission.'});
     const p=state.collaborators?.[rest[0]];
     return p?send(res,200,{permission:p==='maintain'?'write':p,role_name:p}):send(res,404,{message:'Not Found'});
    }
@@ -80,14 +83,14 @@ export async function startFakeGithub() {
    return repos.get(key);
   },
   /** Publish the files of a `pack --release` output directory as the release of `tag` (newest first). */
-  publish(owner,name,tag,dir,{prerelease=false,draft=false,commit,annotated=false,only}={}) {
+  publish(owner,name,tag,dir,{prerelease=false,draft=false,commit,annotated=false,only,author}={}) {
    const state=this.repo(owner,name);
    const files=readdirSync(dir).filter(f=>!only || only(f));
    const assets=files.map(f=>({name:f,bytes:readFileSync(join(dir,f)),updated:new Date(Date.now()+(++uploads)).toISOString()}));
    const record=assets.find(a=>a.name.endsWith('.release.json'));
    const sha=commit ?? (record?JSON.parse(record.bytes).source.commit:createHash('sha1').update(tag).digest('hex'));
    state.tags[tag]={commit:sha,annotated};
-   state.releases=[{tag_name:tag,draft,prerelease,published_at:'2026-10-12T10:00:00Z',assets},...state.releases.filter(r=>r.tag_name!==tag)];
+   state.releases=[{tag_name:tag,draft,prerelease,published_at:'2026-10-12T10:00:00Z',author,assets},...state.releases.filter(r=>r.tag_name!==tag)];
    return state.releases[0];
   },
   /** Replace an asset's bytes (a creator re-uploading a published asset). */
