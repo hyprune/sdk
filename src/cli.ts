@@ -11,10 +11,12 @@ import {validateWire} from './validation.js';
 import {parseJson} from './codec.js';
 import {questMain,questHelp} from './quest-cli.js';
 import {objectMain,objectHelp} from './object-cli.js';
-const help=`hyprune world validate <dir>\nhyprune world pack <dir> [--output file.tar.zst]\nhyprune object check <dir> [--measured measured.json]\nhyprune library check <dir>\n${objectHelp}\nhyprune ext new <screen-type|widget|movement-mode|integration> [dir] [--id org.example.id]\nhyprune ipc call <method> [JSON params] [--socket path] [--protocol 0.3|0.2|0.1]\nhyprune ipc subscribe [--socket path] [--count N]\nhyprune doctor [--socket path]\n${questHelp}\n\nAuthentication: supervisor supplies HYPRUNE_TOKEN_FD (>=3), HYPRUNE_CLIENT_ID, HYPRUNE_SOCKET.\nNo tokens on the command line. Use hyprune-mock --launch for developer grants.`;
+import {npcMain,npcHelp} from './npc-cli.js';
+const help=`hyprune world validate <dir>\nhyprune world pack <dir> [--output file.tar.zst]\nhyprune object check <dir> [--measured measured.json]\nhyprune library check <dir>\n${objectHelp}\n${npcHelp}\nhyprune ext new <screen-type|widget|movement-mode|integration> [dir] [--id org.example.id]\nhyprune ipc call <method> [JSON params] [--socket path] [--protocol 0.3|0.2|0.1]\nhyprune ipc subscribe [--socket path] [--count N]\nhyprune doctor [--socket path]\n${questHelp}\n\nAuthentication: supervisor supplies HYPRUNE_TOKEN_FD (>=3), HYPRUNE_CLIENT_ID, HYPRUNE_SOCKET.\nNo tokens on the command line. Use hyprune-mock --launch for developer grants.`;
 export async function main(argv=process.argv.slice(2)):Promise<void> {
  if(argv[0]==='quest' || argv[0]==='focus') return questMain(argv);
  if(argv[0]==='object' && ['add','list'].includes(argv[1]) || argv[0]==='library' && ['install','list','remove'].includes(argv[1])) return objectMain(argv);
+ if(argv[0]==='npc' || argv[0]==='path') return npcMain(argv);
  const {values:v,positionals:p}=parseArgs({args:argv,allowPositionals:true,options:{help:{type:'boolean',short:'h'},socket:{type:'string'},protocol:{type:'string'},output:{type:'string'},measured:{type:'string'},id:{type:'string'},count:{type:'string'},capabilities:{type:'string'}}});
  if(v.help || !p.length) {console.log(help);return;}
  if(v.protocol) process.env.HYPRUNE_PROTOCOL=v.protocol;
