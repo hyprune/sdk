@@ -15,6 +15,8 @@ export interface ObjectCheck {manifest:ObjectManifest;files:Array<{path:string;s
 export interface LibraryCheck {manifest:LibraryManifest;files:Array<{path:string;size:number}>;digest:string;warnings:string[];objects:Array<{id:string;version:string;formatVersion:string;digest:string;triangles?:number}>}
 type Result={valid:boolean;errors:string[];warnings?:string[];triangles?:number};
 const MANIFEST_BYTES=1_048_576;
+/** Objects a user folder may hold (RFC-0011 "Budgets and limits"). */
+export const USER_FOLDER_OBJECTS=256;
 
 function readManifest(root:string,name:string,limit:number):any {
  const bytes=readAsset(root,name,limit);
@@ -144,4 +146,44 @@ export async function validateLibrary(directory:string):Promise<LibraryCheck> {
  // Catalog order is the manifest's.
  const order=(manifest as LibraryManifest).objects;checked.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
  return {manifest:manifest as LibraryManifest,files,digest:packageDigest(root,files,objectLimits.fileBytes),warnings,objects:checked};
+}
+
+const COMPONENT_MAX:Record<number,number>={5120:127,5121:255,5122:32767,5123:65535};
+function nodeMatrix(n:any):number[] {
+ if(Array.isArray(n.matrix) && n.matrix.length===16) return n.matrix.slice();
+ const [x,y,z,w]=n.rotation || [0,0,0,1],[sx,sy,sz]=n.scale || [1,1,1],t=n.translation || [0,0,0];
+ return [(1-2*(y*y+z*z))*sx,2*(x*y+z*w)*sx,2*(x*z-y*w)*sx,0,2*(x*y-z*w)*sy,(1-2*(x*x+z*z))*sy,2*(y*z+x*w)*sy,0,
+  2*(x*z+y*w)*sz,2*(y*z-x*w)*sz,(1-2*(x*x+y*y))*sz,0,t[0],t[1],t[2],1];
+}
+const mul=(a:number[],b:number[])=>Array.from({length:16},(_,i)=>{const c=i>>2,r=i&3;return a[r]*b[c*4]+a[4+r]*b[c*4+1]+a[8+r]*b[c*4+2]+a[12+r]*b[c*4+3];});
+const apply=(m:number[],p:number[])=>[0,1,2].map(r=>m[r]*p[0]+m[4+r]*p[1]+m[8+r]*p[2]+m[12+r]);
+/**
+ * Rest-pose bounds of a glTF's drawn scene from its POSITION accessor min/max, the way the
+ * object validator measures them: every mesh node's world matrix applied to its accessor box.
+ * Exact when the matrices are axis-aligned, else a containing box. Undefined for skinned
+ * meshes or accessors without min/max (an import tool must measure those).
+ */
+export function gltfBounds(gltf:any):{min:[number,number,number];max:[number,number,number];exact:boolean}|undefined {
+ const nodes=gltf?.nodes || [],scene=gltf?.scenes?.[gltf.scene ?? 0],drawn=new Map<number,number[]>();
+ const visit=(i:number,parent:number[],depth:number)=>{
+  if(drawn.has(i) || !nodes[i] || depth>64) return;
+  const m=mul(parent,nodeMatrix(nodes[i]));drawn.set(i,m);for(const c of nodes[i].children || []) visit(c,m,depth+1);
+ };
+ for(const i of scene?.nodes || []) visit(i,nodeMatrix({}),0);
+ const lo=[Infinity,Infinity,Infinity],hi=[-Infinity,-Infinity,-Infinity];let exact=true,unknown=false;
+ for(const [i,m] of drawn) {
+  const node=nodes[i],mesh=gltf.meshes?.[node.mesh];if(!mesh) continue;
+  if(node.skin!==undefined) {unknown=true;continue;}
+  for(let c=0;c<3;c++) if([0,1,2].filter(r=>Math.abs(m[c*4+r])>1e-6).length>1) exact=false;
+  for(const p of mesh.primitives || []) {
+   const a=gltf.accessors?.[p.attributes?.POSITION];if(!a?.min || !a?.max) {unknown=true;continue;}
+   const scale=a.normalized && [...a.min,...a.max].some((v:number)=>Math.abs(v)>1)?COMPONENT_MAX[a.componentType] || 1:1;
+   const [mn,mx]=[a.min,a.max].map((v:number[])=>v.map(x=>Math.max(x/scale,a.normalized?-1:-Infinity)));
+   for(let k=0;k<8;k++) {
+    const w=apply(m,[k&1?mx[0]:mn[0],k&2?mx[1]:mn[1],k&4?mx[2]:mn[2]]);
+    for(let j=0;j<3;j++) {lo[j]=Math.min(lo[j],w[j]);hi[j]=Math.max(hi[j],w[j]);}
+   }
+  }
+ }
+ return unknown || lo[0]===Infinity?undefined:{min:lo as [number,number,number],max:hi as [number,number,number],exact};
 }

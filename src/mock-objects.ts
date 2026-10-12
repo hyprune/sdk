@@ -7,7 +7,7 @@ import {existsSync,lstatSync,mkdtempSync,readFileSync,readdirSync,rmSync} from '
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {RpcError} from './client.js';
-import {validateObject,validateLibrary,type ObjectManifest} from './object.js';
+import {validateObject,validateLibrary,USER_FOLDER_OBJECTS,type ObjectManifest} from './object.js';
 import {objectFormats} from './validation.js';
 import type {Ipc22_CatalogEntry,Ipc22_ObjectBounds,Ipc22_LibraryRecord,Ipc22_ObjectInstance,Ipc22_ObjectPocketItem,Ipc22_ObjectPose,Ipc22_ObjectRule,
  Ipc22_ObjectsState,Ipc22_ObjectTraitName} from './generated.js';
@@ -27,7 +27,7 @@ export const REASONS={
  mover:'mover: tracks and items need world format 0.10 (RFC-0011 P3)',
  notMovable:'not movable: only objects with the movable trait can be placed'
 } as const;
-const POCKET_MAX=16,FOLDER_MAX=256,SCAN_MS=1000;
+const POCKET_MAX=16,SCAN_MS=1000;
 
 type Entry=Ipc22_CatalogEntry;
 type Pose=Ipc22_ObjectPose;
@@ -194,7 +194,7 @@ export class ObjectEngine {
   if(this.scanning) return this.scanning;
   this.lastScan=Date.now();
   this.scanning=(async()=>{
-   const names=existsSync(root)?readdirSync(root,{withFileTypes:true}).filter(d=>d.isDirectory() && /^[a-z][a-z0-9-]{0,63}$/.test(d.name)).map(d=>d.name).sort().slice(0,FOLDER_MAX):[];
+   const names=existsSync(root)?readdirSync(root,{withFileTypes:true}).filter(d=>d.isDirectory() && /^[a-z][a-z0-9-]{0,63}$/.test(d.name)).map(d=>d.name).sort().slice(0,USER_FOLDER_OBJECTS):[];
    const next:Entry[]=[];
    for(const name of names){
     const dir=join(root,name);let fingerprint:string;
