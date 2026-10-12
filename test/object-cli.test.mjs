@@ -111,7 +111,8 @@ test('hyprune object add|list and library install|list|remove end to end against
  const run=(args,caps=['state.read','objects.control'])=>new Promise((resolve,reject)=>{
   const token=daemon.issueToken('org.example.cli',caps);
   const child=spawn(process.execPath,['dist/src/cli.js',...args],{stdio:['ignore','pipe','pipe','pipe'],
-   env:{...process.env,HYPRUNE_SOCKET:daemon.path,HYPRUNE_CLIENT_ID:'org.example.cli',HYPRUNE_TOKEN_FD:'3',HYPRUNE_PROTOCOL:'',HYPRUNE_OBJECT_DIR:folder}});
+   env:{...process.env,HYPRUNE_SOCKET:daemon.path,HYPRUNE_CLIENT_ID:'org.example.cli',HYPRUNE_TOKEN_FD:'3',HYPRUNE_PROTOCOL:'',HYPRUNE_OBJECT_DIR:folder,
+    XDG_DATA_HOME:join(root,'data'),XDG_STATE_HOME:join(root,'state'),XDG_CACHE_HOME:join(root,'cache'),XDG_CONFIG_HOME:join(root,'config'),HYPRUNE_LIBRARY_DIR:'',HYPRUNE_WORLD_DIR:''}});
   child.stdio[3].on('error',()=>{});child.stdio[3].end(token+'\n');let out='',err='';child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>err+=b);
   child.on('close',code=>code===0?resolve(out.trim()):reject(new Error(`${code}: ${err}`)));
  });
@@ -130,11 +131,12 @@ test('hyprune object add|list and library install|list|remove end to end against
   url:'https://example.com/com.example.street-1.2.0.tar.zst',sha256:digest,nixHash:nixHash(digest),published:true}}));
  assert.equal(await run(['library','install','com.example.street@1.2.0','--releases',releases]),'installed com.example.street@1.2.0','idempotent');
  assert.match(await run(['library','list'],['state.read']),/^com\.example\.street@1\.2\.0\s+user\s+ready\s+2 objects  Street kit$/m);
- await assert.rejects(run(['library','install',archive],['state.read']),/Method not advertised: libraries\.install/);
+ // Without objects.control the CLI commits libraries itself (RFC-0015 phase 1); the record makes this one idempotent.
+ assert.equal(await run(['library','install',archive],['state.read']),'installed com.example.street@1.2.0');
  await assert.rejects(run(['library','remove','com.hyprune.starter@0.1.0']),/system library/);
  assert.equal(await run(['library','remove','com.example.street@1.2.0']),'removed com.example.street@1.2.0');
  assert.doesNotMatch(await run(['library','list'],['state.read']),/com\.example\.street/);
  await assert.rejects(run(['object','list','--protocol','0.21'],['state.read']),/need IPC 0\.22 or newer/);
  assert.equal(OBJECTS_SINCE,'0.22');
- const help=await run(['--help']);assert.match(help,/hyprune object add <dir \| file\.glb>/);assert.match(help,/hyprune library install <archive\.tar\.zst \| id@version>/);
+ const help=await run(['--help']);assert.match(help,/hyprune object add <dir \| file\.glb>/);assert.match(help,/hyprune library install <archive\.tar\.zst \| id@version>/);assert.match(help,/hyprune world\|library add <id\[@tag\]/);
 });
