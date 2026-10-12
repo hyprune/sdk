@@ -276,3 +276,60 @@ questClient.on('state', s=>{
  // @ts-expect-error 0.21 state has no objects key
  void s.state.objects;
 });
+
+// IPC 0.23 adds characters (npcs), paths and interactions on top of 0.22.
+declare const npcClient: import('../src/client.js').HypruneClient<'0.23'>;
+new HypruneClient({protocol:'0.23',capabilities:['state.read','objects.control','world.control']});
+npcClient.call('npcs.spawn', {ref:'package/guide',path:'user/path-1',phase:.25,speed:1.5,accent:[1,.5,0],reverse:true}).then(r=>{const id:string=r.id;void id;});
+npcClient.call('npcs.spawn', {ref:'package/guide',pose:{position:[0,0,-2],rotation:[0,0,0,1]}});
+npcClient.call('npcs.spawn', {ref:'package/guide'});
+npcClient.call('npcs.bind', {id:'u-1a2b3c',path:'loop'});
+npcClient.call('npcs.disable', {id:'keeper',disabled:true});
+npcClient.call('npcs.remove', {all:true});
+npcClient.call('npcs.remove', {id:'u-1a2b3c'});
+npcClient.call('paths.list', {}).then(r=>{
+ const p=r.paths[0];const ref:string|undefined=p?.ref;const walkable:boolean|null|undefined=p?.walkable;const bound:string[]|undefined=p?.bound;
+ const use:'route'|'track'|'generic'|undefined=p?.use;void ref;void walkable;void bound;void use;
+});
+npcClient.call('paths.set', {path:{use:'route',closed:false,points:[{position:[0,0,0],type:'line'},{position:[2,0,0],type:'curve'}],stops:[{point:1,seconds:4,clip:'wave'}]}}).then(r=>{const id:string=r.id;void id;});
+npcClient.call('paths.remove', {id:'path-1',unbind:true});
+npcClient.call('paths.draw', {use:'route',spawn:{ref:'package/guide',speed:1}});
+npcClient.call('paths.finish', {}).then(r=>{const id:string|null=r.id;const bound:string|null=r.bound;void id;void bound;});
+npcClient.call('interaction.choose', {objectId:'keeper',interactionId:'chat'});
+npcClient.call('interaction.choose', {objectId:'keeper',interactionId:null});
+npcClient.call('graphics.set', {patch:{npc_motion:'still'}});
+npcClient.on('state', s=>{
+ const n=s.state.npcs;const motion:'auto'|'always'|'still'|'off'=n.motion;const user:number=n.limits.user;
+ const line:string|null|undefined=n.interaction?.line;const aimed:number|undefined=n.aimed?.interactions.length;
+ const i=s.state.objects.instances[0];const character:boolean|undefined=i?.character;const path:string|null|undefined=i?.path;
+ const activity:string|null|undefined=i?.activity;const accent:[number,number,number]|null|undefined=i?.accent;
+ const stops:number|undefined=s.state.editor.paths[0]?.stops.length;
+ void motion;void user;void line;void aimed;void character;void path;void activity;void accent;void stops;
+});
+// @ts-expect-error a stop needs its point
+npcClient.call('paths.set', {path:{use:'route',closed:false,points:[],stops:[{seconds:3}]}});
+// @ts-expect-error interaction.choose needs an explicit interactionId (null ends it)
+npcClient.call('interaction.choose', {objectId:'keeper'});
+// @ts-expect-error 0.22 sessions have no characters
+objectsClient.call('npcs.spawn', {ref:'package/guide'});
+// @ts-expect-error 0.22 sessions have no npc_motion
+objectsClient.call('graphics.set', {patch:{npc_motion:'still'}});
+objectsClient.on('state', s=>{
+ // @ts-expect-error 0.22 state has no npcs key
+ void s.state.npcs;
+ // @ts-expect-error 0.22 instances have no character flag
+ void s.state.objects.instances[0]?.character;
+});
+
+// World format 0.9: object asset sources, characters on routes, paths, seats and keepClear.
+import type {World09_Document} from '../src/generated.js';
+const assets09:World09_Document['objectAssets']=[{id:'guide',dir:'objects/guide'},{id:'bench',library:'com.example.kit@1.0.0',object:'bench'},
+ {id:'lamp',scene:'objects/lamp.glb',traits:{collidable:{node:'collision'}}}];
+const objects09:World09_Document['objects']=[{id:'g',asset:'guide',path:'loop',reverse:true,accent:[1,0,0],
+ interactions:[{id:'hello',label:'Talk',action:{type:'say',lines:['Hello']}},{id:'go',label:'Show me',action:{type:'guide',path:'loop'}}]}];
+const paths09:World09_Document['paths']=[{id:'loop',use:'route',closed:true,points:[{position:[0,0,0],type:'line'},{position:[4,0,0],type:'arc'}],stops:[{point:1,face:{object:'g'}}]}];
+const seats09:World09_Document['seats']=[{id:'bench-1',pose:{position:[0,0,0],rotation:[0,0,0,1]},height:.45}];
+const keep09:World09_Document['keepClear']=[{id:'door',min:[0,0,0],max:[1,2,1]}];
+void assets09;void objects09;void paths09;void seats09;void keep09;
+// @ts-expect-error 0.8 manifests have no paths
+const paths08:World08_Document['paths']=[];void paths08;

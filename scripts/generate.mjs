@@ -15,6 +15,8 @@ const docName = v => v === '0.1' ? 'ipc' : 'ipc' + String(minor(v)).padStart(2, 
 for (const v of ipcVersions.filter(v => minor(v) >= 7)) docs[docName(v)] = JSON.parse(readFileSync(`vendor/schema/v${v}/ipc.schema.json`));
 docs.common07=JSON.parse(readFileSync('vendor/schema/v0.7/common.schema.json'));
 docs.common08=JSON.parse(readFileSync('vendor/schema/v0.8/common.schema.json'));
+docs.common09=JSON.parse(readFileSync('vendor/schema/v0.9/common.schema.json'));
+docs.world09=JSON.parse(readFileSync('vendor/schema/v0.9/world.schema.json'));
 docs.world08=JSON.parse(readFileSync('vendor/schema/v0.8/world.schema.json'));
 docs.world07=JSON.parse(readFileSync('vendor/schema/v0.7/world.schema.json'));
 docs.world06=JSON.parse(readFileSync('vendor/schema/v0.6/world.schema.json'));
@@ -37,19 +39,29 @@ function type(s, file) {
   if ('const' in s) return JSON.stringify(s.const);
   if (s.enum) return s.enum.map(JSON.stringify).join(' | ');
   // `not: {}` matches nothing (reserved names): the property can never be present.
+  // A `not` beside declared properties only excludes combinations of them (e.g. at most one
+  // of clip/face/seat): a value refinement, not a TypeScript shape.
+  if ('not' in s && s.properties && Object.keys(s.not).length) {
+    const members=s.not.anyOf || s.not.oneOf || [s.not], declared=Object.keys(s.properties);
+    if (Object.keys(s.not).some(k=>!['anyOf','oneOf','properties','required'].includes(k)) || members.some(m=>Object.keys(m).some(k=>!['properties','required'].includes(k)) ||
+      [...Object.keys(m.properties || {}),...(m.required || [])].some(k=>!declared.includes(k)))) throw new Error(`Unhandled not in ${file}: ${JSON.stringify(s)}`);
+    const {not,...rest}=s; return type(rest,file);
+  }
   if ('not' in s) {
     if (Object.keys(s.not).length || Object.keys(s).some(k=>!['not','description','title'].includes(k))) throw new Error(`Unhandled not in ${file}: ${JSON.stringify(s)}`);
     return 'never';
   }
   if (s.allOf) {
     const {allOf,...base}=s;
-    // An if/then member only makes properties the parent already declares required
-    // (e.g. `values` when type is enum); it refines values, not the TypeScript shape.
+    // An if/then(/else) member only makes properties the parent already declares required
+    // or narrows their values (e.g. `values` when type is enum, no stops on generic paths);
+    // it refines values, not the TypeScript shape.
     const refinement=x=>{
       if (!('if' in x)) return false;
       const declared=Object.keys(base.properties || {});
-      if (Object.keys(x).some(k=>!['if','then'].includes(k)) || Object.keys(x.then || {}).some(k=>!['properties','required'].includes(k)) ||
-        [...Object.keys(x.then?.properties || {}),...(x.then?.required || [])].some(k=>!declared.includes(k))) throw new Error(`Unhandled if/then in ${file}: ${JSON.stringify(x)}`);
+      const branches=[x.then || {},x.else || {}];
+      if (Object.keys(x).some(k=>!['if','then','else'].includes(k)) || branches.some(b=>Object.keys(b).some(k=>!['properties','required'].includes(k)) ||
+        [...Object.keys(b.properties || {}),...(b.required || [])].some(k=>!declared.includes(k)))) throw new Error(`Unhandled if/then in ${file}: ${JSON.stringify(x)}`);
       return true;
     };
     const parts=allOf.filter(x=>!refinement(x)).map(x=>type(x,file));
@@ -92,7 +104,7 @@ for (const [name,doc] of Object.entries(docs)) {
 for (const [name,doc] of Object.entries(docs)) for(const [key,s] of Object.entries(doc.properties || {})) output += `export type ${refName(name,key)} = ${type(s,name)};\n`;
 // Each supported IPC version has a deliberately named method map: the SDK's API
 // surface. Every vendored pin must have one, and PROTOCOLS follows this table.
-const methodMaps = {'0.1':'LegacyMethodMap','0.2':'MethodMap','0.3':'SessionMethodMap','0.4':'MountMethodMap','0.5':'HandsMethodMap','0.6':'KeymapMethodMap','0.7':'GraphicsMethodMap','0.8':'HoldMethodMap','0.9':'HudMethodMap','0.10':'PerformanceMethodMap','0.11':'ClimbingMethodMap','0.12':'RecordingMethodMap','0.13':'AuthoringMethodMap','0.14':'InkMethodMap','0.15':'PlacementMethodMap','0.16':'UpscalerMethodMap','0.17':'CaptureNotesMethodMap','0.18':'OffloadDeviceMethodMap','0.19':'PlayerMethodMap','0.20':'PocketMethodMap','0.21':'QuestMethodMap','0.22':'ObjectsMethodMap'};
+const methodMaps = {'0.1':'LegacyMethodMap','0.2':'MethodMap','0.3':'SessionMethodMap','0.4':'MountMethodMap','0.5':'HandsMethodMap','0.6':'KeymapMethodMap','0.7':'GraphicsMethodMap','0.8':'HoldMethodMap','0.9':'HudMethodMap','0.10':'PerformanceMethodMap','0.11':'ClimbingMethodMap','0.12':'RecordingMethodMap','0.13':'AuthoringMethodMap','0.14':'InkMethodMap','0.15':'PlacementMethodMap','0.16':'UpscalerMethodMap','0.17':'CaptureNotesMethodMap','0.18':'OffloadDeviceMethodMap','0.19':'PlayerMethodMap','0.20':'PocketMethodMap','0.21':'QuestMethodMap','0.22':'ObjectsMethodMap','0.23':'NpcsMethodMap'};
 const unmapped = ipcVersions.filter(v => !methodMaps[v]), stale = Object.keys(methodMaps).filter(v => !ipcVersions.includes(v));
 if (unmapped.length || stale.length) throw new Error(`IPC method maps out of sync with vendored pins: add ${unmapped.join(', ') || '-'}; remove ${stale.join(', ') || '-'}`);
 for (const [name,map] of ipcVersions.map(v => [docName(v), methodMaps[v]])) {

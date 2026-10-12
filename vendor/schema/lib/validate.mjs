@@ -87,6 +87,9 @@ function sceneExtensionRules(gltf, version, fail) {
 // lightmap textures (world.lightmaps[].texture) stay PNG in every v0 format.
 // With options.asset, `gltf` is that world 0.8 object asset's glTF instead: the
 // same extension rules, the asset rules above, and no lightmaps (assets are never baked).
+// World 0.9 inline assets may give the animations and proxy as traits, and a
+// character trait needs a skin and its clips; dir and library assets are checked
+// through their object.json (kind object).
 function validateScene(gltf, version, world, assetId) {
   const errors = [], fail = m => errors.push(m);
   if (!worldFormats.includes(version)) throw new Error(`Unknown world format: ${version}`);
@@ -94,8 +97,15 @@ function validateScene(gltf, version, world, assetId) {
   const textures = gltf.textures || [], images = gltf.images || [];
   if (assetId !== undefined) {
     const asset = atLeast(version, '0.8') ? (world?.objectAssets || []).find(a => a.id === assetId) : undefined;
+    const label = `objectAssets ${assetId}`, character = asset?.traits?.character;
     if (!asset) fail(`objectAssets: unknown asset ${assetId} for world ${version}`);
-    else validateObjectAsset(gltf, asset, fail);
+    else if (asset.scene === undefined) fail(`${label}: not an inline glTF asset; check its object.json with kind object`);
+    else validateObjectAsset(gltf, { id: asset.id, animations: asset.animations ?? asset.traits?.decorative?.animations, collision: asset.collision ?? asset.traits?.collidable }, fail);
+    if (asset?.scene !== undefined && character) {
+      if (!(gltf.skins || []).length) fail(`${label}: traits.character: the glTF has no skin`);
+      const clips = new Set((gltf.animations || []).map(a => a.name));
+      for (const name of Object.keys(character.clips)) if (!clips.has(name)) fail(`${label}: traits.character: clip "${name}" not found in the glTF`);
+    }
     return { valid: errors.length === 0, errors };
   }
   for (const lightmap of world?.lightmaps || []) {
@@ -373,21 +383,14 @@ function validateMachine(value, fail) {
     }
   }
 }
-function validateObjectManifest(value, version, options, fail, warn) {
-  const traits = value.traits, slots = value.slots || {}, names = Object.keys(traits), b = value.bounds;
-  if (options.directory !== undefined && options.directory !== value.id) fail(`id: "${value.id}" differs from its directory "${options.directory}"`);
+// The trait and slot rules that need no geometry: combinations, animation fields,
+// a static proxy, movable scale, unique ids, anchor capacity, slot poses and palettes.
+// Object manifests pass `inside` (poses within the grown bounds); world 0.9 inline
+// assets have no bounds. Messages are relative to the manifest (traits..., slots...).
+function traitCombinations(names, fail) {
   for (const a of names) for (const c of names) if (a < c && !(traitPairs[a] || []).includes(c)) fail(`traits: ${a} and ${c} can't be combined`);
-  for (let j = 0; j < 3; j++) if (b.min[j] >= b.max[j]) fail(`bounds: min ${'xyz'[j]} must be below max`);
-  const t = objectLimits.boundsTolerance, surfaces = new Set(traits.movable ? traits.movable.surfaces || ['floor'] : []);
-  const one = surfaces.size === 1 ? [...surfaces][0] : undefined;
-  if (one === 'floor' && Math.abs(b.min[1]) > t) fail(`bounds: min y must be 0 (the base at the origin), is ${b.min[1]}`);
-  // A character's rest (bind) pose is not the pose it stands in, so its feet get a looser check.
-  if (traits.character && Math.abs(b.min[1]) > objectLimits.characterOriginTolerance) fail(`bounds: min y must be within ${objectLimits.characterOriginTolerance} m of 0 (the feet at the origin), is ${b.min[1]}`);
-  if (one === 'wall' && Math.abs(b.min[2]) > t) fail(`bounds: min z must be 0 (the back against the wall), is ${b.min[2]}`);
-  if (one === 'ceiling' && Math.abs(b.max[1]) > t) fail(`bounds: max y must be 0 (the top at the origin), is ${b.max[1]}`);
-  const m = objectLimits.slotMargin, inside = (p, where, grow = m) => {
-    if (p.some((v, j) => v < b.min[j] - grow || v > b.max[j] + grow)) fail(`${where}: lies outside the bounds grown by ${grow} m`);
-  };
+}
+function objectTraitRules(traits, slots, fail, inside = () => {}) {
   const quat = (q, where) => { if (Math.abs(Math.hypot(...q) - 1) > 0.002) fail(`${where}: quaternion must be normalized`); };
   const unique = (items, field, label) => { const ids = items.map(v => v[field]); if (new Set(ids).size !== ids.length) fail(`${label}: duplicate ${field}`); };
   // Traits.
@@ -431,6 +434,23 @@ function validateObjectManifest(value, version, options, fail, warn) {
     if (s.cap > s.layout.grid.reduce((x, y) => x * y, 1)) fail(`slots.stacks ${s.id}: cap exceeds the layout grid`);
     s.layout.grid.forEach((n, j) => { if (n > 1 && !(s.layout.spacing[j] > 0)) fail(`slots.stacks ${s.id}: spacing ${'xyz'[j]} must be positive for ${n} cells`); });
   }
+}
+function validateObjectManifest(value, version, options, fail, warn) {
+  const traits = value.traits, slots = value.slots || {}, names = Object.keys(traits), b = value.bounds;
+  if (options.directory !== undefined && options.directory !== value.id) fail(`id: "${value.id}" differs from its directory "${options.directory}"`);
+  traitCombinations(names, fail);
+  for (let j = 0; j < 3; j++) if (b.min[j] >= b.max[j]) fail(`bounds: min ${'xyz'[j]} must be below max`);
+  const t = objectLimits.boundsTolerance, surfaces = new Set(traits.movable ? traits.movable.surfaces || ['floor'] : []);
+  const one = surfaces.size === 1 ? [...surfaces][0] : undefined;
+  if (one === 'floor' && Math.abs(b.min[1]) > t) fail(`bounds: min y must be 0 (the base at the origin), is ${b.min[1]}`);
+  // A character's rest (bind) pose is not the pose it stands in, so its feet get a looser check.
+  if (traits.character && Math.abs(b.min[1]) > objectLimits.characterOriginTolerance) fail(`bounds: min y must be within ${objectLimits.characterOriginTolerance} m of 0 (the feet at the origin), is ${b.min[1]}`);
+  if (one === 'wall' && Math.abs(b.min[2]) > t) fail(`bounds: min z must be 0 (the back against the wall), is ${b.min[2]}`);
+  if (one === 'ceiling' && Math.abs(b.max[1]) > t) fail(`bounds: max y must be 0 (the top at the origin), is ${b.max[1]}`);
+  const m = objectLimits.slotMargin, inside = (p, where, grow = m) => {
+    if (p.some((v, j) => v < b.min[j] - grow || v > b.max[j] + grow)) fail(`${where}: lies outside the bounds grown by ${grow} m`);
+  };
+  objectTraitRules(traits, slots, fail, inside);
   if (traits.machine) validateMachine(value, fail);
   // Directory contents, thumbnail and measured values.
   const files = options.files;
@@ -529,6 +549,135 @@ function validateManifestKind(kind, value, method, version, options) {
   if (kind === 'library-releases') validateLibraryReleases(value, fail);
   return { valid: errors.length === 0, errors, warnings, ...stats };
 }
+// World 0.9 (RFC-0011 P2): object asset sources, characters, paths, seats and
+// keepClear. `supplied` maps a dir or library asset id to its object.json, so its
+// traits (character, seat, movable) can be checked like an inline asset's.
+const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/;
+const REVERSE_DOMAIN = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/;
+export const worldLimits = Object.freeze({ characters: 16, charactersPerPath: 8, pathPoints: 1024, arcChord: 0.1 });
+function validateWorldObjects(value, supplied, fail, unique, quat) {
+  const format = value.formatVersion, assets = value.objectAssets || [], objects = value.objects || [];
+  const paths = value.paths || [], seats = value.seats || [], keepClear = value.keepClear || [];
+  unique(paths, 'id', 'paths'); unique(seats, 'id', 'seats'); unique(keepClear, 'id', 'keepClear');
+  // Traits per asset id, when known: inline traits (with the 0.8 shorthand), or a supplied object.json.
+  const known = new Map();
+  for (const a of assets) {
+    const label = `objectAssets ${a.id}`, f = m => fail(`${label}: ${m}`);
+    if (a.scene !== undefined) {
+      const traits = { ...(a.traits || {}) };
+      if (a.animations && a.traits?.decorative) f('animations is shorthand for traits.decorative; give one form');
+      if (a.collision && a.traits?.collidable) f('collision is shorthand for traits.collidable; give one form');
+      if (a.animations) traits.decorative = { animations: a.animations };
+      if (a.collision) traits.collidable = a.collision;
+      traitCombinations(Object.keys(traits), f);
+      objectTraitRules(a.traits || {}, a.slots || {}, f);
+      // The proxy from one form, the animations from the other.
+      const crossed = (a.collision && a.traits?.decorative) || (a.traits?.collidable && a.animations);
+      if (crossed && traits.decorative.animations.some(n => n.node === traits.collidable.node)) f(`collision node "${traits.collidable.node}" is animated`);
+      known.set(a.id, traits);
+      continue;
+    }
+    if (a.library !== undefined) {
+      const [id, version] = a.library.split('@');
+      if (!REVERSE_DOMAIN.test(id) || !SEMVER.test(version)) f(`library must be <reverse-domain id>@<semver>, is ${a.library}`);
+    }
+    const manifest = Object.hasOwn(supplied, a.id) ? supplied[a.id] : undefined;
+    if (manifest === undefined) continue;
+    if (!manifest || typeof manifest.traits !== 'object' || manifest.traits === null) { f('the supplied object.json has no traits'); continue; }
+    if (typeof manifest.formatVersion === 'string' && /^\d+\.\d+$/.test(manifest.formatVersion) && !atLeast(format, manifest.formatVersion))
+      f(`object format ${manifest.formatVersion} is newer than the world's ${format}`);
+    if (a.library !== undefined && manifest.id !== undefined && manifest.id !== a.object) f(`the supplied object.json is ${manifest.id}, not ${a.object}`);
+    known.set(a.id, manifest.traits);
+  }
+  const objectsById = new Map(objects.map(o => [o.id, o])), pathsById = new Map(paths.map(p => [p.id, p]));
+  const seatIds = new Set(seats.map(s => s.id)), zoneIds = new Set((value.zones || []).map(z => z.id)), anchorIds = new Set((value.anchors || []).map(a => a.id));
+  // A world seat id, else <objectId>[/<anchorId>]; anchors are checkable when the seat's asset is known.
+  const seatRef = (ref, where) => {
+    const [objectId, anchor] = ref.split('/');
+    if (anchor === undefined && seatIds.has(objectId)) return;
+    const target = objectsById.get(objectId);
+    if (!target) { fail(`${where}: unknown seat ${ref} (not a seats[] id or an object)`); return; }
+    const traits = known.get(target.asset);
+    if (!traits) return;
+    if (!traits.seat) fail(`${where}: object ${objectId} is not a seat`);
+    else if (anchor !== undefined && !traits.seat.anchors.some(x => x.id === anchor)) fail(`${where}: seat ${objectId} has no anchor ${anchor}`);
+  };
+  const objectTarget = (target, where) => {
+    if (target.anchor !== undefined && !anchorIds.has(target.anchor)) fail(`${where}: unknown anchor ${target.anchor}`);
+    if (target.object !== undefined && !objectsById.has(target.object)) fail(`${where}: unknown object ${target.object}`);
+    if (target.zoneId !== undefined && !zoneIds.has(target.zoneId)) fail(`${where}: unknown zone ${target.zoneId}`);
+  };
+  const route = (id, where) => {
+    const p = pathsById.get(id);
+    if (!p) fail(`${where}: unknown path ${id}`);
+    else if ((p.use ?? 'generic') !== 'route') fail(`${where}: path ${id} is not a route (use ${p.use ?? 'generic'})`);
+  };
+  let characters = 0;
+  const perPath = new Map();
+  for (const o of objects) {
+    const label = `objects ${o.id}`, traits = known.get(o.asset), character = traits ? !!traits.character : undefined;
+    if (o.path === undefined && o.pose === undefined) fail(`${label}: pose is required unless path is set`);
+    if (o.path !== undefined && o.pose !== undefined) fail(`${label}: pose and path are exclusive (a bound character starts at its phase along the route)`);
+    if (o.reverse !== undefined && o.path === undefined) fail(`${label}: reverse needs a path`);
+    if (o.seat !== undefined && o.path !== undefined) fail(`${label}: seat is for characters without a path (routes sit at their stops)`);
+    if (character === false) for (const field of ['path', 'seat', 'accent', 'interactions'])
+      if (o[field] !== undefined) fail(`${label}: ${field} is for characters; asset ${o.asset} is not a character`);
+    if (character && o.scale !== undefined && o.scale !== 1) fail(`${label}: a character's scale must be 1`);
+    if (o.locked !== undefined && traits && !traits.movable) fail(`${label}: locked is for movable assets; asset ${o.asset} is not movable`);
+    if (character || (character === undefined && o.path !== undefined)) characters++;
+    if (o.path !== undefined) { route(o.path, label); perPath.set(o.path, (perPath.get(o.path) || 0) + 1); }
+    if (o.seat !== undefined) seatRef(o.seat, `${label} seat`);
+    unique(o.interactions || [], 'id', `${label} interactions`);
+    for (const i of o.interactions || []) {
+      const where = `${label} interaction ${i.id}`;
+      if (i.action.type === 'guide') route(i.action.path, where);
+      if (i.action.type === 'waypoint') objectTarget(i.action.target, where);
+    }
+  }
+  if (characters > worldLimits.characters) fail(`objects: ${characters} character instances, more than ${worldLimits.characters}`);
+  for (const [id, n] of perPath) if (n > worldLimits.charactersPerPath) fail(`paths ${id}: ${n} characters, more than ${worldLimits.charactersPerPath}`);
+  let total = 0;
+  for (const p of paths) {
+    const label = `paths ${p.id}`, n = p.points.length;
+    total += n;
+    // The point's type is the arriving segment; an open path ignores the first point's.
+    p.points.forEach((point, i) => {
+      if (point.type !== 'arc' || (i === 0 && !p.closed)) return;
+      const prev = p.points[i === 0 ? n - 1 : i - 1].position;
+      if (Math.hypot(point.position[0] - prev[0], point.position[2] - prev[2]) < worldLimits.arcChord) fail(`${label} point ${i}: an arc needs a horizontal chord of at least ${worldLimits.arcChord} m`);
+    });
+    const stopped = new Set();
+    for (const stop of p.stops || []) {
+      const where = `${label} stop ${stop.point}`;
+      if (stop.point >= n) fail(`${where}: the path has ${n} points`);
+      if (stopped.has(stop.point)) fail(`${label}: more than one stop at point ${stop.point}`);
+      stopped.add(stop.point);
+      if (stop.seat !== undefined) seatRef(stop.seat, where);
+      if (stop.face) objectTarget(stop.face, where);
+    }
+  }
+  if (total > worldLimits.pathPoints) fail(`paths: ${total} points in total, more than ${worldLimits.pathPoints}`);
+  for (const seat of seats) quat(seat.pose.rotation, `seats ${seat.id}`);
+  for (const box of keepClear) if (box.min.some((v, i) => v >= box.max[i])) fail(`keepClear ${box.id}: min must be below max on every axis`);
+}
+// Plain reasons for names world 0.9 reserves; the schema alone reports them as
+// unmatched alternatives. Schema errors under each path are replaced by the reason.
+function worldReserved(value, version) {
+  if (!atLeast(version, '0.9') || !value || typeof value !== 'object') return [];
+  const out = [], list = v => Array.isArray(v) ? v : [];
+  const traitWhy = { mount: 'reserved for props that hold a window (RFC-0011 P4)', interactive: 'reserved for use actions (RFC-0011 P4)',
+    mover: 'needs world format 0.10', machine: 'reserved for RFC-0013 live objects' };
+  list(value.objectAssets).forEach((a, i) => {
+    if (a?.traits && typeof a.traits === 'object') for (const [name, why] of Object.entries(traitWhy))
+      if (Object.hasOwn(a.traits, name)) out.push([`/objectAssets/${i}`, `objectAssets ${a.id}: traits.${name}: ${why}; rejected in world ${version}`]);
+  });
+  list(value.objects).forEach((o, i) => list(o?.interactions).forEach((x, j) => {
+    const type = x?.action?.type;
+    if (type === 'travel' || type === 'quest') out.push([`/objects/${i}/interactions/${j}/action`,
+      `objects ${o.id} interaction ${x.id}: ${type} is reserved (${type === 'quest' ? 'RFC-0012 quests' : 'player travel'}); rejected in world ${version}`]);
+  }));
+  return out;
+}
 // The optional method binds a response to the caller's outstanding request.
 // An envelope alone cannot know whether a valid result belongs to that method.
 export function validate(kind, value, method, version, options = {}) {
@@ -552,7 +701,11 @@ export function validate(kind, value, method, version, options = {}) {
     validators.set(key, ajv.getSchema(schema));
   }
   const check = validators.get(key);
-  if (!check(value)) return { valid: false, errors: check.errors.map(e => `${e.instancePath || '/'} ${e.message}`) };
+  if (!check(value)) {
+    const reserved = kind === 'world' && version !== '0.1' ? worldReserved(value, version) : [];
+    const said = e => reserved.some(([path]) => e.instancePath === path || e.instancePath.startsWith(path + '/'));
+    return { valid: false, errors: [...reserved.map(([, message]) => message), ...check.errors.filter(e => !said(e)).map(e => `${e.instancePath || '/'} ${e.message}`)] };
+  }
   const errors = [];
   const fail = message => errors.push(message);
   const unique = (items, field, label) => {
@@ -644,7 +797,7 @@ export function validate(kind, value, method, version, options = {}) {
       const ids = new Set(assets.map(a => a.id));
       for (const a of assets) {
         const label = `objectAssets ${a.id}`, animations = a.animations || [];
-        if (a.library !== undefined) fail(`${label}: library references are reserved for a later world format; use a package scene`);
+        if (a.library !== undefined && !atLeast(value.formatVersion, '0.9')) fail(`${label}: library references are reserved for a later world format; use a package scene`);
         unique(animations, 'node', `${label} animations`);
         for (const n of animations) {
           if (Math.abs(Math.hypot(...n.axis) - 1) > 0.001) fail(`${label}: animation "${n.node}" axis must be a unit vector`);
@@ -655,9 +808,10 @@ export function validate(kind, value, method, version, options = {}) {
       }
       for (const o of objects) {
         if (!ids.has(o.asset)) fail(`objects ${o.id}: unknown asset ${o.asset}`);
-        quat(o.pose.rotation, `objects ${o.id}`);
+        if (o.pose) quat(o.pose.rotation, `objects ${o.id}`);
       }
     }
+    if (atLeast(value.formatVersion, '0.9')) validateWorldObjects(value, options.assets || {}, fail, unique, quat);
     unique(value.attribution, 'path', 'attribution');
     for (const a of value.attribution) license(a.license, `attribution ${a.path}`);
   }
