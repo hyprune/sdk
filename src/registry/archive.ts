@@ -6,7 +6,7 @@
 import {spawn} from 'node:child_process';
 import {closeSync,fstatSync,lstatSync,mkdirSync,openSync,writeSync,constants} from 'node:fs';
 import {join} from 'node:path';
-import {fail,RegistryError} from './errors.js';
+import {diskFull,fail,RegistryError} from './errors.js';
 import {registryLimits} from '../validation.js';
 
 export type PackageType='world'|'library';
@@ -154,7 +154,7 @@ export async function extractArchive(archive:string,into:string,{limits,expectRo
      const n=Math.min(current.remaining,buffer.length-at),part=buffer.subarray(at,at+n);
      if(current.head.length<8) current.head=Buffer.concat([current.head,part.subarray(0,8-current.head.length)]);
      current.svg?.push(Buffer.from(part));
-     try {writeSync(current.fd,part);} catch(e:any) {fail(e.code==='ENOSPC'?'disk.full':'archive.unsafe',`writing ${current.path}: ${e.code}`);}
+     try {writeSync(current.fd,part);} catch(e:any) {fail(diskFull(e)?'disk.full':'archive.unsafe',`writing ${current.path}: ${e.code}`);}
      current.remaining-=n;at+=n;
      if(!current.remaining) finishFile();
      continue;

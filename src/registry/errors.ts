@@ -11,3 +11,5 @@ export class RegistryError extends Error {
  toJSON() {return {rule:this.rule,message:this.message,...(this.data?{data:this.data}:{})};}
 }
 export function fail(rule:Rule,message:string,data?:Record<string,unknown>):never {throw new RegistryError(rule,message,data);}
+/** ENOSPC or EDQUOT (Node names some errnos only by number). */
+export const diskFull=(e:any)=>e?.code==='ENOSPC' || e?.code==='EDQUOT' || e?.errno===-28 || e?.errno===-122;

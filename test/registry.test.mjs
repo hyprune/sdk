@@ -2,7 +2,7 @@
 // pre-release handling, the fetch helper's transport rules, and the shared extractor fixtures.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdir,writeFile,readFile,readdir,stat} from 'node:fs/promises';
+import {mkdir,writeFile,readFile,readdir,stat,symlink} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
@@ -111,6 +111,12 @@ test('download: pinned size and hash, Range resume, hash failure deletes the par
  assert.ok(!existsSync(join(dir,`${'0'.repeat(64)}.tar.zst.part`)),'a mismatching part is deleted');
  await assert.rejects(download(url,{bytes:1000,sha256:hash,dir:join(dir,'x'),env:fake.env}),/more than the pinned 1000/);
  await assert.rejects(download(url,{bytes:body.length+1,sha256:hash,dir:join(dir,'y'),env:fake.env}),/ended early/);
+ // A full disk is an error with its rule, never an unhandled stream error (the part file
+ // links to /dev/full, where every write fails with ENOSPC).
+ if(existsSync('/dev/full')) {
+  const full=join(dir,'full');await mkdir(full);await symlink('/dev/full',join(full,`${hash}.tar.zst.part`));
+  await assert.rejects(download(url,{bytes:body.length,sha256:hash,dir:full,env:fake.env}),rule('disk.full'));
+ }
 });
 
 async function extract(t,bytes,options={}) {

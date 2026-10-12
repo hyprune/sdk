@@ -9,7 +9,7 @@ import {createReadStream,createWriteStream,existsSync,mkdirSync,renameSync,statS
 import {createHash} from 'node:crypto';
 import {join} from 'node:path';
 import type {IncomingMessage} from 'node:http';
-import {RegistryError,fail} from './errors.js';
+import {RegistryError,diskFull,fail} from './errors.js';
 import {parseJson} from '../codec.js';
 
 type Env=Record<string,string|undefined>;
@@ -138,21 +138,27 @@ async function transfer(url:string,part:string,bytes:number,exact:boolean,onProg
  const length=Number(res.headers['content-length']);
  if(Number.isFinite(length) && have+length>bytes) {res.destroy();fail('fetch.failed',`${url}: ${have+length} bytes, more than the pinned ${bytes}`);}
  const out=createWriteStream(part,{flags:have?'a':'w',mode:0o600});
+ // A write error (disk full, quota) arrives as an 'error' event: keep it, stop reading, report it.
+ let writeError:any=null;
+ out.on('error',e=>{writeError=e;res.destroy();});
  let total=have,last=0;
  try {
   for await (const chunk of res) {
+   if(writeError) break;
    total+=chunk.length;
    if(total>bytes) {res.destroy();fail('fetch.failed',`${url}: more than the pinned ${bytes} bytes`);}
-   if(!out.write(chunk)) await new Promise<void>(r=>out.once('drain',()=>r()));
+   if(!out.write(chunk)) await new Promise<void>(r=>{out.once('drain',()=>r());out.once('error',()=>r());});
    const now=Date.now();
    if(onProgress && now-last>=250) {last=now;onProgress({bytes:total,total:exact?bytes:Number.isFinite(length)?length:0});}
   }
  } catch(e:any) {
   if(e instanceof RegistryError) throw e;
-  fail('fetch.failed',`${url}: ${e.code==='ENOSPC'?'disk full':e.message}`);
+  if(!writeError) fail(diskFull(e)?'disk.full':'fetch.failed',`${url}: ${diskFull(e)?'disk full':e.message}`);
  } finally {
-  await new Promise<void>((resolve,reject)=>out.end((e?:Error|null)=>e?reject(e.message.includes('ENOSPC')?new RegistryError('disk.full','disk full while downloading'):e):resolve()));
+  if(!writeError) await new Promise<void>(resolve=>out.end(()=>resolve()));
+  else out.destroy();
  }
+ if(writeError) fail(diskFull(writeError)?'disk.full':'fetch.failed',`${diskFull(writeError)?'disk full or quota exceeded':'cannot write'} while downloading ${url} (${writeError.message})`);
  if(exact && total<bytes) fail('fetch.failed',`${url}: transfer ended early (${total} of ${bytes} bytes)`);
  if(!exact && Number.isFinite(length) && total<length) fail('fetch.failed',`${url}: transfer ended early (${total} of ${length} bytes)`);
  onProgress?.({bytes:total,total:exact?bytes:total});
