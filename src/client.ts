@@ -34,8 +34,8 @@ export class HypruneClient<P extends Protocol='0.2'> extends EventEmitter {
   get snapshot():Snapshot<P>|undefined { return this.store.snapshot; }
   get protocol():P { return (this.options.protocol || '0.2') as P; }
   async connect():Promise<void> {
-    if(this.hello) return;
     if(this.connecting) return this.connecting;
+    if(this.hello) return;
     this.stopped=false;
     this.connecting=this.open().finally(()=>{ this.connecting=undefined; });
     return this.connecting;
@@ -56,7 +56,9 @@ export class HypruneClient<P extends Protocol='0.2'> extends EventEmitter {
     const deadline=setInterval(()=>{ try { decoder.checkDeadline(); } catch(e) { this.emit('fault',e); socket.destroy(); } },1000); deadline.unref(); socket.once('close',()=>clearInterval(deadline));
     await new Promise<void>((resolve,reject)=>{ socket.once('connect',resolve); socket.once('error',reject); socket.once('close',()=>reject(new Error('Connection closed before connect'))); });
     try {
-      this.hello=await this.request('session.hello',{protocols:[this.protocol],client:this.options.client || {id:'com.hyprune.sdk',name:'Hyprune SDK'},capabilities:this.options.capabilities || [],...(token?{token}:{})});
+      // Held from the response frame on: core may write an event right behind it in the same
+      // read, and receive() only accepts events the hello advertised.
+      await this.request('session.hello',{protocols:[this.protocol],client:this.options.client || {id:'com.hyprune.sdk',name:'Hyprune SDK'},capabilities:this.options.capabilities || [],...(token?{token}:{})},v=>{this.hello=v;});
       if(this.hello?.protocol!==this.protocol) throw new Error('Protocol mismatch');
       if(this.subscribed) await this.subscribe();
       this.attempts=0; clearTimeout(this.retry);
