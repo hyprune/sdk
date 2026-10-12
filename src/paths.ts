@@ -16,3 +16,13 @@ export function secureDirectory(path: string): void {
   if(st.uid!==process.getuid?.()) throw new Error('Socket directory must belong to this UID');
   chmodSync(absolute,0o700);
 }
+/** $XDG_DATA_HOME (absolute per the XDG spec), else ~/.local/share. */
+export function dataHome(env=process.env): string {
+  if(env.XDG_DATA_HOME && env.XDG_DATA_HOME.startsWith('/')) return env.XDG_DATA_HOME;
+  if(!env.HOME || !env.HOME.startsWith('/')) throw new Error('Set an absolute XDG_DATA_HOME or HOME');
+  return join(env.HOME,'.local','share');
+}
+/** The RFC-0011 user object folder: $HYPRUNE_OBJECT_DIR, else $XDG_DATA_HOME/hyprune/objects. */
+export function objectDir(env=process.env): string {
+  return env.HYPRUNE_OBJECT_DIR?resolve(env.HYPRUNE_OBJECT_DIR):join(dataHome(env),'hyprune','objects');
+}

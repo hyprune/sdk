@@ -5,40 +5,9 @@ import {mkdtemp,mkdir,rm,cp,writeFile,readFile,symlink,rename} from 'node:fs/pro
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawn} from 'node:child_process';
-import {deflateSync,crc32} from 'node:zlib';
 import {validateObject,validateLibrary,imageHeader,objectLimits,objectFormats} from '../dist/src/index.js';
+import {png,meshBin,sceneGltf,writeObject,writeLibrary} from './object-fixtures.mjs';
 
-// A minimal valid RGB PNG (one filter byte per row, then zlib-deflated pixels).
-function png(width,height) {
- const chunk=(type,data)=>{const out=Buffer.alloc(12+data.length);out.writeUInt32BE(data.length,0);out.write(type,4,'latin1');data.copy(out,8);out.writeUInt32BE(crc32(out.subarray(4,8+data.length)),8+data.length);return out;};
- const ihdr=Buffer.alloc(13);ihdr.writeUInt32BE(width,0);ihdr.writeUInt32BE(height,4);ihdr[8]=8;ihdr[9]=2;
- const raw=Buffer.alloc((width*3+1)*height,0x80);for(let y=0;y<height;y++) raw[y*(width*3+1)]=0;
- return Buffer.concat([Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]),chunk('IHDR',ihdr),chunk('IDAT',deflateSync(raw)),chunk('IEND',Buffer.alloc(0))]);
-}
-// One textured triangle (bounds [-0.25,0,-0.25]..[0.25,2.5,0.25]) drawn by node "lantern";
-// node "proxy" (outside the scene) is the collision proxy using the same mesh.
-const positions=[-0.25,0,-0.25, 0.25,0,0.25, 0,2.5,0.25],uvs=[0,0, 1,0, 0.5,1];
-function meshBin() {const b=Buffer.alloc(60);[...positions,...uvs].forEach((n,i)=>b.writeFloatLE(n,i*4));return b;}
-function sceneGltf() {
- return {asset:{version:'2.0'},scene:0,scenes:[{nodes:[0]}],nodes:[{name:'lantern',mesh:0},{name:'proxy',mesh:0}],
-  meshes:[{primitives:[{attributes:{POSITION:0,TEXCOORD_0:1},material:0}]}],materials:[{pbrMetallicRoughness:{baseColorTexture:{index:0}}}],
-  textures:[{source:0}],images:[{uri:'albedo.png'}],buffers:[{uri:'object.bin',byteLength:60}],
-  bufferViews:[{buffer:0,byteLength:36,target:34962},{buffer:0,byteOffset:36,byteLength:24,target:34962}],
-  accessors:[{bufferView:0,componentType:5126,count:3,type:'VEC3',min:[-0.25,0,-0.25],max:[0.25,2.5,0.25]},{bufferView:1,componentType:5126,count:3,type:'VEC2'}]};
-}
-function objectJson(id) {
- return {formatVersion:'0.9',id,version:'1.0.0',name:'Street lantern',category:'lighting',tags:['lamp'],scene:'object.gltf',license:'CC0-1.0',
-  attribution:[{path:'.',author:'Example Author',license:'CC0-1.0'}],bounds:{min:[-0.25,0,-0.25],max:[0.25,2.5,0.25]},thumbnail:'thumbnail.png',
-  lighting:{mode:'probe'},traits:{collidable:{node:'proxy'},movable:{surfaces:['floor'],scale:[0.75,1.5]}}};
-}
-async function writeObject(dir,id=dir.split('/').at(-1)) {
- await mkdir(dir,{recursive:true});
- await writeFile(join(dir,'object.json'),JSON.stringify(objectJson(id)));
- await writeFile(join(dir,'object.gltf'),JSON.stringify(sceneGltf()));
- await writeFile(join(dir,'object.bin'),meshBin());
- await writeFile(join(dir,'albedo.png'),png(64,64));
- await writeFile(join(dir,'thumbnail.png'),png(256,256));
-}
 async function temp(t) {const root=await mkdtemp(join(tmpdir(),'hyprune-object-'));t.after(()=>rm(root,{recursive:true,force:true}));return root;}
 async function fixture(t,id='street-lantern') {const root=await temp(t),dir=join(root,id);await writeObject(dir);return {root,dir};}
 async function edit(path,fn) {const v=JSON.parse(await readFile(path));fn(v);await writeFile(path,JSON.stringify(v));}
@@ -114,14 +83,7 @@ test('object rejects reserved traits and over-limit directories',async t=>{
  await assert.rejects(validateObject(dir),/Object directory exceeds 64 files/);
 });
 
-async function library(t) {
- const root=await temp(t),dir=join(root,'com.example.street');
- await writeObject(join(dir,'objects','street-lantern'));await writeObject(join(dir,'objects','bench'));
- await writeFile(join(dir,'LICENSE'),'CC0-1.0\n');await writeFile(join(dir,'ATTRIBUTION.md'),'# Attribution\n');
- await writeFile(join(dir,'library.json'),JSON.stringify({formatVersion:'0.9',id:'com.example.street',version:'1.2.0',name:'Street kit',license:'CC0-1.0',
-  attribution:[{path:'.',author:'Example Author',license:'CC0-1.0'}],objects:['street-lantern','bench']}));
- return dir;
-}
+async function library(t) {return writeLibrary(await temp(t));}
 test('a library validates every listed object in catalog order',async t=>{
  const dir=await library(t),result=await validateLibrary(dir);
  assert.equal(result.manifest.id,'com.example.street');assert.deepEqual(result.objects.map(o=>o.id),['street-lantern','bench']);

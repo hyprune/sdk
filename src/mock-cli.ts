@@ -4,18 +4,19 @@ import {spawn,type ChildProcess} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import type {Writable} from 'node:stream';
 import {fileURLToPath} from 'node:url';
-import {MockDaemon,GRANTS,QUEST_GRANTS,QUEST_PROTOCOL,type Scenario} from './mock.js';
+import {MockDaemon,GRANTS,MOCK_PROTOCOLS,grantsFor,type MockProtocol,type Scenario} from './mock.js';
 import {parseJson} from './codec.js';
-const help=`hyprune-mock [--socket path] [--scenario file.json] [--protocol 0.21|0.2|0.1]\nhyprune-mock [options] --launch <command> [args...]\nhyprune-mock --demo [--duration seconds]\n\n--client-id org.example.id   Approved developer client (default com.hyprune.sdk)\n--capabilities state.read,... Developer grants (default state.read)\n--protocol 0.21|0.2|0.1     Default 0.2; 0.1 selects legacy-only listener; 0.21 adds\n                            markers, personal quests and focus sessions (quest.control)\n\nDefault socket: $XDG_RUNTIME_DIR/hyprune/$HYPRLAND_INSTANCE_SIGNATURE/control.sock.\n--demo chooses instance mock and launches trusted system-pulse + terminal widget.\nLaunch tokens are one-use, expiring and passed through inherited FD 3.`;
+const help=`hyprune-mock [--socket path] [--scenario file.json] [--protocol 0.22|0.21|0.2|0.1] [--object-dir dir]\nhyprune-mock [options] --launch <command> [args...]\nhyprune-mock --demo [--duration seconds]\n\n--client-id org.example.id   Approved developer client (default com.hyprune.sdk)\n--capabilities state.read,... Developer grants (default state.read)\n--protocol 0.22|0.21|0.2|0.1 Default 0.2; 0.1 selects legacy-only listener; 0.21 adds\n                            markers, personal quests and focus sessions (quest.control);\n                            0.22 adds the object catalog, user placements and libraries\n                            (objects.control). A listener also accepts older versions.\n--object-dir dir            0.22: list this user object folder (default $HYPRUNE_OBJECT_DIR;\n                            unset: fixture user objects)\n\nDefault socket: $XDG_RUNTIME_DIR/hyprune/$HYPRLAND_INSTANCE_SIGNATURE/control.sock.\n--demo chooses instance mock and launches trusted system-pulse + terminal widget.\nLaunch tokens are one-use, expiring and passed through inherited FD 3.`;
 async function main():Promise<void> {
  const argv=process.argv.slice(2),idx=argv.indexOf('--launch'),launch=idx<0?[]:argv.slice(idx+1);
- const {values:v}=parseArgs({args:idx<0?argv:argv.slice(0,idx),options:{help:{type:'boolean',short:'h'},socket:{type:'string'},scenario:{type:'string'},protocol:{type:'string'},demo:{type:'boolean'},duration:{type:'string'},'client-id':{type:'string'},capabilities:{type:'string'}}});
+ const {values:v}=parseArgs({args:idx<0?argv:argv.slice(0,idx),options:{help:{type:'boolean',short:'h'},socket:{type:'string'},scenario:{type:'string'},protocol:{type:'string'},demo:{type:'boolean'},duration:{type:'string'},'client-id':{type:'string'},capabilities:{type:'string'},'object-dir':{type:'string'}}});
  if(v.help){console.log(help);return;}if(idx>=0 && !launch.length) throw new Error('--launch needs a command');
  if(v.demo && v.protocol==='0.1') throw new Error('--demo publishing requires IPC 0.2');
  if(v.demo && launch.length) throw new Error('Choose --demo or --launch');
  if(v.demo && !process.env.HYPRLAND_INSTANCE_SIGNATURE) process.env.HYPRLAND_INSTANCE_SIGNATURE='mock';
  const scenario=v.scenario?parseJson(readFileSync(v.scenario,'utf8')) as Scenario:undefined;
- const daemon=new MockDaemon({socket:v.socket,scenario,protocol:(v.protocol || '0.2') as '0.2'|'0.1'|typeof QUEST_PROTOCOL});
+ const protocol=(v.protocol || '0.2') as MockProtocol;if(!(MOCK_PROTOCOLS as readonly string[]).includes(protocol)) throw new Error('--protocol must be one of '+MOCK_PROTOCOLS.join(', '));
+ const daemon=new MockDaemon({socket:v.socket,scenario,protocol,objectDir:v['object-dir'] || process.env.HYPRUNE_OBJECT_DIR || undefined});
  await daemon.start();console.error(`hyprune-mock: ${daemon.protocol} listening at ${daemon.path}`);
  const children:ChildProcess[]=[];let stopping=false;
  const stop=async()=>{
@@ -44,7 +45,7 @@ async function main():Promise<void> {
   start(process.execPath,[fileURLToPath(new URL('pulse-widget/main.mjs',dir))],'org.example.pulsewidget',['state.read']);
  }else if(launch.length) {
   const caps=(v.capabilities || 'state.read').split(',').filter(Boolean);
-  if(caps.some(c=>!(daemon.protocol===QUEST_PROTOCOL?QUEST_GRANTS:GRANTS).includes(c as any))) {await stop();throw new Error('Unknown capability');}
+  if(caps.some(c=>!grantsFor(daemon.protocol).includes(c as any))) {await stop();throw new Error('Unknown capability');}
   const child=start(launch[0],launch.slice(1),v['client-id'] || 'com.hyprune.sdk',caps as typeof GRANTS);
   child.once('exit',code=>{if(!stopping){process.exitCode=code || 0;void stop();}});
  }

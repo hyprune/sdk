@@ -4,18 +4,34 @@ import {chmodSync,lstatSync,unlinkSync} from 'node:fs';
 import {dirname,isAbsolute} from 'node:path';
 import {FrameDecoder,FrameError,encodeFrame,MAX_FRAME} from './codec.js';
 import {secureDirectory,socketPath} from './paths.js';
-import {validateWire,validateState,type Protocol} from './validation.js';
+import {validateWire,validateState,atLeast,type Protocol} from './validation.js';
 import {RpcError} from './client.js';
 import type {State,Snapshot} from './state.js';
 import type {Common02_Capability,Ipc02_Target,Ipc02_Transition,MethodMap} from './generated.js';
 import {QuestEngine,QUEST_REQUIREMENTS,QUEST_EVENTS,BASELINE_021} from './mock-quests.js';
+import {ObjectEngine,OBJECT_REQUIREMENTS} from './mock-objects.js';
 export {QuestEngine,QUEST_REQUIREMENTS,QUEST_EVENTS,BASELINE_021,GUIDANCE_DEFAULTS,slugify} from './mock-quests.js';
-export type Capability=Common02_Capability|'quest.control';
+export {ObjectEngine,OBJECT_REQUIREMENTS,OBJECT_LIMITS,PLACEABLE_TRAITS,REASONS,placeability,manifestEntry,compareVersions,listArchive} from './mock-objects.js';
+export type Capability=Common02_Capability|'quest.control'|'objects.control';
 export const GRANTS:Capability[]=['state.read','world.control','surface.control','movement.control','shell.control','runtime.control','data.publish'];
 /** IPC 0.21 adds quest.control (quest and focus mutations, guidance.set). */
 export const QUEST_GRANTS:Capability[]=[...GRANTS,'quest.control'];
 /** The quest protocol the mock implements next to 0.1/0.2 (RFC-0012 P1). */
 export const QUEST_PROTOCOL='0.21' satisfies Protocol;
+/** The object catalog protocol (RFC-0011 P1): objects state, object and library methods, objects.control. */
+export const OBJECTS_PROTOCOL='0.22' satisfies Protocol;
+/**
+ * The projections the mock serves: 0.1, 0.2 and the feature versions it models. A listener
+ * started at version V negotiates every one of these up to V (compared with atLeast).
+ */
+export const MOCK_PROTOCOLS=['0.1','0.2',QUEST_PROTOCOL,OBJECTS_PROTOCOL] as const;
+export type MockProtocol=typeof MOCK_PROTOCOLS[number];
+/** Developer grants a listener at `protocol` can hand out. */
+export function grantsFor(protocol:Protocol):Capability[] {
+ return [...GRANTS,...(atLeast(protocol,QUEST_PROTOCOL)?['quest.control' as const]:[]),...(atLeast(protocol,OBJECTS_PROTOCOL)?['objects.control' as const]:[])];
+}
+/** IPC 0.22 adds objects.control (object placements and library installs). */
+export const OBJECT_GRANTS:Capability[]=grantsFor(OBJECTS_PROTOCOL);
 export const REQUIREMENTS:Record<string,Capability|undefined>={
  'session.hello':undefined,'session.ping':undefined,'state.subscribe':'state.read','state.snapshot':'state.read','state.unsubscribe':'state.read',
  'world.load':'world.control','surface.focus':'surface.control','movement.set':'movement.control','shell.claim':'shell.control','shell.release':'shell.control','shell.overlay':'shell.control','runtime.exit':'runtime.control',
@@ -54,17 +70,23 @@ type Hint={method:string;params:unknown};
 export class MockDaemon {
  readonly sessionId=randomUUID(); revision=0; state:State; readonly scenario:Scenario;readonly protocol:Protocol;readonly path:string;
  /** Markers, personal quests and focus sessions, served to 0.21 peers. */
+ /** Object catalog, user placements and libraries, served to 0.22 peers. */
+ readonly objects:ObjectEngine;
  readonly quests=new QuestEngine(()=>({zones:this.state.location.zones,loaded:!!this.state.world,
   waypoint:this.state.location.waypoint?{id:this.state.location.waypoint.id,label:this.state.location.waypoint.label,position:this.state.location.waypoint.position}:null}));
  private server?:Server;private peers=new Set<Peer>();private tokens:Grant[]=[];
  private tick?:NodeJS.Timeout;private flush?:NodeJS.Timeout;private scripted:NodeJS.Timeout[]=[];private timers=new Map<NodeJS.Timeout,()=>void>();private stopped=false;
  private started=0;private lastTick=0;private lastPose=0;private motion?:{from:Vec3;to:Vec3;start:number;duration:number};private driveIndex=0;private speed=3.5;
- private load?:{peer:Peer;cancel:()=>void};private publications=new Map<string,{owner:Peer;time:number}>();private holding=false;private heldSince=0;private opened=false;
+ private objectTick?:Promise<void>;private load?:{peer:Peer;cancel:()=>void};private publications=new Map<string,{owner:Peer;time:number}>();private holding=false;private heldSince=0;private opened=false;
  private supervisor:Peer={decoder:new FrameDecoder(),hello:true,protocol:'0.2',clientId:'com.hyprune.mock',grants:GRANTS,methods:Object.keys(REQUIREMENTS),ids:new Set(),baseline:0,leases:new Set(),closing:false,outstanding:0};
- constructor(options:{socket?:string;protocol?:Protocol;scenario?:Scenario}={}) {
+ /** objectDir: list this user object folder in the 0.22 catalog instead of the fixture user objects. */
+ constructor(options:{socket?:string;protocol?:Protocol;scenario?:Scenario;objectDir?:string}={}) {
   this.path=options.socket || socketPath();if(!isAbsolute(this.path)) throw new Error('Mock socket must be an absolute path in a private directory');this.protocol=options.protocol || '0.2';
-  if(!['0.1','0.2',QUEST_PROTOCOL].includes(this.protocol)) throw new Error('Unsupported protocol');
-  this.scenario=structuredClone(options.scenario || DEFAULT_SCENARIO);this.state=structuredClone(this.scenario.state);validateState(this.snapshot());if(this.protocol===QUEST_PROTOCOL)validateState(this.questView(this.snapshot()),QUEST_PROTOCOL);
+  if(!(MOCK_PROTOCOLS as readonly string[]).includes(this.protocol)) throw new Error('Unsupported protocol');
+  this.scenario=structuredClone(options.scenario || DEFAULT_SCENARIO);this.state=structuredClone(this.scenario.state);
+  this.objects=new ObjectEngine(()=>({id:this.state.world?.id ?? null,active:this.state.runtime.active,zones:this.state.location.zones,obstacles:this.scenario.obstacles || [],
+   position:this.state.movement.position,orientation:this.state.movement.orientation}),{objectDir:options.objectDir});
+  validateState(this.snapshot());if(atLeast(this.protocol,QUEST_PROTOCOL))validateState(this.project(this.snapshot(),this.protocol),this.protocol);
   if(!Array.isArray(this.scenario.path) || this.scenario.path.some(p=>p.length!==3 || p.some(n=>!Number.isFinite(n)))) throw new Error('Scenario path requires finite vec3 points');
   if(this.scenario.tickMs!==undefined && (!Number.isFinite(this.scenario.tickMs) || this.scenario.tickMs<34)) throw new Error('tickMs must be >=34');
   for(const world of this.scenario.worlds) {
@@ -80,14 +102,25 @@ export class MockDaemon {
   for(const entry of [...this.scenario.notices,...(this.scenario.transactions || []),...(this.scenario.actions || []),...(this.scenario.input || [])]) if(!Number.isFinite(entry.atMs) || entry.atMs<0) throw new Error('Invalid scenario time');
  }
  snapshot():Snapshot {return {sessionId:this.sessionId,revision:this.revision,state:structuredClone(this.state)};}
- private view(p:Peer):Snapshot<Protocol> {const snapshot=this.snapshot();if(p.protocol==='0.1') {const {location,integrations,...state}=snapshot.state;return {...snapshot,state};}return p.protocol===QUEST_PROTOCOL?this.questView(snapshot):snapshot;}
+ private view(p:Peer):Snapshot<Protocol> {const snapshot=this.snapshot();if(p.protocol==='0.1') {const {location,integrations,...state}=snapshot.state;return {...snapshot,state};}return this.project(snapshot,p.protocol);}
+ /** The snapshot as a peer at `protocol` (0.2 or newer) sees it: no key of a newer version ever reaches an older peer. */
+ project(snapshot:Snapshot,protocol:Protocol):Snapshot<Protocol> {
+  if(!atLeast(protocol,QUEST_PROTOCOL))return snapshot;
+  return atLeast(protocol,OBJECTS_PROTOCOL)?this.objectsView(snapshot):this.questView(snapshot);
+ }
+ /** The 0.22 projection: the 0.21 one plus the objects key, editor.gizmo and the object pocket items in editor.unplaced. */
+ objectsView(snapshot:Snapshot):Snapshot<typeof OBJECTS_PROTOCOL> {
+  const base=this.questView(snapshot),objects=this.objects.state(),editor=base.state.editor;
+  return {...base,state:{...base.state,objects,editor:{...editor,gizmo:{space:'world',pivot:'centre',snap:false},
+   unplaced:{...editor.unplaced,count:editor.unplaced.windows.length+objects.pocket.length,objects:structuredClone(objects.pocket)}}}} as Snapshot<typeof OBJECTS_PROTOCOL>;
+ }
  /** The 0.21 projection: 0.2 keys, neutral values for keys the mock does not model, and the quest keys. */
  questView(snapshot:Snapshot):Snapshot<typeof QUEST_PROTOCOL> {
   const state=snapshot.state;
   return {...snapshot,state:{...state,movement:{...state.movement,state:'flying',ladderId:null,prompt:''},...structuredClone(BASELINE_021),...this.quests.state()}} as Snapshot<typeof QUEST_PROTOCOL>;
  }
  issueToken(clientId:string,capabilities:Capability[],ttlMs=60_000):string {
-  const protocol=this.protocol===QUEST_PROTOCOL?QUEST_PROTOCOL:'0.2';validateWire({jsonrpc:'2.0',id:'grant',method:'session.hello',params:{protocols:[protocol],client:{id:clientId,name:'supervised'},capabilities}},protocol);
+  const protocol=atLeast(this.protocol,QUEST_PROTOCOL)?this.protocol:'0.2';validateWire({jsonrpc:'2.0',id:'grant',method:'session.hello',params:{protocols:[protocol],client:{id:clientId,name:'supervised'},capabilities}},protocol);
   const token=randomBytes(32).toString('hex');this.tokens=this.tokens.filter(t=>t.expires>Date.now());this.tokens.push({token,clientId,capabilities:[...capabilities],expires:Date.now()+ttlMs});return token;
  }
  async start():Promise<void> {
@@ -123,11 +156,15 @@ export class MockDaemon {
   socket.on('data',chunk=>{if(p.closing)return;try{p.decoder.feed(chunk,m=>{if(!p.closing) void this.handle(p,m);});}catch(e){p.closing=true;if(e instanceof FrameError && e.parseError){this.error(p,null,-32700,'Parse error');socket.end();}else socket.destroy();}});
   socket.on('close',()=>{clearTimeout(p.timer);clearInterval(deadline);p.closing=true;this.peers.delete(p);if(this.load?.peer===p)this.load.cancel();this.cleanup(p);});
  }
- private send(p:Peer,message:unknown):void {
-  if(!p.socket || p.socket.destroyed) return;validateWire(message,p.protocol);const frame=encodeFrame(message);
+ private send(p:Peer,message:unknown,method?:string):void {
+  if(!p.socket || p.socket.destroyed) return;validateWire(message,p.protocol,method);const frame=encodeFrame(message);
   if(p.socket.writableLength+frame.length>4*1024*1024){p.socket.destroy();return;}p.socket.write(frame);
  }
- private error(p:Peer,id:string|null,code:number,message:string):void {this.send(p,{jsonrpc:'2.0',id,error:{code,message}});}
+ private error(p:Peer,id:string|null,code:number,message:string,data?:{retryable:boolean;rule?:string}):void {
+  // Error data carries a placement rule from 0.22 on; older peers get retryable only.
+  const shown=data && !atLeast(p.protocol,OBJECTS_PROTOCOL)?{retryable:data.retryable}:data;
+  this.send(p,{jsonrpc:'2.0',id,error:{code,message,...(shown?{data:shown}:{})}});
+ }
  private async handle(p:Peer,message:unknown):Promise<void> {
   const m:any=message;const id:string|null=m && typeof m.id==='string' && m.id.length>0 && m.id.length<=128?m.id:null;
   try {
@@ -138,17 +175,18 @@ export class MockDaemon {
    if(p.hello && !p.methods.includes(m.method)) throw new RpcError(-32601,'Method not advertised');
    try{validateWire(m,p.protocol);}catch{throw new RpcError(-32602,'Invalid params');}
    if(m.method==='session.hello') {
-    const supported=this.protocol==='0.1'?['0.1']:this.protocol===QUEST_PROTOCOL?[QUEST_PROTOCOL,'0.2','0.1']:['0.2','0.1'];const selected=supported.find(version=>m.params.protocols.includes(version));
+    const supported=MOCK_PROTOCOLS.filter(v=>this.protocol==='0.1'?v==='0.1':atLeast(this.protocol,v)).reverse() as string[];const selected=supported.find(version=>m.params.protocols.includes(version));
     if(!selected){this.error(p,id,-32001,'Incompatible protocol');p.closing=true;p.socket!.end();return;}p.protocol=selected as Protocol;
     try{validateWire(m,p.protocol);}catch{throw new RpcError(-32602,'Invalid capabilities for protocol');}
     if(m.params.token){const index=this.tokens.findIndex(t=>t.clientId===m.params.client.id && t.expires>Date.now() && timingSafeEqual(Buffer.from(t.token),Buffer.from(m.params.token)));if(index<0)throw new RpcError(-32002,'Invalid launch token');const [grant]=this.tokens.splice(index,1);p.grants=m.params.capabilities.filter((c:Capability)=>grant.capabilities.includes(c));}
     p.clientId=m.params.client.id;p.methods=Object.keys(REQUIREMENTS).filter(k=>(!REQUIREMENTS[k] || p.grants.includes(REQUIREMENTS[k]!)) && (p.protocol!=='0.1' || LEGACY.has(k)));
-    if(p.protocol===QUEST_PROTOCOL)p.methods.push(...Object.entries(QUEST_REQUIREMENTS).filter(([,grant])=>p.grants.includes(grant)).map(([k])=>k));p.hello=true;clearTimeout(p.timer);
-    this.send(p,{jsonrpc:'2.0',id,result:{protocol:p.protocol,sessionId:this.sessionId,capabilities:p.grants,methods:p.methods,events:p.grants.includes('state.read')?['state.delta','runtime.notice','session.revoked',...(p.protocol!=='0.1'?['location.transition','ui.opened','ui.closed','data.updated']:[]),...(p.protocol===QUEST_PROTOCOL?QUEST_EVENTS:[])]:['session.revoked']}});return;
+    if(atLeast(p.protocol,QUEST_PROTOCOL))p.methods.push(...Object.entries(QUEST_REQUIREMENTS).filter(([,grant])=>p.grants.includes(grant)).map(([k])=>k));
+    if(atLeast(p.protocol,OBJECTS_PROTOCOL))p.methods.push(...Object.entries(OBJECT_REQUIREMENTS).filter(([,grant])=>p.grants.includes(grant)).map(([k])=>k));p.hello=true;clearTimeout(p.timer);
+    this.send(p,{jsonrpc:'2.0',id,result:{protocol:p.protocol,sessionId:this.sessionId,capabilities:p.grants,methods:p.methods,events:p.grants.includes('state.read')?['state.delta','runtime.notice','session.revoked',...(p.protocol!=='0.1'?['location.transition','ui.opened','ui.closed','data.updated']:[]),...(atLeast(p.protocol,QUEST_PROTOCOL)?QUEST_EVENTS:[])]:['session.revoked']}},'session.hello');return;
    }
    if(p.outstanding>=64)throw new RpcError(-32008,'64 outstanding calls exceeded');p.outstanding++;
-   try{const operation=this.execute(p,m.method,m.params);const result=operation instanceof Promise?await operation:operation;this.send(p,{jsonrpc:'2.0',id,result});}finally{p.outstanding--;}
-  }catch(e){const error=e instanceof RpcError?e:new RpcError(-32603,'Internal error');this.error(p,id,error.code,error.message);if(!p.hello || id===null || error.code===-32008 && p.outstanding>=64){p.closing=true;p.socket!.end();}}
+   try{const operation=this.execute(p,m.method,m.params);const result=operation instanceof Promise?await operation:operation;this.send(p,{jsonrpc:'2.0',id,result},m.method);}finally{p.outstanding--;}
+  }catch(e){const error=e instanceof RpcError?e:new RpcError(-32603,'Internal error');this.error(p,id,error.code,error.message,error.data);if(!p.hello || id===null || error.code===-32008 && p.outstanding>=64){p.closing=true;p.socket!.end();}}
  }
  private subscription(p:Peer,id:string):void {if(!p.subscription || p.subscription!==id)throw new RpcError(-32003,'Unknown subscription');}
  private lease(p:Peer,id:string){const lease=this.state.shell.leases.find(l=>l.id===id);if(!lease || !p.leases.has(id))throw new RpcError(-32004,'Stale or foreign lease');return lease;}
@@ -214,14 +252,22 @@ export class MockDaemon {
    case 'data.publish':case 'data.remove':this.publish(p,method,params);break;
    case 'runtime.exit':{this.load?.cancel();const hints=this.stopMotion();this.hideUI(hints);this.commit({runtime:{...this.state.runtime,active:false},shell:{leases:[]},location:{...this.state.location,autodrive:false}},hints);for(const peer of [...this.peers,this.supervisor])peer.leases.clear();break;}
    default:{
+    if(method in OBJECT_REQUIREMENTS)return this.objectCall(method,params);
     if(!(method in QUEST_REQUIREMENTS))throw new RpcError(-32601,'Unimplemented');
     const {result,hints,changed}=this.quests.execute(method,params);
-    if(changed)this.questCommit(hints);
+    if(changed)this.extendedCommit(hints);
     if(result===undefined)break;
     return method==='quests.create' || method==='focus.start'?{revision:this.revision,...result as object}:result;
    }
   }
   return {revision:this.revision};
+ }
+ /** 0.22 object and library methods: results carry the state revision (the catalog revision for objects.catalog). */
+ private async objectCall(method:string,params:unknown):Promise<Record<string,unknown>> {
+  const call=await this.objects.execute(method,params);
+  if(call.changed)this.extendedCommit([]);
+  for(const notice of call.notices)for(const p of this.peers)if(p.hello && p.grants.includes('state.read') && atLeast(p.protocol,OBJECTS_PROTOCOL))this.send(p,{jsonrpc:'2.0',method:'runtime.notice',params:notice});
+  return {...(call.revision==='none'?{}:{revision:call.revision==='catalog'?this.objects.catalogRevision:this.revision}),...call.result};
  }
  private publish(p:Peer,method:string,params:any):void {
   const id=params.sourceId;if(id!==p.clientId && !id.startsWith(p.clientId+'.'))throw new RpcError(-32002,'Source outside authenticated namespace');
@@ -256,19 +302,20 @@ export class MockDaemon {
   if(JSON.stringify(next)!==JSON.stringify(this.state) || hints.length){if(this.revision>=Number.MAX_SAFE_INTEGER)throw new RpcError(-32008,'Session revision exhausted');this.revision++;}this.state=next;
   for(const hint of hints)this.broadcast(hint.method,{...(hint.params as object),sessionId:this.sessionId,revision:this.revision});
  }
- /** Quest/focus/marker changes live outside the 0.2 state: bump the revision and hint 0.21 readers. */
- private questCommit(hints:Array<{method:string;params:unknown}>):void {
-  if(this.protocol===QUEST_PROTOCOL)validateState(this.questView(this.snapshot()),QUEST_PROTOCOL);
+ /** Quest, focus, marker and object changes live outside the 0.2 state: bump the revision and hint newer readers. */
+ private extendedCommit(hints:Array<{method:string;params:unknown}>):void {
+  if(atLeast(this.protocol,QUEST_PROTOCOL))validateState(this.project(this.snapshot(),this.protocol),this.protocol);
   if(this.revision>=Number.MAX_SAFE_INTEGER)throw new RpcError(-32008,'Session revision exhausted');this.revision++;
   for(const hint of hints)this.broadcast(hint.method,{...(hint.params as object),sessionId:this.sessionId,revision:this.revision});
  }
  private flushDeltas():void {for(const p of this.peers)if(p.subscription && p.baseline!==this.revision){this.send(p,{jsonrpc:'2.0',method:'state.delta',params:{subscriptionId:p.subscription,sessionId:this.sessionId,baseRevision:p.baseline,revision:this.revision,changes:this.view(p).state}});p.baseline=this.revision;}}
- private broadcast(method:string,params:unknown):void {for(const p of this.peers)if(p.hello && p.grants.includes('state.read') && (method==='runtime.notice' || p.protocol!=='0.1' && p.subscription && ((QUEST_EVENTS as readonly string[]).includes(method)?p.protocol===QUEST_PROTOCOL:true)))this.send(p,{jsonrpc:'2.0',method,params});}
+ private broadcast(method:string,params:unknown):void {for(const p of this.peers)if(p.hello && p.grants.includes('state.read') && (method==='runtime.notice' || p.protocol!=='0.1' && p.subscription && ((QUEST_EVENTS as readonly string[]).includes(method)?atLeast(p.protocol,QUEST_PROTOCOL):true)))this.send(p,{jsonrpc:'2.0',method,params});}
  private advance():void {
   const now=Date.now(),dt=Math.min(.1,(now-this.lastTick)/1000);this.lastTick=now;
   const expired=this.state.integrations.sources.filter(s=>Math.floor(performance.now())-s.monotonicMs>=s.ttlMs);if(expired.length){for(const s of expired)this.publications.delete(s.sourceId);this.commit({integrations:{sources:this.state.integrations.sources.filter(s=>!expired.includes(s))}});}
   if(this.holding && !this.opened && now-this.heldSince>=350){this.opened=true;const hints:Hint[]=[];const shell={leases:this.state.shell.leases.map(l=>({...l,overlays:l.overlays.map(o=>{hints.push({method:'ui.opened',params:{leaseId:l.id,outputId:o.outputId,panel:'overview'}});return {...o,visible:true,exclusiveInput:false};})}))};this.commit({shell},hints);}
-  if(this.protocol===QUEST_PROTOCOL){const hints=this.quests.tick();if(hints)this.questCommit(hints);}
+  if(atLeast(this.protocol,QUEST_PROTOCOL)){const hints=this.quests.tick();if(hints)this.extendedCommit(hints);}
+  if(atLeast(this.protocol,OBJECTS_PROTOCOL) && !this.objectTick)this.objectTick=this.objects.tick().then(changed=>{if(changed && !this.stopped)this.extendedCommit([]);},()=>{}).finally(()=>{this.objectTick=undefined;});
   if(this.load || !this.state.runtime.active)return;
   if(this.motion){const motion=this.motion,progress=Math.min(1,(now-motion.start)/motion.duration),eased=progress*progress*(3-2*progress);const position=motion.from.map((n,i)=>n+(motion.to[i]-n)*eased) as Vec3;const hints=this.transition(progress===1?'arrived':'travelling',progress);this.commit({movement:{...this.state.movement,position},location:this.state.location},hints);if(progress===1)this.motion=undefined;return;}
   if(this.state.location.autodrive){const point=this.state.location.route[this.driveIndex]?.position;if(!point){this.commit({location:{...this.state.location,autodrive:false}});return;}const from=this.state.movement.position,distance=Math.hypot(...point.map((n,i)=>n-from[i])),step=this.speed*dt,position=distance<=step?point:from.map((n,i)=>n+(point[i]-n)*step/distance) as Vec3;
