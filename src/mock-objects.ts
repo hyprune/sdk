@@ -1,6 +1,8 @@
 // In-memory object catalog, user placements and libraries for the mock daemon (IPC 0.22,
 // RFC-0011 P1). Development simulation only: a fixture catalog (or a real user folder),
 // box-level placement rules against the mock's zones and obstacles, nothing persisted.
+// With `characters` (a 0.23 listener, RFC-0011 P2) the fixture world also has authored
+// characters and user characters live among the placements; mock-npcs.ts drives them.
 import {randomBytes,createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {existsSync,lstatSync,mkdtempSync,readFileSync,readdirSync,rmSync} from 'node:fs';
@@ -9,8 +11,8 @@ import {tmpdir} from 'node:os';
 import {RpcError} from './client.js';
 import {validateObject,validateLibrary,USER_FOLDER_OBJECTS,type ObjectManifest} from './object.js';
 import {objectFormats} from './validation.js';
-import type {Ipc22_CatalogEntry,Ipc22_ObjectBounds,Ipc22_LibraryRecord,Ipc22_ObjectInstance,Ipc22_ObjectPocketItem,Ipc22_ObjectPose,Ipc22_ObjectRule,
- Ipc22_ObjectsState,Ipc22_ObjectTraitName} from './generated.js';
+import type {Ipc22_CatalogEntry,Ipc22_ObjectBounds,Ipc22_LibraryRecord,Ipc22_ObjectPocketItem,Ipc22_ObjectPose,Ipc22_ObjectRule,
+ Ipc22_ObjectsState,Ipc22_ObjectTraitName,Ipc23_ObjectInstance,Ipc23_ObjectsState,Ipc23_NpcActivity,World09_InstanceInteraction} from './generated.js';
 
 /** Grant per 0.22 method (RFC-0011 P1): reads need state.read, every change objects.control. */
 export const OBJECT_REQUIREMENTS={
@@ -33,7 +35,8 @@ type Entry=Ipc22_CatalogEntry;
 type Pose=Ipc22_ObjectPose;
 type Vec3=[number,number,number];
 type Box={min:number[];max:number[]};
-type Notice={level:'info'|'warning'|'error';code:string;message:string};
+/** `since`: the first protocol that receives the notice (default the object catalog's 0.22). */
+export type Notice={level:'info'|'warning'|'error';code:string;message:string;since?:string};
 export interface ObjectWorld {id:string|null;active:boolean;zones:Array<{id:string;bounds:Box}>;obstacles:Box[];position:number[];orientation:number[]}
 export interface ObjectCall {result?:Record<string,unknown>;changed:boolean;notices:Notice[];revision?:'state'|'catalog'|'none'}
 
@@ -81,7 +84,9 @@ const FIXTURE_USER:Entry[]=[
   surfaces:['floor'],scale:[0.5,2],bounds:box(0.3,0.5,0.3),triangles:900,gpuBytes:131_072,license:'CC0-1.0'}),
  entry({ref:'user/broken-lamp',source:'user',id:'broken-lamp',name:'broken-lamp',category:'other',state:'invalid',errors:['bounds: min y must be 0 (the base at the origin), is 0.1']})
 ];
-interface Authored {id:string;asset:string;areaId:string;pose:Pose;scale:number;movable:boolean;locked?:boolean}
+/** A character's binding and settings (RFC-0011 P2): authored from the world, user ones from npcs.spawn/bind. */
+export interface CharacterData {path:string|null;phase:number;speed:number;accent:Vec3|null;reverse:boolean;disabled:boolean;interactions:World09_InstanceInteraction[]}
+export interface Authored {id:string;asset:string;areaId:string;pose:Pose;scale:number;movable:boolean;locked?:boolean;npc?:CharacterData}
 const FIXTURE_WORLDS:Record<string,{assets:Entry[];objects:Authored[]}>={
  'com.hyprune.observatory':{
   assets:[
@@ -91,6 +96,27 @@ const FIXTURE_WORLDS:Record<string,{assets:Entry[];objects:Authored[]}>={
   objects:[
    {id:'observatory-armillary',asset:'armillary',areaId:'gallery',pose:{position:[8,0,-2],rotation:[0,0,0,1]},scale:1,movable:false},
    {id:'reading-chair',asset:'reading-chair',areaId:'work',pose:{position:[-2,0,-4],rotation:[0,0.7071068,0,0.7071068]},scale:1,movable:true}]
+ }
+};
+/** A world 0.9 package path of a fixture world (paths.list source package). */
+export interface PackagePath {id:string;name:string|null;use:'route'|'track'|'generic';closed:boolean;points:Array<{position:Vec3;type:'line'|'curve'|'arc'}>;speed:number|null;
+ stops:Array<{point:number;seconds?:number;clip?:'look_around'|'wave'|'nod'|'idle_fidget'}>}
+const npc=(e:Partial<CharacterData>):CharacterData=>({path:null,phase:0,speed:1,accent:null,reverse:false,disabled:false,interactions:[],...e});
+/** The 0.23 additions to the fixture worlds: a package character asset, two authored characters and package paths. */
+export const FIXTURE_CHARACTERS:Record<string,{assets:Entry[];objects:Authored[];paths:PackagePath[]}>={
+ 'com.hyprune.observatory':{
+  assets:['Keeper','Astronomer'].map(name=>entry({ref:`package/${name.toLowerCase()}`,source:'package',id:name.toLowerCase(),name,category:'characters',formatVersion:'0.9',
+   version:'1.0.0',traits:['character'],bounds:box(0.6,1.8,0.4),triangles:12_000,gpuBytes:4_194_304})),
+  objects:[
+   {id:'keeper',asset:'keeper',areaId:'gallery',pose:{position:[5,0,-5],rotation:[0,0,0,1]},scale:1,movable:false,npc:npc({path:'package/gallery-loop',interactions:[
+    {id:'chat',label:'Talk',prompt:'Talk to the keeper',action:{type:'say',lines:['Welcome to the gallery.','The armillary turns once a minute.','Mind the steps on your way out.']}},
+    {id:'desk',label:'Where is my desk?',action:{type:'waypoint',target:{zoneId:'work'}}}]})},
+   {id:'astronomer',asset:'astronomer',areaId:'work',pose:{position:[-1,0,-2],rotation:[0,0,0,1]},scale:1,movable:false,npc:npc({accent:[0.2,0.4,0.9],interactions:[
+    {id:'hello',label:'Say hello',action:{type:'say',lines:['Clear skies tonight.','Ask the keeper about the gallery.']}}]})}],
+  paths:[
+   {id:'gallery-loop',name:'Gallery loop',use:'route',closed:true,speed:null,stops:[{point:1,seconds:4,clip:'look_around'}],
+    points:[{position:[5,0,-5],type:'line'},{position:[11,0,-5],type:'line'},{position:[11,0,1],type:'curve'},{position:[5,0,1],type:'line'}]},
+   {id:'survey-line',name:null,use:'generic',closed:false,speed:null,stops:[],points:[{position:[-3,0,-5],type:'line'},{position:[3,0,-5],type:'line'}]}]
  }
 };
 
@@ -112,8 +138,12 @@ const round=(n:number)=>Math.round(n*1e6)/1e6;
 const inside=(b:Box,p:number[],grow=0)=>p.every((v,i)=>v>=b.min[i]-grow && v<=b.max[i]+grow);
 const overlap=(a:Box,b:Box)=>[0,1,2].every(i=>a.min[i]<b.max[i] && a.max[i]>b.min[i]);
 
-interface Placement {id:string;ref:string;areaId:string;pose:Pose;scale:number;locked:boolean}
+export interface Placement {id:string;ref:string;areaId:string;pose:Pose;scale:number;locked:boolean;npc?:CharacterData}
 interface Override {pose?:Pose;scale?:number;hidden?:boolean;locked?:boolean}
+/** A character's moment-to-moment state from the NPC engine (a route pose, the activity). */
+export interface CharacterLive {pose?:Pose;activity:Ipc23_NpcActivity|null}
+/** Refused for characters by objects.transform/configure/pocket/reset (RFC-0011 P2). */
+export const PROTECTED='characters are protected';
 interface Library extends Ipc22_LibraryRecord {entries:Entry[]}
 
 export class ObjectEngine {
@@ -124,29 +154,51 @@ export class ObjectEngine {
  private placements=new Map<string,Placement[]>();private overrides=new Map<string,Map<string,Override>>();
  private pocketItems:Ipc22_ObjectPocketItem[]=[];private pocketCounter=0;
  private scanned=new Map<string,{fingerprint:string;entry:Entry}>();private lastScan=0;private scanning?:Promise<boolean>;
- /** world: the mock's loaded world, zones, obstacles and player pose; objectDir: a user folder to list instead of the fixture. */
- constructor(private readonly world:()=>ObjectWorld,readonly options:{objectDir?:string}={}) {this.user=options.objectDir?[]:structuredClone(FIXTURE_USER);}
+ /** Character poses and activities, supplied by the NPC engine of a 0.23 listener. */
+ live?:(worldId:string,id:string)=>CharacterLive|undefined;
+ /**
+  * world: the mock's loaded world, zones, obstacles and player pose; objectDir: a user folder to list
+  * instead of the fixture; characters: the 0.23 fixture characters and character placements.
+  */
+ constructor(private readonly world:()=>ObjectWorld,readonly options:{objectDir?:string;characters?:boolean}={}) {this.user=options.objectDir?[]:structuredClone(FIXTURE_USER);}
 
  // ---- state ----
- state():Ipc22_ObjectsState {
+ /** The 0.23 objects state; older projections drop the character fields (mock.ts). */
+ state():Ipc23_ObjectsState {
   const w=this.world(),placements=w.id?this.placements.get(w.id) || []:[];
-  const instances=[...this.authored(w.id),...placements.map(p=>this.instance(p))].slice(0,512);
+  const instances=[...this.authoredInstances(w.id),...placements.map(p=>this.instance(w.id!,p))].slice(0,512);
   return {catalogRevision:this.catalogRevision,instances,pocket:structuredClone(this.pocketItems),usage:this.usage(placements),limits:{...OBJECT_LIMITS}};
  }
  get pocket():Ipc22_ObjectPocketItem[] {return structuredClone(this.pocketItems);}
- private authored(worldId:string|null):Ipc22_ObjectInstance[] {
-  const fixture=worldId?FIXTURE_WORLDS[worldId]:undefined;if(!fixture) return [];
-  const overrides=this.overrides.get(worldId!) || new Map<string,Override>();
-  return fixture.objects.map(o=>{
-   const over=overrides.get(o.id) || {},asset=fixture.assets.find(a=>a.id===o.asset);
-   return {id:o.id,source:'authored',ref:`package/${o.asset}`,name:(asset?.name || o.asset).slice(0,64),areaId:o.areaId,pose:structuredClone(over.pose || o.pose),
-    scale:over.scale ?? o.scale,state:over.hidden?'hidden':'active',movable:o.movable,locked:over.locked ?? o.locked ?? false,rule:null,path:null,activity:null,seat:null};
+ /** Authored objects of a fixture world, with its characters on a characters listener. */
+ authoredOf(worldId:string|null):Authored[] {
+  if(!worldId) return [];
+  return [...(FIXTURE_WORLDS[worldId]?.objects || []),...(this.options.characters?FIXTURE_CHARACTERS[worldId]?.objects || []:[])];
+ }
+ /** User placements (and user characters) of a world; the array is live. */
+ placementsOf(worldId:string):Placement[] {let list=this.placements.get(worldId);if(!list) this.placements.set(worldId,list=[]);return list;}
+ private packageAssets(worldId:string|null):Entry[] {
+  if(!worldId) return [];
+  return [...(FIXTURE_WORLDS[worldId]?.assets || []),...(this.options.characters?FIXTURE_CHARACTERS[worldId]?.assets || []:[])];
+ }
+ private characterFields(worldId:string,id:string,c:CharacterData|undefined,hidden:boolean,pose:Pose):Pick<Ipc23_ObjectInstance,'pose'|'path'|'activity'|'seat'|'character'|'accent'> {
+  if(!c) return {pose:structuredClone(pose),path:null,activity:null,seat:null,character:false,accent:null};
+  const live=hidden?undefined:this.live?.(worldId,id);
+  return {pose:structuredClone(live?.pose || pose),path:c.path,activity:live?.activity ?? null,seat:null,character:true,accent:c.accent?[...c.accent] as Vec3:null};
+ }
+ private authoredInstances(worldId:string|null):Ipc23_ObjectInstance[] {
+  if(!worldId) return [];
+  const overrides=this.overrides.get(worldId) || new Map<string,Override>(),assets=this.packageAssets(worldId);
+  return this.authoredOf(worldId).map(o=>{
+   const over=overrides.get(o.id) || {},asset=assets.find(a=>a.id===o.asset),hidden=!!over.hidden;
+   return {id:o.id,source:'authored',ref:`package/${o.asset}`,name:(asset?.name || o.asset).slice(0,64),areaId:o.areaId,scale:over.scale ?? o.scale,
+    state:hidden?'hidden':'active',movable:o.movable,locked:over.locked ?? o.locked ?? false,rule:null,...this.characterFields(worldId,o.id,o.npc,hidden,over.pose || o.pose)};
   });
  }
- private instance(p:Placement):Ipc22_ObjectInstance {
-  const e=this.resolve(p.ref),ready=e?.state==='ready';
-  return {id:p.id,source:'user',ref:p.ref,name:(e?.name || p.ref.slice(p.ref.lastIndexOf('/')+1)).slice(0,64),areaId:p.areaId,pose:structuredClone(p.pose),scale:p.scale,
-   state:ready?'active':'missing',movable:ready,locked:p.locked,rule:null,path:null,activity:null,seat:null};
+ private instance(worldId:string,p:Placement):Ipc23_ObjectInstance {
+  const e=this.resolve(p.ref),ready=e?.state==='ready',hidden=!!p.npc?.disabled;
+  return {id:p.id,source:'user',ref:p.ref,name:(e?.name || p.ref.slice(p.ref.lastIndexOf('/')+1)).slice(0,64),areaId:p.areaId,scale:p.scale,
+   state:!ready?'missing':hidden?'hidden':'active',movable:ready && !p.npc,locked:p.locked,rule:null,...this.characterFields(worldId,p.id,p.npc,hidden || !ready,p.pose)};
  }
  private usage(placements:Placement[]):Ipc22_ObjectsState['usage'] {
   const refs=new Set<string>();let triangles=0,gpuBytes=0,collisionTriangles=0;
@@ -162,9 +214,9 @@ export class ObjectEngine {
  /** Every resolvable entry: this world's package assets, every installed library version, the user folder. */
  private all():Entry[] {
   const w=this.world();
-  return [...(w.id?FIXTURE_WORLDS[w.id]?.assets || []:[]),...this.libraries.filter(l=>l.state==='ready').flatMap(l=>l.entries),...this.user];
+  return [...this.packageAssets(w.id),...this.libraries.filter(l=>l.state==='ready').flatMap(l=>l.entries),...this.user];
  }
- private resolve(ref:string):Entry|undefined {return this.all().find(e=>e.ref===ref);}
+ resolve(ref:string):Entry|undefined {return this.all().find(e=>e.ref===ref);}
  /** The catalog: library objects at their highest installed version, the others in `versions`. */
  catalog():Entry[] {
   const out:Entry[]=[],seen=new Map<string,Entry>();
@@ -232,7 +284,7 @@ export class ObjectEngine {
   return {min:lo,max:hi};
  }
  /** The mock's placement rules, in contract order: playable, walls, support (floor), player. */
- private rule(e:Entry,pose:Pose,scale:number):Ipc22_ObjectRule|null {
+ rule(e:Entry,pose:Pose,scale:number):Ipc22_ObjectRule|null {
   const w=this.world(),shape=this.shape(e,pose,scale),p=pose.position;
   if(w.zones.length && !w.zones.some(z=>inside(z.bounds,p,0.001))) return 'playable';
   if(w.obstacles.some(o=>overlap(o,shape))) return 'walls';
@@ -243,16 +295,16 @@ export class ObjectEngine {
   }
   return null;
  }
- private refuse(rule:string,detail:string):never {throw new RpcError(-32007,`${rule}: ${detail}`,{retryable:false,rule});}
- private checkPose(pose:Pose):void {
+ refuse(rule:string,detail:string):never {throw new RpcError(-32007,`${rule}: ${detail}`,{retryable:false,rule});}
+ checkPose(pose:Pose):void {
   const n=Math.hypot(...pose.rotation);if(Math.abs(n-1)>0.002) throw new RpcError(-32602,'pose.rotation must be a unit quaternion (within 0.002)');
  }
  private checkScale(e:Entry,scale:number):void {
   const [lo,hi]=e.scale || [1,1];if(scale<lo-1e-9 || scale>hi+1e-9) throw new RpcError(-32602,`scale ${scale} is outside the object's range ${lo}..${hi}`);
  }
- private areaOf(p:number[]):string {return this.world().zones.find(z=>inside(z.bounds,p,0.001))?.id || '';}
+ areaOf(p:number[]):string {return this.world().zones.find(z=>inside(z.bounds,p,0.001))?.id || '';}
  /** Without a pose: in front of the player at 2 m, then 1.5 m and 1 m, facing the player; floor objects on the zone floor. */
- private spawnPose(e:Entry,scale:number):Pose {
+ spawnPose(e:Entry,scale:number):Pose {
   const w=this.world(),f=rotate(w.orientation,[0,0,-1]),len=Math.hypot(f[0],f[2]) || 1,dir=[f[0]/len,f[2]/len];
   const rotation=yawQuat(Math.atan2(-dir[0],-dir[1])).map(round) as Pose["rotation"];let last:Ipc22_ObjectRule='playable';
   for(const distance of [2,1.5,1]){
@@ -265,7 +317,7 @@ export class ObjectEngine {
   }
   this.refuse(last,'no free spot in front of the player');
  }
- private requireWorld():ObjectWorld & {id:string} {
+ requireWorld():ObjectWorld & {id:string} {
   const w=this.world();if(!w.id || !w.active) throw new RpcError(-32005,'exploration inactive: load a world first');return w as ObjectWorld & {id:string};
  }
  private placeable(ref:string):Entry {
@@ -276,17 +328,30 @@ export class ObjectEngine {
   }
   return e;
  }
- private budget(placements:Placement[]):void {
+ budget(placements:Placement[]):void {
   const usage=this.usage(placements);
   for(const key of Object.keys(OBJECT_LIMITS) as Array<keyof typeof OBJECT_LIMITS>)
    if(usage[key]>OBJECT_LIMITS[key]) throw new RpcError(-32008,`budget: ${key} would be ${usage[key]}, the limit is ${OBJECT_LIMITS[key]}`,{retryable:false,rule:'budget'});
  }
- private find(worldId:string,id:string):{placement?:Placement;authored?:Authored} {
+ find(worldId:string,id:string):{placement?:Placement;authored?:Authored} {
   const placement=(this.placements.get(worldId) || []).find(p=>p.id===id);if(placement) return {placement};
-  const authored=FIXTURE_WORLDS[worldId]?.objects.find(o=>o.id===id);if(authored) return {authored};
+  const authored=this.authoredOf(worldId).find(o=>o.id===id);if(authored) return {authored};
   throw new RpcError(-32004,`unknown object instance ${id}`);
  }
- private override(worldId:string,id:string):Override {
+ /** A fresh u-xxxxxx id, unique among this world's placements and authored objects. */
+ newId(worldId:string):string {
+  const list=this.placements.get(worldId) || [];let id:string;
+  do id='u-'+randomBytes(3).toString('hex');while(list.some(p=>p.id===id) || this.authoredOf(worldId).some(o=>o.id===id));
+  return id;
+ }
+ /** Whether an authored character is disabled (the objects.hide override). */
+ authoredHidden(worldId:string,id:string):boolean {return !!this.overrides.get(worldId)?.get(id)?.hidden;}
+ setAuthoredHidden(worldId:string,id:string,hidden:boolean):void {this.override(worldId,id).hidden=hidden;}
+ private isCharacter(found:{placement?:Placement;authored?:Authored}):boolean {return !!(found.placement?.npc || found.authored?.npc);}
+ private protectedCharacter(found:{placement?:Placement;authored?:Authored}):void {
+  if(this.isCharacter(found)) throw new RpcError(-32005,`${PROTECTED}: ${(found.placement || found.authored)!.id} is a character`);
+ }
+ override(worldId:string,id:string):Override {
   let map=this.overrides.get(worldId);if(!map) this.overrides.set(worldId,map=new Map());
   let o=map.get(id);if(!o) map.set(id,o={});return o;
  }
@@ -299,6 +364,7 @@ export class ObjectEngine {
    case 'objects.catalog':{await this.scan();return {result:{entries:this.catalog()},changed:false,notices,revision:'catalog'};}
    case 'libraries.list':return {result:{libraries:this.libraryList()},changed:false,notices,revision:'none'};
    case 'objects.pocket':{
+    if(this.options.characters && this.resolve(params.ref)?.traits.includes('character')) throw new RpcError(-32005,`${PROTECTED}: ${params.ref} is a character`);
     const e=this.placeable(params.ref);
     if(this.pocketItems.length>=POCKET_MAX) throw new RpcError(-32008,`budget: the pocket holds at most ${POCKET_MAX} objects`,{retryable:false,rule:'budget'});
     const itemId=`pocket-${++this.pocketCounter}`;this.pocketItems.push({itemId,ref:e.ref,name:e.name});
@@ -306,10 +372,10 @@ export class ObjectEngine {
     return {result:{itemId},changed:true,notices};
    }
    case 'objects.place':{
+    if(this.options.characters && this.resolve(params.ref)?.traits.includes('character')) throw new RpcError(-32005,`character: use npcs.spawn for ${params.ref}`);
     const w=this.requireWorld(),e=this.placeable(params.ref),scale=params.scale ?? 1;this.checkScale(e,scale);
     if(params.pose) this.checkPose(params.pose);
-    const list=this.placements.get(w.id) || [];
-    let id:string;do id='u-'+randomBytes(3).toString('hex');while(list.some(p=>p.id===id) || FIXTURE_WORLDS[w.id]?.objects.some(o=>o.id===id));
+    const list=this.placements.get(w.id) || [],id=this.newId(w.id);
     const pose:Pose=params.pose?structuredClone(params.pose):this.spawnPose(e,scale);
     const placement:Placement={id,ref:e.ref,areaId:this.areaOf(pose.position),pose,scale,locked:false};
     this.budget([...list,placement]);
@@ -321,7 +387,7 @@ export class ObjectEngine {
     return {result:{id},changed:true,notices};
    }
    case 'objects.transform':{
-    const w=this.requireWorld(),{placement,authored}=this.find(w.id,params.id);this.checkPose(params.pose);
+    const w=this.requireWorld(),found=this.find(w.id,params.id),{placement,authored}=found;this.protectedCharacter(found);this.checkPose(params.pose);
     if(placement){
      if(placement.locked) throw new RpcError(-32005,`locked: ${placement.id} is locked`);
      const e=this.resolve(placement.ref);if(!e || e.state!=='ready') throw new RpcError(-32005,`not movable: ${placement.id} is missing its object`);
@@ -341,14 +407,22 @@ export class ObjectEngine {
     const w=this.requireWorld(),list=this.placements.get(w.id) || [];
     if(params.all){this.placements.set(w.id,[]);notices.push({level:'info',code:'object.removed',message:`${list.length} objects removed`});return {changed:list.length>0,notices};}
     const {placement,authored}=this.find(w.id,params.id);
-    if(authored) throw new RpcError(-32005,`protected: ${authored.id} belongs to the world; hide it instead`);
+    if(authored) throw new RpcError(-32005,`protected: ${authored.id} belongs to the world; ${authored.npc?'disable':'hide'} it instead`);
+    // A user character: the same as npcs.remove.
+    if(placement!.npc){this.placements.set(w.id,list.filter(p=>p!==placement));notices.push({level:'info',code:'npc.removed',message:`${placement!.id} removed`,since:'0.23'});return {changed:true,notices};}
     if(placement!.locked) throw new RpcError(-32005,`locked: ${placement!.id} is locked`);
     this.placements.set(w.id,list.filter(p=>p!==placement));notices.push({level:'info',code:'object.removed',message:`${placement!.id} removed`});
     return {changed:true,notices};
    }
    case 'objects.hide':{
     const w=this.requireWorld(),{placement,authored}=this.find(w.id,params.id);
-    if(placement) throw new RpcError(-32005,`not movable: ${placement.id} is a user placement; remove it instead`);
+    if(placement) throw new RpcError(-32005,`not movable: ${placement.id} is a user placement; ${placement.npc?'disable or ':''}remove it instead`);
+    // An authored character: the same as npcs.disable.
+    if(authored!.npc){
+     const was=this.authoredHidden(w.id,authored!.id);this.setAuthoredHidden(w.id,authored!.id,params.hidden);
+     if(was!==params.hidden) notices.push({level:'info',code:params.hidden?'npc.disabled':'npc.enabled',message:`${authored!.id} ${params.hidden?'disabled':'enabled'}`,since:'0.23'});
+     return {changed:was!==params.hidden,notices};
+    }
     if(!authored!.movable) throw new RpcError(-32005,`not movable: ${authored!.id} is not movable`);
     if(this.authoredLocked(w.id,authored!)) throw new RpcError(-32005,`locked: ${authored!.id} is locked`);
     this.override(w.id,authored!.id).hidden=params.hidden;return {changed:true,notices};
@@ -356,8 +430,9 @@ export class ObjectEngine {
    case 'objects.reset':{
     const w=this.requireWorld();
     if(params.all){const had=(this.overrides.get(w.id)?.size || 0)>0;this.overrides.delete(w.id);return {changed:had,notices};}
-    const {placement,authored}=this.find(w.id,params.id);
+    const found=this.find(w.id,params.id),{placement,authored}=found;
     if(authored){this.overrides.get(w.id)?.delete(authored.id);return {changed:true,notices};}
+    this.protectedCharacter(found);
     const p=placement!;if(p.locked) throw new RpcError(-32005,`locked: ${p.id} is locked`);
     const e=this.resolve(p.ref);if(!e || e.state!=='ready') throw new RpcError(-32005,`not movable: ${p.id} is missing its object`);
     const pose={position:p.pose.position,rotation:yawQuat(yawOf(p.pose.rotation)).map(round)} as Pose;
@@ -365,7 +440,7 @@ export class ObjectEngine {
     Object.assign(p,{pose,scale:1});return {changed:true,notices};
    }
    case 'objects.configure':{
-    const w=this.requireWorld(),{placement,authored}=this.find(w.id,params.id);
+    const w=this.requireWorld(),found=this.find(w.id,params.id),{placement,authored}=found;this.protectedCharacter(found);
     if(params.patch.locked!==undefined){if(placement) placement.locked=params.patch.locked;else this.override(w.id,authored!.id).locked=params.patch.locked;}
     return {changed:true,notices};
    }

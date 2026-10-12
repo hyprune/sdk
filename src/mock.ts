@@ -9,9 +9,11 @@ import {RpcError} from './client.js';
 import type {State,Snapshot} from './state.js';
 import type {Common02_Capability,Ipc02_Target,Ipc02_Transition,MethodMap} from './generated.js';
 import {QuestEngine,QUEST_REQUIREMENTS,QUEST_EVENTS,BASELINE_021} from './mock-quests.js';
-import {ObjectEngine,OBJECT_REQUIREMENTS} from './mock-objects.js';
+import {ObjectEngine,OBJECT_REQUIREMENTS,type Notice} from './mock-objects.js';
+import {NpcEngine,NPC_REQUIREMENTS,type NpcCall,type PowerProfile} from './mock-npcs.js';
 export {QuestEngine,QUEST_REQUIREMENTS,QUEST_EVENTS,BASELINE_021,GUIDANCE_DEFAULTS,slugify} from './mock-quests.js';
-export {ObjectEngine,OBJECT_REQUIREMENTS,OBJECT_LIMITS,PLACEABLE_TRAITS,REASONS,placeability,manifestEntry,compareVersions,listArchive} from './mock-objects.js';
+export {ObjectEngine,OBJECT_REQUIREMENTS,OBJECT_LIMITS,PLACEABLE_TRAITS,REASONS,PROTECTED,FIXTURE_CHARACTERS,placeability,manifestEntry,compareVersions,listArchive} from './mock-objects.js';
+export {NpcEngine,NPC_REQUIREMENTS,NPC_LIMITS,GRAPHICS_DEFAULTS,WALK_SPEED,USE_DISTANCE,samplePath,type PowerProfile} from './mock-npcs.js';
 export type Capability=Common02_Capability|'quest.control'|'objects.control';
 export const GRANTS:Capability[]=['state.read','world.control','surface.control','movement.control','shell.control','runtime.control','data.publish'];
 /** IPC 0.21 adds quest.control (quest and focus mutations, guidance.set). */
@@ -20,11 +22,13 @@ export const QUEST_GRANTS:Capability[]=[...GRANTS,'quest.control'];
 export const QUEST_PROTOCOL='0.21' satisfies Protocol;
 /** The object catalog protocol (RFC-0011 P1): objects state, object and library methods, objects.control. */
 export const OBJECTS_PROTOCOL='0.22' satisfies Protocol;
+/** Characters, paths and interactions (RFC-0011 P2): the npcs state key, npcs/paths/interaction methods, graphics npc_motion. */
+export const NPCS_PROTOCOL='0.23' satisfies Protocol;
 /**
  * The projections the mock serves: 0.1, 0.2 and the feature versions it models. A listener
  * started at version V negotiates every one of these up to V (compared with atLeast).
  */
-export const MOCK_PROTOCOLS=['0.1','0.2',QUEST_PROTOCOL,OBJECTS_PROTOCOL] as const;
+export const MOCK_PROTOCOLS=['0.1','0.2',QUEST_PROTOCOL,OBJECTS_PROTOCOL,NPCS_PROTOCOL] as const;
 export type MockProtocol=typeof MOCK_PROTOCOLS[number];
 /** Developer grants a listener at `protocol` can hand out. */
 export function grantsFor(protocol:Protocol):Capability[] {
@@ -32,6 +36,8 @@ export function grantsFor(protocol:Protocol):Capability[] {
 }
 /** IPC 0.22 adds objects.control (object placements and library installs). */
 export const OBJECT_GRANTS:Capability[]=grantsFor(OBJECTS_PROTOCOL);
+/** IPC 0.23 adds no grant: characters and paths use objects.control, interactions world.control. */
+export const NPC_GRANTS:Capability[]=grantsFor(NPCS_PROTOCOL);
 export const REQUIREMENTS:Record<string,Capability|undefined>={
  'session.hello':undefined,'session.ping':undefined,'state.subscribe':'state.read','state.snapshot':'state.read','state.unsubscribe':'state.read',
  'world.load':'world.control','surface.focus':'surface.control','movement.set':'movement.control','shell.claim':'shell.control','shell.release':'shell.control','shell.overlay':'shell.control','runtime.exit':'runtime.control',
@@ -72,6 +78,8 @@ export class MockDaemon {
  /** Markers, personal quests and focus sessions, served to 0.21 peers. */
  /** Object catalog, user placements and libraries, served to 0.22 peers. */
  readonly objects:ObjectEngine;
+ /** Characters, paths, interactions and graphics, served to 0.23 peers of a 0.23 listener. */
+ readonly npcs?:NpcEngine;
  readonly quests=new QuestEngine(()=>({zones:this.state.location.zones,loaded:!!this.state.world,
   waypoint:this.state.location.waypoint?{id:this.state.location.waypoint.id,label:this.state.location.waypoint.label,position:this.state.location.waypoint.position}:null}));
  private server?:Server;private peers=new Set<Peer>();private tokens:Grant[]=[];
@@ -85,7 +93,9 @@ export class MockDaemon {
   if(!(MOCK_PROTOCOLS as readonly string[]).includes(this.protocol)) throw new Error('Unsupported protocol');
   this.scenario=structuredClone(options.scenario || DEFAULT_SCENARIO);this.state=structuredClone(this.scenario.state);
   this.objects=new ObjectEngine(()=>({id:this.state.world?.id ?? null,active:this.state.runtime.active,zones:this.state.location.zones,obstacles:this.scenario.obstacles || [],
-   position:this.state.movement.position,orientation:this.state.movement.orientation}),{objectDir:options.objectDir});
+   position:this.state.movement.position,orientation:this.state.movement.orientation}),{objectDir:options.objectDir,characters:atLeast(this.protocol,NPCS_PROTOCOL)});
+  if(atLeast(this.protocol,NPCS_PROTOCOL))this.npcs=new NpcEngine(this.objects,()=>({id:this.state.world?.id ?? null,active:this.state.runtime.active,zones:this.state.location.zones,
+   obstacles:this.scenario.obstacles || [],position:this.state.movement.position,orientation:this.state.movement.orientation}));
   validateState(this.snapshot());if(atLeast(this.protocol,QUEST_PROTOCOL))validateState(this.project(this.snapshot(),this.protocol),this.protocol);
   if(!Array.isArray(this.scenario.path) || this.scenario.path.some(p=>p.length!==3 || p.some(n=>!Number.isFinite(n)))) throw new Error('Scenario path requires finite vec3 points');
   if(this.scenario.tickMs!==undefined && (!Number.isFinite(this.scenario.tickMs) || this.scenario.tickMs<34)) throw new Error('tickMs must be >=34');
@@ -106,18 +116,34 @@ export class MockDaemon {
  /** The snapshot as a peer at `protocol` (0.2 or newer) sees it: no key of a newer version ever reaches an older peer. */
  project(snapshot:Snapshot,protocol:Protocol):Snapshot<Protocol> {
   if(!atLeast(protocol,QUEST_PROTOCOL))return snapshot;
+  if(atLeast(protocol,NPCS_PROTOCOL))return this.npcsView(snapshot);
   return atLeast(protocol,OBJECTS_PROTOCOL)?this.objectsView(snapshot):this.questView(snapshot);
+ }
+ /** The 0.23 projection: the 0.22 one with the 0.23 instance and editor path fields, the npcs key and reticle interact. */
+ npcsView(snapshot:Snapshot):Snapshot<typeof NPCS_PROTOCOL> {
+  const base=this.objectsView(snapshot) as unknown as Snapshot<typeof NPCS_PROTOCOL>,npcs=this.npcs!;
+  const state=base.state,aimed=npcs.aimed();
+  return {...base,state:{...state,objects:this.objects.state(),editor:{...state.editor,paths:npcs.editorPaths()},
+   interaction:{...state.interaction,reticle:aimed?{state:'valid',action:'interact'}:state.interaction.reticle},npcs:npcs.state23()}} as Snapshot<typeof NPCS_PROTOCOL>;
  }
  /** The 0.22 projection: the 0.21 one plus the objects key, editor.gizmo and the object pocket items in editor.unplaced. */
  objectsView(snapshot:Snapshot):Snapshot<typeof OBJECTS_PROTOCOL> {
   const base=this.questView(snapshot),objects=this.objects.state(),editor=base.state.editor;
-  return {...base,state:{...base.state,objects,editor:{...editor,gizmo:{space:'world',pivot:'centre',snap:false},
+  // 0.22 instances: no character or accent; path, activity and seat are always null.
+  const instances=objects.instances.map(({character,accent,...i})=>({...i,path:null,activity:null,seat:null}));
+  return {...base,state:{...base.state,objects:{...objects,instances},editor:{...editor,gizmo:{space:'world',pivot:'centre',snap:false},
    unplaced:{...editor.unplaced,count:editor.unplaced.windows.length+objects.pocket.length,objects:structuredClone(objects.pocket)}}}} as Snapshot<typeof OBJECTS_PROTOCOL>;
  }
  /** The 0.21 projection: 0.2 keys, neutral values for keys the mock does not model, and the quest keys. */
  questView(snapshot:Snapshot):Snapshot<typeof QUEST_PROTOCOL> {
-  const state=snapshot.state;
-  return {...snapshot,state:{...state,movement:{...state.movement,state:'flying',ladderId:null,prompt:''},...structuredClone(BASELINE_021),...this.quests.state()}} as Snapshot<typeof QUEST_PROTOCOL>;
+  const state=snapshot.state,base=structuredClone(BASELINE_021);
+  if(this.npcs){
+   // A 0.23 listener: user paths (pre-0.23 shape), tool 3 while a route is drawn, a valid click reticle on an aimed character.
+   base.editor.paths=this.npcs.editorPaths().map(({use,name,speed,stops,...p})=>p);
+   if(this.npcs.drawingPath){base.editor.tool=3;base.interaction.tool=3;}
+   if(this.npcs.aimed())base.interaction.reticle={state:'valid',action:'click'};
+  }
+  return {...snapshot,state:{...state,movement:{...state.movement,state:'flying',ladderId:null,prompt:''},...base,...this.quests.state()}} as Snapshot<typeof QUEST_PROTOCOL>;
  }
  issueToken(clientId:string,capabilities:Capability[],ttlMs=60_000):string {
   const protocol=atLeast(this.protocol,QUEST_PROTOCOL)?this.protocol:'0.2';validateWire({jsonrpc:'2.0',id:'grant',method:'session.hello',params:{protocols:[protocol],client:{id:clientId,name:'supervised'},capabilities}},protocol);
@@ -181,7 +207,8 @@ export class MockDaemon {
     if(m.params.token){const index=this.tokens.findIndex(t=>t.clientId===m.params.client.id && t.expires>Date.now() && timingSafeEqual(Buffer.from(t.token),Buffer.from(m.params.token)));if(index<0)throw new RpcError(-32002,'Invalid launch token');const [grant]=this.tokens.splice(index,1);p.grants=m.params.capabilities.filter((c:Capability)=>grant.capabilities.includes(c));}
     p.clientId=m.params.client.id;p.methods=Object.keys(REQUIREMENTS).filter(k=>(!REQUIREMENTS[k] || p.grants.includes(REQUIREMENTS[k]!)) && (p.protocol!=='0.1' || LEGACY.has(k)));
     if(atLeast(p.protocol,QUEST_PROTOCOL))p.methods.push(...Object.entries(QUEST_REQUIREMENTS).filter(([,grant])=>p.grants.includes(grant)).map(([k])=>k));
-    if(atLeast(p.protocol,OBJECTS_PROTOCOL))p.methods.push(...Object.entries(OBJECT_REQUIREMENTS).filter(([,grant])=>p.grants.includes(grant)).map(([k])=>k));p.hello=true;clearTimeout(p.timer);
+    if(atLeast(p.protocol,OBJECTS_PROTOCOL))p.methods.push(...Object.entries(OBJECT_REQUIREMENTS).filter(([,grant])=>p.grants.includes(grant)).map(([k])=>k));
+    if(this.npcs && atLeast(p.protocol,NPCS_PROTOCOL))p.methods.push(...Object.entries(NPC_REQUIREMENTS).filter(([,grant])=>p.grants.includes(grant)).map(([k])=>k));p.hello=true;clearTimeout(p.timer);
     this.send(p,{jsonrpc:'2.0',id,result:{protocol:p.protocol,sessionId:this.sessionId,capabilities:p.grants,methods:p.methods,events:p.grants.includes('state.read')?['state.delta','runtime.notice','session.revoked',...(p.protocol!=='0.1'?['location.transition','ui.opened','ui.closed','data.updated']:[]),...(atLeast(p.protocol,QUEST_PROTOCOL)?QUEST_EVENTS:[])]:['session.revoked']}},'session.hello');return;
    }
    if(p.outstanding>=64)throw new RpcError(-32008,'64 outstanding calls exceeded');p.outstanding++;
@@ -253,6 +280,7 @@ export class MockDaemon {
    case 'runtime.exit':{this.load?.cancel();const hints=this.stopMotion();this.hideUI(hints);this.commit({runtime:{...this.state.runtime,active:false},shell:{leases:[]},location:{...this.state.location,autodrive:false}},hints);for(const peer of [...this.peers,this.supervisor])peer.leases.clear();break;}
    default:{
     if(method in OBJECT_REQUIREMENTS)return this.objectCall(method,params);
+    if(this.npcs && method in NPC_REQUIREMENTS)return this.npcCall(method,params);
     if(!(method in QUEST_REQUIREMENTS))throw new RpcError(-32601,'Unimplemented');
     const {result,hints,changed}=this.quests.execute(method,params);
     if(changed)this.extendedCommit(hints);
@@ -266,9 +294,31 @@ export class MockDaemon {
  private async objectCall(method:string,params:unknown):Promise<Record<string,unknown>> {
   const call=await this.objects.execute(method,params);
   if(call.changed)this.extendedCommit([]);
-  for(const notice of call.notices)for(const p of this.peers)if(p.hello && p.grants.includes('state.read') && atLeast(p.protocol,OBJECTS_PROTOCOL))this.send(p,{jsonrpc:'2.0',method:'runtime.notice',params:notice});
+  this.notify(call.notices);
   return {...(call.revision==='none'?{}:{revision:call.revision==='catalog'?this.objects.catalogRevision:this.revision}),...call.result};
  }
+ /** Object and character notices reach peers from their version on (0.22, or `since`). */
+ private notify(notices:Notice[]):void {
+  for(const {since,...notice} of notices)for(const p of this.peers)if(p.hello && p.grants.includes('state.read') && atLeast(p.protocol,(since || OBJECTS_PROTOCOL) as Protocol))this.send(p,{jsonrpc:'2.0',method:'runtime.notice',params:notice});
+ }
+ /** 0.23 character, path, interaction and graphics methods; an interaction's waypoint lands in location. */
+ private npcCall(method:string,params:unknown):Record<string,unknown> {
+  let call:NpcCall;
+  try{call=this.npcs!.execute(method,params);}finally{this.notify(this.npcs!.outbox.splice(0));}
+  this.applyNpc(call);
+  return {...(call.revision==='none'?{}:{revision:this.revision}),...call.result};
+ }
+ private applyNpc(call:NpcCall):void {
+  if(call.waypoint){const {id,label,target}=call.waypoint;this.commit({location:{...this.state.location,waypoint:{id,label,target,position:this.target(target)}}});}
+  if(call.changed)this.extendedCommit([]);
+  this.notify(call.notices);
+ }
+ /** E on the aimed character (native input simulation, 0.23 listeners): advance, run or offer the choice list. */
+ use():void {if(this.npcs)this.applyNpc(this.npcs.use());}
+ /** A tool-3 click while paths.draw is active (native input simulation): append a point. */
+ drawPoint(position:Vec3,type:'line'|'curve'|'arc'='line'):void {if(this.npcs?.drawPoint(position,type))this.extendedCommit([]);}
+ /** Simulate the offload power profile that npc_motion auto follows (full-ac, limited-ac, battery, usb-c, unknown). */
+ setPowerProfile(profile:PowerProfile):void {if(this.npcs && this.npcs.profile!==profile){this.npcs.profile=profile;this.extendedCommit([]);}}
  private publish(p:Peer,method:string,params:any):void {
   const id=params.sourceId;if(id!==p.clientId && !id.startsWith(p.clientId+'.'))throw new RpcError(-32002,'Source outside authenticated namespace');
   const prior=this.publications.get(id);if(prior && prior.owner!==p)throw new RpcError(-32004,'Source belongs to another connection');
@@ -315,6 +365,7 @@ export class MockDaemon {
   const expired=this.state.integrations.sources.filter(s=>Math.floor(performance.now())-s.monotonicMs>=s.ttlMs);if(expired.length){for(const s of expired)this.publications.delete(s.sourceId);this.commit({integrations:{sources:this.state.integrations.sources.filter(s=>!expired.includes(s))}});}
   if(this.holding && !this.opened && now-this.heldSince>=350){this.opened=true;const hints:Hint[]=[];const shell={leases:this.state.shell.leases.map(l=>({...l,overlays:l.overlays.map(o=>{hints.push({method:'ui.opened',params:{leaseId:l.id,outputId:o.outputId,panel:'overview'}});return {...o,visible:true,exclusiveInput:false};})}))};this.commit({shell},hints);}
   if(atLeast(this.protocol,QUEST_PROTOCOL)){const hints=this.quests.tick();if(hints)this.extendedCommit(hints);}
+  if(this.npcs?.tick())this.extendedCommit([]);
   if(atLeast(this.protocol,OBJECTS_PROTOCOL) && !this.objectTick)this.objectTick=this.objects.tick().then(changed=>{if(changed && !this.stopped)this.extendedCommit([]);},()=>{}).finally(()=>{this.objectTick=undefined;});
   if(this.load || !this.state.runtime.active)return;
   if(this.motion){const motion=this.motion,progress=Math.min(1,(now-motion.start)/motion.duration),eased=progress*progress*(3-2*progress);const position=motion.from.map((n,i)=>n+(motion.to[i]-n)*eased) as Vec3;const hints=this.transition(progress===1?'arrived':'travelling',progress);this.commit({movement:{...this.state.movement,position},location:this.state.location},hints);if(progress===1)this.motion=undefined;return;}
