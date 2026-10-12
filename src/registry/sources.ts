@@ -11,6 +11,7 @@ import {githubIndex,githubClient,parseGithub,type GithubClient} from './github.j
 import {extractArchive,ANY_LIMITS} from './archive.js';
 import {contentRoots,type ContentRoots} from './paths.js';
 import {validateRegistry} from '../validation.js';
+import {tagVersion} from './semver.js';
 import {imageHeader} from '../object.js';
 import {parseJson} from '../codec.js';
 import type {Sources01_Document,Sources01_Source} from '../generated.js';
@@ -160,7 +161,10 @@ export async function archiveEntry(url:string,hash:string,ctx:Context,size?:numb
   const {type,manifest}=readManifest(join(staging,result.root));
   if(manifest?.id!==result.root) fail('package.invalid',`the archive root ${result.root} is not the manifest id ${manifest?.id}`);
   const bytes=readFileSync(path).length;
-  const version:IndexVersion={tag:`v${manifest.version}`,version:manifest.version,formatVersion:manifest.formatVersion,published:today(),license:manifest.license,
+  // A GitHub release asset URL names its tag (…/releases/download/<tag>/…); else the convention's v<version>.
+  const named=/\/releases\/download\/([^/]+)\//.exec(new URL(url).pathname)?.[1],urlTag=named && decodeURIComponent(named);
+  const tag=urlTag && tagVersion(urlTag)?.version===manifest.version?urlTag:`v${manifest.version}`;
+  const version:IndexVersion={tag,version:manifest.version,formatVersion:manifest.formatVersion,published:today(),license:manifest.license,
    url,sha256:hash,bytes,expandedBytes:result.expandedBytes,files:result.files.length,...(type==='world' && libraryRefs(manifest).length?{requires:{libraries:libraryRefs(manifest)}}:{}),status:'available'};
   return {id:manifest.id,type,name:String(manifest.name).slice(0,64),creator:new URL(url).host,versions:[version]};
  } finally {rmSync(staging,{recursive:true,force:true});}

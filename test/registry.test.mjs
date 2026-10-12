@@ -196,3 +196,13 @@ test('sources: built-ins, refresh into the cache, serial rollback keeps the cach
  assert.equal(readMeta('official',ctx).serial,7);
  r=await refreshSource(list[1],ctx);assert.match(r.error,/HTTP 404/);
 });
+test('archive URL sources: the tag comes from a release asset URL, else v<version>',async t=>{
+ const fake=await startFakeGithub(),root=await tempDir(t);t.after(()=>fake.close());
+ const env=isolatedEnv(root,fake.env),ctx={env,roots:contentRoots(env)};
+ const archive=zstd(tar(libraryEntries('com.example.tiny','1.0.0')));
+ fake.repo('example','tiny').releases.push({tag_name:'tiny-v1.0.0',assets:[{name:'com.example.tiny-1.0.0.tar.zst',bytes:archive}]});
+ const e=await registry.archiveEntry(fake.assetUrl('example','tiny','tiny-v1.0.0','com.example.tiny-1.0.0.tar.zst'),sha(archive),ctx);
+ assert.deepEqual([e.id,e.type,e.versions[0].tag,e.versions[0].bytes,e.versions[0].files],['com.example.tiny','library','tiny-v1.0.0',archive.length,3]);
+ fake.indexes.set('x',archive);
+ assert.equal((await registry.archiveEntry(`${fake.base}/index/x.json`,sha(archive),ctx)).versions[0].tag,'v1.0.0');
+});
