@@ -32,6 +32,11 @@ hyprune object check ./street-lantern [--measured measured.json]
 hyprune library check ./com.example.street
 ```
 
+To make a checked object available to core, `hyprune object add` copies it into the
+user object folder, and `hyprune library install` hands core a library archive; see
+[User objects and libraries](../README.md#user-objects-and-libraries-ipc-022).
+`gltfBounds(gltf)` is the accessor-bounds measurement `object add` uses for a bare `.glb`.
+
 `object check` validates an RFC-0011 object directory: `object.json` next to its `.gltf`/`.glb`, an optional `thumbnail.png` and any files the scene references. The directory must be plain (no symlinks, devices or executable content) and within the object limits (64 files, 64 MiB, 32 MiB per file); these limits and the budgets below come from the pinned validator's `objectLimits`. The manifest is at most 1 MiB and its `id` must equal the directory name. Every external glTF URI follows the world package rules and must name a file of the directory; the Khronos glTF validator then runs on the scene.
 
 The SDK reads the thumbnail's PNG header (256 x 256, at most 256 KiB) and each texture's header (PNG IHDR, JPEG start-of-frame, KTX2 pixel size) for the largest texture dimension, and estimates GPU memory: PNG and JPEG textures at 4 bytes per pixel, KTX2 at 1 byte per pixel, each times 4/3 for mips, plus every glTF buffer's `byteLength`. The pinned validator then checks the manifest, traits, slots, attribution coverage, the glTF cross-references (node names, collision proxy, states-slot materials, variants, character skins and clips), triangle budgets and bounds. `--measured` takes a JSON object `{bounds, maxTextureSize, gpuBytes}` from an import tool that decoded the assets; its values replace the SDK's estimates and `bounds` enables the exact 1 cm check.

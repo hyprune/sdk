@@ -104,6 +104,44 @@ hyprune-mock --protocol 0.21 --socket "$XDG_RUNTIME_DIR/hyprune/sdk-test/control
   --capabilities state.read,quest.control --launch hyprune quest list
 ```
 
+### User objects and libraries (IPC 0.22)
+
+```sh
+hyprune object add ./street-lantern                  # a checked object directory
+hyprune object add ./lamp.glb --license CC0-1.0 --author "Example Author" [--name Lamp] [--surface floor|wall|ceiling|any]
+hyprune object list [--json]                         # objects.catalog
+hyprune library install ./com.example.street-1.2.0.tar.zst
+hyprune library install com.example.street@1.2.0 --releases libraries/releases.json [--archive file.tar.zst]
+hyprune library list [--json]
+hyprune library remove com.example.street@1.2.0
+```
+
+`object add` writes only to the user object folder: `$HYPRUNE_OBJECT_DIR`, else
+`$XDG_DATA_HOME/hyprune/objects`, else `~/.local/share/hyprune/objects`. A directory is
+copied as `<id>/` (its `object.json` id, whatever the source directory is called); a bare
+`.glb` gets a minimal `object.json` (format 0.9, id from the file name, version 1.0.0,
+category `other`, bounds measured from the glTF accessors, `traits.movable` on the given
+surface, default `floor`); `--license` and `--author` are required for it. The copy is
+staged in a `.hyprune-add-*` directory next to the target, checked with `validateObject`
+and renamed into place, so core's folder watch never sees a half-written object; a
+failing check writes nothing, and a bare `.glb` reports its first failure. An existing
+`<id>/` needs `--replace`. The folder holds at most 256 objects.
+
+`library install` never downloads: a local archive is hashed and handed to core as
+`libraries.install {archive, sha256}` (core re-hashes, extracts and validates it);
+`id@version` looks up a `library-releases` record (`--releases`, the meta repository's
+`libraries/releases.json` format) and uses `--archive` or the archive named by the
+record's URL (or `<id>-<version>.tar.zst`) next to the record, which must match the
+pinned hash. `object list`, `library list|install|remove` speak IPC 0.22 unless
+`--protocol`/`HYPRUNE_PROTOCOL` names a newer pin; `list` requests `state.read`,
+install/remove also the `objects.control` grant. To try them against the mock:
+
+```sh
+hyprune-mock --protocol 0.22 --object-dir "$HOME/.local/share/hyprune/objects" \
+  --socket "$XDG_RUNTIME_DIR/hyprune/sdk-test/control.sock" \
+  --capabilities state.read,objects.control --launch hyprune object list
+```
+
 Tokens are passed through a one-use inherited FD, never command arguments or logs. The mock supervisor approves `--capabilities`; the CLI independently requests its `--capabilities`. Debug commands accept `--protocol 0.1` for a legacy daemon; default is `0.2`. An unauthenticated connection may hello/ping only.
 
 ## Library
@@ -264,3 +302,21 @@ The world keymap gains `markers.reveal`, the overlay style `questColor`, project
 markers an optional `markerId`. `hyprune-mock --protocol 0.21` simulates them in memory
 (see [mock](docs/mock.md)), and the CLI has `quest` and `focus` commands (above).
 Vendored schema `669a259`.
+
+IPC **0.22** (`HypruneClient<'0.22'>`, RFC-0011 P1) adds the object catalog, user
+placements and libraries. State gains `objects` (`catalogRevision`, up to 512 instances
+of this world: authored first, then user placements `u-xxxxxx`, each with its committed
+pose, scale, state, `movable`, `locked` and the blocking `rule`; up to 16 object pocket
+items; user-placement `usage` against `limits`). Methods: `objects.catalog` (up to 1,024
+entries from the world package, installed libraries and the user folder, with
+`placeable` and a `reason`), `objects.pocket/place/transform/remove/hide/reset/configure`
+and `libraries.list/install/remove`; changes need the new `objects.control` grant. Refs
+are `package/<asset>`, `library/<id>@<version>/<object>` or `user/<object>`. A refused
+placement is `-32007` with `error.data.rule` (`playable`, `walls`, `support`, `window`,
+`approach`, `zone`, `keep-clear`, `player`, `reach`, or `library.conflict`), a budget
+`-32008` with rule `budget`; `RpcError.data.rule` carries it. The editor gains
+`selectedKind: "node"`, the `universal` submode, `unplaced.objects` and `gizmo
+{space, pivot, snap}`. No new events; notices use new codes (`object.placed`,
+`library.installed`, …). `hyprune-mock --protocol 0.22` simulates all of it (see
+[mock](docs/mock.md)), and the CLI has `object add|list` and `library
+install|list|remove` (above). Vendored schema `ce517ea`.
