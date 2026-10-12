@@ -333,3 +333,28 @@ const keep09:World09_Document['keepClear']=[{id:'door',min:[0,0,0],max:[1,2,1]}]
 void assets09;void objects09;void paths09;void seats09;void keep09;
 // @ts-expect-error 0.8 manifests have no paths
 const paths08:World08_Document['paths']=[];void paths08;
+
+// IPC 0.24 adds the catalog's machine inputs and the live state key on top of 0.23.
+declare const liveClient: import('../src/client.js').HypruneClient<'0.24'>;
+new HypruneClient({protocol:'0.24',capabilities:['state.read','objects.control']});
+liveClient.call('objects.catalog', {}).then(r=>{
+ const m=r.entries[0]?.machine;const primary:string|null|undefined=m?.primary;const kind:string|undefined=m?.inputs[0]?.type;
+ const repeat:number|undefined=m?.inputs[0]?.repeat;void primary;void kind;void repeat;
+});
+liveClient.on('state', s=>{
+ const i=s.state.live.instances[0];const id:string|undefined=i?.id;const source:string|null|undefined=i?.source;
+ const status:'ok'|'error'|null|undefined=i?.status;const stale:boolean|undefined=i?.stale;
+ const input=i?.inputs['health.1'];const condition:'fresh'|'stale'|'missing'|'error'|undefined=input?.condition;
+ const publishedAt:number|null|undefined=input?.publishedAt;const value:string|number|boolean|null|undefined=input?.value;
+ const npcs:string=s.state.npcs.motion;
+ void id;void source;void status;void stale;void condition;void publishedAt;void value;void npcs;
+});
+liveClient.on('state.delta', d=>{const l=d.changes.live;void l?.instances.length;});
+npcClient.call('objects.catalog', {}).then(r=>{
+ // @ts-expect-error 0.23 catalog entries have no machine
+ void r.entries[0]?.machine;
+});
+npcClient.on('state', s=>{
+ // @ts-expect-error 0.23 state has no live key
+ void s.state.live;
+});
