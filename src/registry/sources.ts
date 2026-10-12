@@ -254,7 +254,7 @@ export async function addSource(spec:string,options:AddOptions,ctx:Context={}):P
  if(same) fail('source.invalid',`already added as ${same.id} (${same.display})`);
  const candidate={kind:c.kind,...(c.url?{url:c.url}:{}),...(c.repo?{repo:c.repo}:{}),...(options.sha256?{sha256:options.sha256}:{})};
  const {index,skipped}=await fetchSource(candidate,ctx);
- const label=checkLabel(options.label ?? (c.kind==='index' && index.name?index.name:c.repo?c.repo.split('/').slice(0,2).join('/'):new URL(c.url!).host));
+ const label=checkLabel(options.label ?? [...(c.kind==='index' && index.name?index.name:c.repo?c.repo.split('/').slice(0,2).join('/'):new URL(c.url!).host)].slice(0,48).join(''));
  if(options.id!==undefined && (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(options.id) || options.id.length>48)) fail('source.invalid','--id is a lowercase slug of at most 48 characters');
  const id=options.id ?? slugId(label,existing.map(s=>s.id));
  if(existing.some(s=>s.id===id)) fail('source.invalid',`a source with id ${id} exists`);

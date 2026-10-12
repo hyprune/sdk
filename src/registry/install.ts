@@ -2,7 +2,7 @@
 // confirm → download → verify → extract → validate → commit, for worlds and libraries from any
 // source, plus update, rollback, pin and remove. Runs under the content lock; nothing is
 // downloaded before the plan is confirmed except index and release metadata.
-import {cpSync,existsSync,lstatSync,mkdirSync,mkdtempSync,renameSync,rmSync,statfsSync,unlinkSync} from 'node:fs';
+import {cpSync,existsSync,lstatSync,mkdirSync,mkdtempSync,readdirSync,renameSync,rmSync,statSync,statfsSync,unlinkSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
 import {fail,RegistryError} from './errors.js';
 import {download,sha256File,type Progress} from './fetch.js';
@@ -308,10 +308,16 @@ function emitter(opts:JobOptions):(e:JobEvent)=>void {return opts.emit ?? (()=>{
 function checkActive(opts:JobOptions,id:string,type:PackageType,what:string):void {
  if(type==='world' && opts.session?.loadedWorld===id) fail('world.active',`${id} is the loaded world: load another world first, then ${what}`);
 }
+/** Downloads are pruned after their commit; leftovers (failed or cancelled jobs) at most after 7 days. */
+function pruneDownloads(dir:string):void {
+ const cutoff=Date.now()-7*86400_000;
+ try {for(const name of readdirSync(dir)) {const p=join(dir,name);try {if(statSync(p).mtimeMs<cutoff) rmSync(p,{recursive:true,force:true});} catch {}}} catch {}
+}
 /** `add`/`install`: one package (and the libraries it requires) from any source or a local archive. */
 export async function install(target:string,opts:JobOptions):Promise<JobResult> {
  const emit=emitter(opts),roots=rootsOf(opts);
  return withLock(roots,async doc=>{
+  pruneDownloads(join(roots.cache,'downloads'));
   emit({event:'stage',stage:'resolving'});
   const local=/\.tar\.zst$/.test(target) && !/^https?:\/\//.test(target);
   if(local) return installLocal(doc,target,opts,emit);
