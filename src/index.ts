@@ -6,3 +6,4 @@ export * from './validation.js';
 export type * from './generated.js';
 export * from './launch.js';
 export * from './object.js';
+export * as registry from './registry/api.js';
