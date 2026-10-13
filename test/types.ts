@@ -358,3 +358,29 @@ npcClient.on('state', s=>{
  // @ts-expect-error 0.23 state has no live key
  void s.state.live;
 });
+
+// IPC 0.25 adds the companion (methods, state key, catalog capability) on top of 0.24.
+declare const companionClient: import('../src/client.js').HypruneClient<'0.25'>;
+new HypruneClient({protocol:'0.25',capabilities:['state.read','objects.control']});
+companionClient.call('companion.set', {ref:'library/io.github.ada.pip@0.1.0/pip'}).then(r=>{const n:number=r.revision;void n;});
+companionClient.call('companion.mode', {mode:'stay'});
+companionClient.call('companion.clear', {});
+// @ts-expect-error route is set by npcs.bind, not companion.mode
+companionClient.call('companion.mode', {mode:'route'});
+companionClient.call('npcs.bind', {id:'companion',path:'user/path-3',phase:.4});
+companionClient.call('objects.catalog', {}).then(r=>{
+ const c=r.entries[0]?.companion;const capable:boolean|undefined=c?.capable;const reason:string|null|undefined=c?.reason;
+ const machine=r.entries[0]?.machine;void capable;void reason;void machine;
+});
+companionClient.on('state', s=>{
+ const c=s.state.companion;const state:'none'|'loading'|'unavailable'|'active'|'waiting'|'hidden'=c.state;
+ const mode:'follow'|'stay'|'route'=c.mode;const carried:boolean=c.carried;const at=c.position?.[0];
+ const live=s.state.live.instances.length;void state;void mode;void carried;void at;void live;
+});
+companionClient.on('state.delta', d=>{const c=d.changes.companion;void c?.activity;});
+// @ts-expect-error 0.24 has no companion methods
+liveClient.call('companion.set', {ref:'user/walker'});
+liveClient.on('state', s=>{
+ // @ts-expect-error 0.24 state has no companion key
+ void s.state.companion;
+});

@@ -423,6 +423,8 @@ function validateMachine(value, fail) {
 function traitCombinations(names, fail) {
   for (const a of names) for (const c of names) if (a < c && !(traitPairs[a] || []).includes(c)) fail(`traits: ${a} and ${c} can't be combined`);
 }
+// RFC-0010 canonical character clip names (talk: the companions amendment).
+const canonicalClips = ['idle', 'idle_fidget', 'walk', 'run', 'turn_left', 'turn_right', 'look_around', 'wave', 'nod', 'sit', 'sit_idle', 'stand', 'talk'];
 function objectTraitRules(traits, slots, fail, inside = () => {}) {
   const quat = (q, where) => { if (Math.abs(Math.hypot(...q) - 1) > 0.002) fail(`${where}: quaternion must be normalized`); };
   const unique = (items, field, label) => { const ids = items.map(v => v[field]); if (new Set(ids).size !== ids.length) fail(`${label}: duplicate ${field}`); };
@@ -473,6 +475,14 @@ function validateObjectManifest(value, version, options, fail, warn) {
   const traits = value.traits, slots = value.slots || {}, names = Object.keys(traits), b = value.bounds;
   if (options.directory !== undefined && options.directory !== value.id) fail(`id: "${value.id}" differs from its directory "${options.directory}"`);
   traitCombinations(names, fail);
+  // Companion block (object format 0.10 draft, RFC-0010 companions amendment).
+  if (value.companion) {
+    if (!traits.character) fail('companion: only characters can be companions');
+    else for (const clip of value.companion.idles || []) {
+      if (!(clip in traits.character.clips)) fail(`companion: idle variant "${clip}" is not a clip of traits.character`);
+      if (canonicalClips.includes(clip)) fail(`companion: "${clip}" is a canonical clip, not an idle variant`);
+    }
+  }
   for (let j = 0; j < 3; j++) if (b.min[j] >= b.max[j]) fail(`bounds: min ${'xyz'[j]} must be below max`);
   const t = objectLimits.boundsTolerance, surfaces = new Set(traits.movable ? traits.movable.surfaces || ['floor'] : []);
   const one = surfaces.size === 1 ? [...surfaces][0] : undefined;

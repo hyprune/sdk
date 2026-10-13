@@ -647,6 +647,45 @@
       "additionalProperties": false,
       "description": "Trait name to trait data. Unknown or reserved names reject the object."
     },
+    "companion": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "followDistance": {
+          "type": "number",
+          "minimum": 1.5,
+          "maximum": 2.5
+        },
+        "idles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "maxItems": 4,
+          "uniqueItems": true
+        },
+        "say": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+          },
+          "maxItems": 8
+        }
+      },
+      "additionalProperties": false,
+      "description": "Companion settings (RFC-0010 companions amendment, draft): display name, follow distance, idle variants (clips of traits.character) and Talk lines. Characters only."
+    },
     "slots": {
       "type": "object",
       "properties": {
