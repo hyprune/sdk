@@ -378,3 +378,13 @@ stale, inputs}`, each input (repeated ones expanded, `health.1`) with its `sourc
 `publishedAt` (wall-clock Unix ms, or null), published on change. No new method, grant or
 event. `hyprune-mock --protocol 0.24` simulates it (see [mock](docs/mock.md)). Peers
 below 0.24 keep their exact shapes. Vendored schema `15466e1`.
+
+IPC **0.25** (draft; `HypruneClient<'0.25'>`, the RFC-0010 companions amendment) adds the
+companion: `companion.set {ref}`, `companion.clear {}` and `companion.mode {mode:
+follow|stay}` (`objects.control`), the required `companion` state key `{ref, name, state,
+reason, mode (follow|stay|route), path, activity, position, carried}`, a `companion`
+capability on catalog entries (`null` or `{capable, name, reason}`) and the aimed
+interaction type `companion`. The reserved object id `companion` works with `npcs.bind`,
+`paths.draw {bind}` and `interaction.choose`. No new grant or event. `hyprune-mock
+--protocol 0.25` simulates it (see [mock](docs/mock.md)). Peers below 0.25 see none of it.
+Vendored schema `344cf4b`.
