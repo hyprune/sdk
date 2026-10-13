@@ -203,7 +203,7 @@ input is in error. The mock has no stale threshold and applies no mappings.
 `--protocol 0.25` negotiates 0.25 next to every older version. 0.25 peers get the 0.24
 projection plus the `companion` key, and `objects.catalog` entries carry `companion`: null
 for non-characters, else `{capable, name, reason}`. Library and user characters are
-capable up to 2.0 m tall and 20000 triangles; a world's own characters (`package/` refs)
+capable up to 2.0 m tall and 16,000 triangles (core also checks the width, GPU memory and walk speed); a world's own characters (`package/` refs)
 are not (they stay in their world). The fixture starter library's `guide` is capable.
 No new grant: `COMPANION_GRANTS` equals `LIVE_GRANTS`.
 

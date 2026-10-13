@@ -32,7 +32,8 @@ test('0.25 mock constants: protocol list, no new grant, capability rules',()=>{
  const character={ref:'user/pip',source:'user',name:'Pip',traits:['character'],bounds:{min:[-.3,0,-.2],max:[.3,1.8,.2]},triangles:8000};
  assert.deepEqual(companionOf(character),{capable:true,name:'Pip',reason:null});
  assert.equal(companionOf({...character,bounds:{min:[0,0,0],max:[1,2.4,1]}}).reason,'taller than 2.0 m');
- assert.equal(companionOf({...character,source:'package'}).capable,false,'world residents stay in their world');
+ assert.equal(companionOf({...character,source:'package'}).reason,"world objects can't be companions");
+ assert.equal(companionOf({...character,triangles:16_001}).reason,'more than 16,000 triangles');
  assert.equal(companionOf({...character,traits:['decorative']}),null);
 });
 

@@ -14,16 +14,16 @@ export interface CompanionWorld {id:string|null;position:number[];orientation:nu
 export const COMPANION_ID='companion';
 export const COMPANION_REQUIREMENTS={'companion.set':'objects.control','companion.clear':'objects.control','companion.mode':'objects.control'} as const;
 /** Mock capability limits (core checks the rig and clips too). */
-export const COMPANION_LIMITS={height:2,triangles:20_000,follow:2};
+export const COMPANION_LIMITS={height:2,triangles:16_000,follow:2};
 const notice=(code:string,message:string):Notice=>({level:'info',code,message,since:'0.25'});
 
 /** The 0.25 catalog field: null for non-characters, else {capable, name, reason}. */
 export function companionOf(e:Entry):{capable:boolean;name:string;reason:string|null}|null {
  if(!e.traits.includes('character')) return null;
  const name=e.name.slice(0,32);
- const reason=e.source==='package'?'a world resident, not yours to take along'
+ const reason=e.source==='package'?"world objects can't be companions"
   :e.bounds && e.bounds.max[1]-e.bounds.min[1]>COMPANION_LIMITS.height+.05?'taller than 2.0 m'
-  :(e.triangles ?? 0)>COMPANION_LIMITS.triangles?'more than 20000 triangles':null;
+  :(e.triangles ?? 0)>COMPANION_LIMITS.triangles?'more than 16,000 triangles':null;
  return {capable:reason===null,name,reason};
 }
 
