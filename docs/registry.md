@@ -27,7 +27,7 @@ without a record is listed as `local`.
 Environment overrides: `HYPRUNE_REGISTRY_OFFICIAL_URL`, `HYPRUNE_REGISTRY_COMMUNITY_URL`
 (defaults `https://hyprune.github.io/registry/v0.1/official.json` and `…/community.json`),
 `HYPRUNE_GITHUB_API` (`https://api.github.com`), `HYPRUNE_GITHUB_DOWNLOAD`
-(`https://github.com`), `GITHUB_TOKEN` (sent only to URLs under the API base, never
+(`https://github.com`; every `https://github.com/…` URL is fetched through it), `GITHUB_TOKEN` (sent only to URLs under the API base, never
 stored) and, for tests only, `HYPRUNE_FETCH_ALLOW_LOOPBACK_HTTP=1`, which allows
 `http://127.0.0.1`, `localhost` and `[::1]`.
 

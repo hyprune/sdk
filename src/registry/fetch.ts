@@ -32,6 +32,11 @@ function checked(url:string|URL,env:Env):URL {
 }
 export const githubApi=(env:Env=process.env)=>(env.HYPRUNE_GITHUB_API || DEFAULT_GITHUB_API).replace(/\/+$/,'');
 export const githubDownload=(env:Env=process.env)=>(env.HYPRUNE_GITHUB_DOWNLOAD || DEFAULT_GITHUB_DOWNLOAD).replace(/\/+$/,'');
+/** A https://github.com/ URL (release assets in index entries and API answers) routed through HYPRUNE_GITHUB_DOWNLOAD when set, as the registry tools do. */
+export function downloadUrl(url:string,env:Env=process.env):string {
+ const base=env.HYPRUNE_GITHUB_DOWNLOAD?.replace(/\/+$/,'');
+ return base && url.startsWith(DEFAULT_GITHUB_DOWNLOAD+'/')?base+url.slice(DEFAULT_GITHUB_DOWNLOAD.length):url;
+}
 
 // At most two downloads at a time across the process.
 let running=0;const queue:Array<()=>void>=[];
@@ -43,7 +48,7 @@ async function slot<T>(fn:()=>Promise<T>):Promise<T> {
 
 /** One GET with redirects; resolves with the final response (status not checked). */
 async function get(url:string,{env=process.env,signal,headers={}}:FetchContext&{headers?:Record<string,string>}={}):Promise<{res:IncomingMessage;url:URL}> {
- let u=checked(url,env);const api=githubApi(env)+'/';
+ let u=checked(downloadUrl(url,env),env);const api=githubApi(env)+'/';
  for(let hop=0;;hop++) {
   const h:Record<string,string>={'user-agent':'hyprune-sdk','accept-encoding':'identity',...headers};
   // The token goes only to the GitHub API (URLs under HYPRUNE_GITHUB_API), never elsewhere.

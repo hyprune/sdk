@@ -93,6 +93,8 @@ test('fetch: HTTPS only, redirects only to allowed URLs, token only to the API h
  const api=fake.requests.find(r=>r.path==='/api/repos/example/tiny'),idx=fake.requests.filter(r=>r.path==='/index/small.json').at(-1);
  assert.equal(api.headers.authorization,'Bearer secret-token');assert.equal(idx.headers.authorization,undefined,'the token goes to the API host only');
  assert.ok(fake.requests.every(r=>!r.headers.cookie));
+ fake.repo('example','tiny').releases.push({tag_name:'v1.0.0',assets:[{name:'a.bin',bytes:Buffer.from('asset')}]});
+ assert.equal((await fetchBytes('https://github.com/example/tiny/releases/download/v1.0.0/a.bin',1024,{env:fake.env})).toString(),'asset','github.com downloads go through HYPRUNE_GITHUB_DOWNLOAD');
 });
 test('download: pinned size and hash, Range resume, hash failure deletes the part',async t=>{
  const fake=await startFakeGithub(),dir=await tempDir(t);t.after(()=>fake.close());
