@@ -24,7 +24,7 @@ async function fixture(t) {
 const until=async(fn,ms=2000)=>{const end=Date.now()+ms;while(!fn()){if(Date.now()>end)throw new Error('Condition timed out');await new Promise(r=>setTimeout(r,15));}};
 
 test('0.24 mock constants: protocol list, no new grant, default source',()=>{
- assert.equal(LIVE_PROTOCOL,'0.24');assert.deepEqual([...MOCK_PROTOCOLS],['0.1','0.2','0.21','0.22','0.23','0.24','0.25']);
+ assert.equal(LIVE_PROTOCOL,'0.24');assert.deepEqual([...MOCK_PROTOCOLS],['0.1','0.2','0.21','0.22','0.23','0.24','0.25','0.26']);
  assert.deepEqual(LIVE_GRANTS,NPC_GRANTS);assert.equal(LIVE_LIMIT,64);
  assert.equal(defaultSource('u-3f9a1c'),'com.hyprune.sources.u-3f9a1c');
  const machine=machineOf({machine:{primary:'level',inputs:[{id:'level',type:'number',min:0,max:1,label:'Level',explain:'Fill.'}],drives:[{input:'level',target:'level:tube'}]}});

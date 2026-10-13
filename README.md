@@ -419,3 +419,13 @@ interaction type `companion`. The reserved object id `companion` works with `npc
 `paths.draw {bind}` and `interaction.choose`. No new grant or event. `hyprune-mock
 --protocol 0.25` simulates it (see [mock](docs/mock.md)). Peers below 0.25 see none of it.
 Vendored schema `344cf4b`.
+
+IPC **0.26** (`HypruneClient<'0.26'>`) names tool 9, the debug tool: `tool` is 1–5 or 9
+in `interaction`, `editor`, `hud.pose` and `tool.changed` (name `debug`),
+`editor.submode` carries the debug layer id, the required `editor.debugTool` is null or
+`{layer, label, index, count, legend: [{label, colour}], card}`, the world action `tool9`
+joins the keymap and `editor.toolDefinitions` lists slot 9 after slots 1–5. The companion
+state gains a required `pace` (`walk|run`) and `companion.mode` an optional `pace`.
+`editor.unplaced.windows` and `mounts.instances` list up to 128 entries. No new method,
+grant or event. `hyprune-mock --protocol 0.26` simulates it (see [mock](docs/mock.md)).
+Peers below 0.26 keep their exact shapes. Vendored schema `d59905e`.

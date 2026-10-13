@@ -31,6 +31,8 @@ type ListedPath={ref:string;use:string;walkable:boolean|null;points:Array<{posit
 type Binding={path:string;phase:number}|{pose:Vec3};
 export class CompanionEngine {
  ref:string|null=null;
+ /** The pace it keeps while following (IPC 0.26 companionState.pace); kept across companions. */
+ pace:'walk'|'run'='walk';
  private name:string|null=null;
  private bindings=new Map<string,Binding>();
  private pendingDraw=false;
@@ -83,10 +85,14 @@ export class CompanionEngine {
    }
    case 'companion.mode':{
     this.requireChosen();const id=this.requireWorld();
-    if(params.mode==='follow'){this.bindings.delete(id);return {changed:true,notices:[notice('companion.following',`${this.name} follows you`)]};}
+    // 0.26: an optional pace, set before the mode.
+    const paced=params.pace!==undefined && params.pace!==this.pace;
+    if(params.pace!==undefined)this.pace=params.pace;
+    const pacing=paced?[notice('companion.pace',`${this.name} ${this.pace==='run'?'runs':'walks'} with you`)]:[];
+    if(params.mode==='follow'){this.bindings.delete(id);return {changed:true,notices:[...pacing,notice('companion.following',`${this.name} follows you`)]};}
     const at=this.state().position ?? this.behind(this.world());
     this.bindings.set(id,{pose:at});
-    return {changed:true,notices:[notice('companion.staying',`${this.name} stays here`)]};
+    return {changed:true,notices:[...pacing,notice('companion.staying',`${this.name} stays here`)]};
    }
   }
   throw new RpcError(-32601,'Unimplemented');
@@ -117,10 +123,14 @@ export class CompanionEngine {
  }
  /** The bound paths' extra entry for paths.list `bound`. */
  boundTo(ref:string):boolean {const id=this.world().id,b=id?this.bindings.get(id):undefined;return !!this.ref && !!b && 'path' in b && b.path===ref;}
- /** interaction.choose {objectId: "companion"}: stay or follow (talk shows nothing in the mock). */
+ /** interaction.choose {objectId: "companion"}: stay or follow, walk or run (talk shows nothing in the mock). */
  choose(interactionId:string|null):{changed:boolean;notices:Notice[]} {
   this.requireChosen();
   if(interactionId==='stay' || interactionId==='follow') return this.execute('companion.mode',{mode:interactionId});
+  if(interactionId==='walk' || interactionId==='run'){
+   const changed=this.pace!==interactionId;this.pace=interactionId;
+   return {changed,notices:changed?[notice('companion.pace',`${this.name} ${this.pace==='run'?'runs':'walks'} with you`)]:[]};
+  }
   if(interactionId==='talk' || interactionId===null) return {changed:false,notices:[]};
   throw new RpcError(-32004,`unknown interaction ${interactionId} on companion`);
  }

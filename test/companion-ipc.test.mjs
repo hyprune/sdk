@@ -26,7 +26,7 @@ const until=async(fn,ms=2000)=>{const end=Date.now()+ms;while(!fn()){if(Date.now
 const rejects=(promise,code)=>assert.rejects(promise,e=>e.code===code);
 
 test('0.25 mock constants: protocol list, no new grant, capability rules',()=>{
- assert.equal(COMPANION_PROTOCOL,'0.25');assert.equal(MOCK_PROTOCOLS.at(-1),'0.25');
+ assert.equal(COMPANION_PROTOCOL,'0.25');assert.ok(MOCK_PROTOCOLS.includes('0.25'));
  assert.deepEqual(COMPANION_GRANTS,LIVE_GRANTS);assert.equal(COMPANION_ID,'companion');
  assert.deepEqual(Object.keys(COMPANION_REQUIREMENTS),['companion.set','companion.clear','companion.mode']);
  const character={ref:'user/pip',source:'user',name:'Pip',traits:['character'],bounds:{min:[-.3,0,-.2],max:[.3,1.8,.2]},triangles:8000};

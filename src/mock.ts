@@ -32,11 +32,13 @@ export const NPCS_PROTOCOL='0.23' satisfies Protocol;
 export const LIVE_PROTOCOL='0.24' satisfies Protocol;
 /** Companions (RFC-0010 companions amendment, draft): companion methods, the companion key, catalog capability. */
 export const COMPANION_PROTOCOL='0.25' satisfies Protocol;
+/** The debug tool (tool 9 named on the wire), the companion's pace and the 128-item pocket list. */
+export const DEBUG_TOOL_PROTOCOL='0.26' satisfies Protocol;
 /**
  * The projections the mock serves: 0.1, 0.2 and the feature versions it models. A listener
  * started at version V negotiates every one of these up to V (compared with atLeast).
  */
-export const MOCK_PROTOCOLS=['0.1','0.2',QUEST_PROTOCOL,OBJECTS_PROTOCOL,NPCS_PROTOCOL,LIVE_PROTOCOL,COMPANION_PROTOCOL] as const;
+export const MOCK_PROTOCOLS=['0.1','0.2',QUEST_PROTOCOL,OBJECTS_PROTOCOL,NPCS_PROTOCOL,LIVE_PROTOCOL,COMPANION_PROTOCOL,DEBUG_TOOL_PROTOCOL] as const;
 export type MockProtocol=typeof MOCK_PROTOCOLS[number];
 /** Developer grants a listener at `protocol` can hand out. */
 export function grantsFor(protocol:Protocol):Capability[] {
@@ -50,6 +52,8 @@ export const NPC_GRANTS:Capability[]=grantsFor(NPCS_PROTOCOL);
 export const LIVE_GRANTS:Capability[]=grantsFor(LIVE_PROTOCOL);
 /** IPC 0.25 adds no grant: the companion methods use objects.control. */
 export const COMPANION_GRANTS:Capability[]=grantsFor(COMPANION_PROTOCOL);
+/** IPC 0.26 adds no grant. */
+export const DEBUG_TOOL_GRANTS:Capability[]=grantsFor(DEBUG_TOOL_PROTOCOL);
 export const REQUIREMENTS:Record<string,Capability|undefined>={
  'session.hello':undefined,'session.ping':undefined,'state.subscribe':'state.read','state.snapshot':'state.read','state.unsubscribe':'state.read',
  'world.load':'world.control','surface.focus':'surface.control','movement.set':'movement.control','shell.claim':'shell.control','shell.release':'shell.control','shell.overlay':'shell.control','runtime.exit':'runtime.control',
@@ -82,6 +86,9 @@ export const DEFAULT_SCENARIO:Scenario={
  worlds:[{id:'com.hyprune.observatory',spawns:['arrival','desk'],zones},{id:'com.hyprune.garden',spawns:['arrival'],zones:[{id:'garden',name:'Garden',bounds:{min:[-6,0,-6],max:[6,4,6]}}],loadMs:250}],
  notices:[{atMs:500,level:'info',code:'mock.ready',message:'Observatory ready. Follow the path to the work nook.'},{atMs:5000,level:'warning',code:'mock.demo',message:'This is a synthetic development session.'}],tickMs:100
 };
+/** Slot 9, the debug tool, as core defines it (IPC 0.26 editor.toolDefinitions). */
+export const DEBUG_TOOL_DEFINITION={slot:9 as const,name:'Debug',slots:{primary:{action:'debug.inspect',label:'Inspect'},
+ secondary:{action:'debug.clear',label:'Close info card'},alternate:null,cycle:{action:'tool.cycle',label:'Debug layer'}}};
 type Grant={token:string;clientId:string;capabilities:Capability[];expires:number};
 type Peer={socket?:Socket;decoder:FrameDecoder;hello:boolean;protocol:Protocol;clientId:string;grants:Capability[];methods:string[];ids:Set<string>;subscription?:string;baseline:number;leases:Set<string>;timer?:NodeJS.Timeout;closing:boolean;outstanding:number};
 type Hint={method:string;params:unknown};
@@ -134,10 +141,23 @@ export class MockDaemon {
  /** The snapshot as a peer at `protocol` (0.2 or newer) sees it: no key of a newer version ever reaches an older peer. */
  project(snapshot:Snapshot,protocol:Protocol):Snapshot<Protocol> {
   if(!atLeast(protocol,QUEST_PROTOCOL))return snapshot;
+  if(atLeast(protocol,DEBUG_TOOL_PROTOCOL))return this.debugToolView(snapshot);
   if(atLeast(protocol,COMPANION_PROTOCOL))return this.companionView(snapshot);
   if(atLeast(protocol,LIVE_PROTOCOL))return this.liveView(snapshot);
   if(atLeast(protocol,NPCS_PROTOCOL))return this.npcsView(snapshot);
   return atLeast(protocol,OBJECTS_PROTOCOL)?this.objectsView(snapshot):this.questView(snapshot);
+ }
+ /**
+  * The 0.26 projection: the 0.25 one plus the companion's pace, the slot-9 tool definition, the
+  * world action tool9 (unbound in the mock) and editor.debugTool (null: the mock never takes
+  * out the debug tool).
+  */
+ debugToolView(snapshot:Snapshot):Snapshot<typeof DEBUG_TOOL_PROTOCOL> {
+  const base=this.companionView(snapshot),s=base.state,keymap=s.keymap;
+  const world={...keymap.config.modes.world,tool9:['9']};
+  return {...base,state:{...s,companion:{...s.companion,pace:this.companion!.pace},
+   keymap:{...keymap,config:{...keymap.config,modes:{...keymap.config.modes,world}}},
+   editor:{...s.editor,debugTool:null,toolDefinitions:[...s.editor.toolDefinitions,DEBUG_TOOL_DEFINITION]}}} as Snapshot<typeof DEBUG_TOOL_PROTOCOL>;
  }
  /** The 0.25 projection: the 0.24 one plus the companion key, the companion in paths' bound lists and the aimed companion. */
  companionView(snapshot:Snapshot):Snapshot<typeof COMPANION_PROTOCOL> {
