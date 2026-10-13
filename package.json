@@ -1,6 +1,6 @@
 {
   "name": "@hyprune/sdk",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "type": "module",
   "license": "MIT",
   "description": "Hyprune IPC client, development mock daemon and the hyprune CLI for world and extension authors",
