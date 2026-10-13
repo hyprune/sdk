@@ -12,10 +12,12 @@ import {QuestEngine,QUEST_REQUIREMENTS,QUEST_EVENTS,BASELINE_021} from './mock-q
 import {ObjectEngine,OBJECT_REQUIREMENTS,catalogEntry22,catalogEntry24,type Notice} from './mock-objects.js';
 import {liveState} from './mock-live.js';
 import {NpcEngine,NPC_REQUIREMENTS,type NpcCall,type PowerProfile} from './mock-npcs.js';
+import {CompanionEngine,COMPANION_ID,COMPANION_REQUIREMENTS,companionOf} from './mock-companion.js';
 export {QuestEngine,QUEST_REQUIREMENTS,QUEST_EVENTS,BASELINE_021,GUIDANCE_DEFAULTS,slugify} from './mock-quests.js';
 export {ObjectEngine,OBJECT_REQUIREMENTS,OBJECT_LIMITS,PLACEABLE_TRAITS,REASONS,PROTECTED,FIXTURE_CHARACTERS,placeability,manifestEntry,compareVersions,listArchive} from './mock-objects.js';
 export {NpcEngine,NPC_REQUIREMENTS,NPC_LIMITS,GRAPHICS_DEFAULTS,WALK_SPEED,USE_DISTANCE,samplePath,type PowerProfile} from './mock-npcs.js';
 export {LIVE_LIMIT,defaultSource,machineOf,liveState} from './mock-live.js';
+export {CompanionEngine,COMPANION_ID,COMPANION_REQUIREMENTS,COMPANION_LIMITS,companionOf} from './mock-companion.js';
 export type Capability=Common02_Capability|'quest.control'|'objects.control';
 export const GRANTS:Capability[]=['state.read','world.control','surface.control','movement.control','shell.control','runtime.control','data.publish'];
 /** IPC 0.21 adds quest.control (quest and focus mutations, guidance.set). */
@@ -28,11 +30,13 @@ export const OBJECTS_PROTOCOL='0.22' satisfies Protocol;
 export const NPCS_PROTOCOL='0.23' satisfies Protocol;
 /** Live machines (RFC-0013): catalog entries carry machine, the live state key. */
 export const LIVE_PROTOCOL='0.24' satisfies Protocol;
+/** Companions (RFC-0010 companions amendment, draft): companion methods, the companion key, catalog capability. */
+export const COMPANION_PROTOCOL='0.25' satisfies Protocol;
 /**
  * The projections the mock serves: 0.1, 0.2 and the feature versions it models. A listener
  * started at version V negotiates every one of these up to V (compared with atLeast).
  */
-export const MOCK_PROTOCOLS=['0.1','0.2',QUEST_PROTOCOL,OBJECTS_PROTOCOL,NPCS_PROTOCOL,LIVE_PROTOCOL] as const;
+export const MOCK_PROTOCOLS=['0.1','0.2',QUEST_PROTOCOL,OBJECTS_PROTOCOL,NPCS_PROTOCOL,LIVE_PROTOCOL,COMPANION_PROTOCOL] as const;
 export type MockProtocol=typeof MOCK_PROTOCOLS[number];
 /** Developer grants a listener at `protocol` can hand out. */
 export function grantsFor(protocol:Protocol):Capability[] {
@@ -44,6 +48,8 @@ export const OBJECT_GRANTS:Capability[]=grantsFor(OBJECTS_PROTOCOL);
 export const NPC_GRANTS:Capability[]=grantsFor(NPCS_PROTOCOL);
 /** IPC 0.24 adds no grant: live reads with state.read. */
 export const LIVE_GRANTS:Capability[]=grantsFor(LIVE_PROTOCOL);
+/** IPC 0.25 adds no grant: the companion methods use objects.control. */
+export const COMPANION_GRANTS:Capability[]=grantsFor(COMPANION_PROTOCOL);
 export const REQUIREMENTS:Record<string,Capability|undefined>={
  'session.hello':undefined,'session.ping':undefined,'state.subscribe':'state.read','state.snapshot':'state.read','state.unsubscribe':'state.read',
  'world.load':'world.control','surface.focus':'surface.control','movement.set':'movement.control','shell.claim':'shell.control','shell.release':'shell.control','shell.overlay':'shell.control','runtime.exit':'runtime.control',
@@ -88,6 +94,8 @@ export class MockDaemon {
  readonly objects:ObjectEngine;
  /** Characters, paths, interactions and graphics, served to 0.23 peers of a 0.23 listener. */
  readonly npcs?:NpcEngine;
+ /** The companion, served to 0.25 peers of a 0.25 listener. */
+ readonly companion?:CompanionEngine;
  readonly quests=new QuestEngine(()=>({zones:this.state.location.zones,loaded:!!this.state.world,
   waypoint:this.state.location.waypoint?{id:this.state.location.waypoint.id,label:this.state.location.waypoint.label,position:this.state.location.waypoint.position}:null}));
  private server?:Server;private peers=new Set<Peer>();private tokens:Grant[]=[];
@@ -104,6 +112,8 @@ export class MockDaemon {
    position:this.state.movement.position,orientation:this.state.movement.orientation}),{objectDir:options.objectDir,characters:atLeast(this.protocol,NPCS_PROTOCOL)});
   if(atLeast(this.protocol,NPCS_PROTOCOL))this.npcs=new NpcEngine(this.objects,()=>({id:this.state.world?.id ?? null,active:this.state.runtime.active,zones:this.state.location.zones,
    obstacles:this.scenario.obstacles || [],position:this.state.movement.position,orientation:this.state.movement.orientation}));
+  if(this.npcs && atLeast(this.protocol,COMPANION_PROTOCOL))this.companion=new CompanionEngine(this.objects,this.npcs,()=>({id:this.state.world?.id ?? null,
+   position:this.state.movement.position,orientation:this.state.movement.orientation}));
   validateState(this.snapshot());if(atLeast(this.protocol,QUEST_PROTOCOL))validateState(this.project(this.snapshot(),this.protocol),this.protocol);
   if(!Array.isArray(this.scenario.path) || this.scenario.path.some(p=>p.length!==3 || p.some(n=>!Number.isFinite(n)))) throw new Error('Scenario path requires finite vec3 points');
   if(this.scenario.tickMs!==undefined && (!Number.isFinite(this.scenario.tickMs) || this.scenario.tickMs<34)) throw new Error('tickMs must be >=34');
@@ -124,9 +134,15 @@ export class MockDaemon {
  /** The snapshot as a peer at `protocol` (0.2 or newer) sees it: no key of a newer version ever reaches an older peer. */
  project(snapshot:Snapshot,protocol:Protocol):Snapshot<Protocol> {
   if(!atLeast(protocol,QUEST_PROTOCOL))return snapshot;
+  if(atLeast(protocol,COMPANION_PROTOCOL))return this.companionView(snapshot);
   if(atLeast(protocol,LIVE_PROTOCOL))return this.liveView(snapshot);
   if(atLeast(protocol,NPCS_PROTOCOL))return this.npcsView(snapshot);
   return atLeast(protocol,OBJECTS_PROTOCOL)?this.objectsView(snapshot):this.questView(snapshot);
+ }
+ /** The 0.25 projection: the 0.24 one plus the companion key, the companion in paths' bound lists and the aimed companion. */
+ companionView(snapshot:Snapshot):Snapshot<typeof COMPANION_PROTOCOL> {
+  const base=this.liveView(snapshot);
+  return {...base,state:{...base.state,companion:this.companion!.state()}} as Snapshot<typeof COMPANION_PROTOCOL>;
  }
  /** The 0.24 projection: the 0.23 one plus the live key from the placed machines and published sources. */
  liveView(snapshot:Snapshot):Snapshot<typeof LIVE_PROTOCOL> {
@@ -223,7 +239,8 @@ export class MockDaemon {
     p.clientId=m.params.client.id;p.methods=Object.keys(REQUIREMENTS).filter(k=>(!REQUIREMENTS[k] || p.grants.includes(REQUIREMENTS[k]!)) && (p.protocol!=='0.1' || LEGACY.has(k)));
     if(atLeast(p.protocol,QUEST_PROTOCOL))p.methods.push(...Object.entries(QUEST_REQUIREMENTS).filter(([,grant])=>p.grants.includes(grant)).map(([k])=>k));
     if(atLeast(p.protocol,OBJECTS_PROTOCOL))p.methods.push(...Object.entries(OBJECT_REQUIREMENTS).filter(([,grant])=>p.grants.includes(grant)).map(([k])=>k));
-    if(this.npcs && atLeast(p.protocol,NPCS_PROTOCOL))p.methods.push(...Object.entries(NPC_REQUIREMENTS).filter(([,grant])=>p.grants.includes(grant)).map(([k])=>k));p.hello=true;clearTimeout(p.timer);
+    if(this.npcs && atLeast(p.protocol,NPCS_PROTOCOL))p.methods.push(...Object.entries(NPC_REQUIREMENTS).filter(([,grant])=>p.grants.includes(grant)).map(([k])=>k));
+    if(this.companion && atLeast(p.protocol,COMPANION_PROTOCOL))p.methods.push(...Object.entries(COMPANION_REQUIREMENTS).filter(([,grant])=>p.grants.includes(grant)).map(([k])=>k));p.hello=true;clearTimeout(p.timer);
     this.send(p,{jsonrpc:'2.0',id,result:{protocol:p.protocol,sessionId:this.sessionId,capabilities:p.grants,methods:p.methods,events:p.grants.includes('state.read')?['state.delta','runtime.notice','session.revoked',...(p.protocol!=='0.1'?['location.transition','ui.opened','ui.closed','data.updated']:[]),...(atLeast(p.protocol,QUEST_PROTOCOL)?QUEST_EVENTS:[])]:['session.revoked']}},'session.hello');return;
    }
    if(p.outstanding>=64)throw new RpcError(-32008,'64 outstanding calls exceeded');p.outstanding++;
@@ -294,8 +311,9 @@ export class MockDaemon {
    case 'data.publish':case 'data.remove':this.publish(p,method,params);break;
    case 'runtime.exit':{this.load?.cancel();const hints=this.stopMotion();this.hideUI(hints);this.commit({runtime:{...this.state.runtime,active:false},shell:{leases:[]},location:{...this.state.location,autodrive:false}},hints);for(const peer of [...this.peers,this.supervisor])peer.leases.clear();break;}
    default:{
+    if(this.companion && method in COMPANION_REQUIREMENTS){const call=this.companion.execute(method,params);if(call.changed)this.extendedCommit([]);this.notify(call.notices);return {revision:this.revision};}
     if(method in OBJECT_REQUIREMENTS)return this.objectCall(method,params,p.protocol);
-    if(this.npcs && method in NPC_REQUIREMENTS)return this.npcCall(method,params);
+    if(this.npcs && method in NPC_REQUIREMENTS)return this.npcCall(method,params,p.protocol);
     if(!(method in QUEST_REQUIREMENTS))throw new RpcError(-32601,'Unimplemented');
     const {result,hints,changed}=this.quests.execute(method,params);
     if(changed)this.extendedCommit(hints);
@@ -309,7 +327,11 @@ export class MockDaemon {
  private async objectCall(method:string,params:unknown,protocol:Protocol):Promise<Record<string,unknown>> {
   const call=await this.objects.execute(method,params);
   // Catalog entries carry machine from 0.24 on (null for non-machines).
-  if(method==='objects.catalog' && call.result)call.result={...call.result,entries:(call.result.entries as Parameters<typeof catalogEntry24>[0][]).map(atLeast(protocol,LIVE_PROTOCOL)?catalogEntry24:catalogEntry22)};
+  if(method==='objects.catalog' && call.result){
+   const entries=call.result.entries as Parameters<typeof catalogEntry24>[0][];
+   // Catalog entries carry companion from 0.25 on (null for non-characters).
+   call.result={...call.result,entries:atLeast(protocol,COMPANION_PROTOCOL)?entries.map(e=>({...catalogEntry24(e),companion:companionOf(e)})):entries.map(atLeast(protocol,LIVE_PROTOCOL)?catalogEntry24:catalogEntry22)};
+  }
   if(call.changed)this.extendedCommit([]);
   this.notify(call.notices);
   return {...(call.revision==='none'?{}:{revision:call.revision==='catalog'?this.objects.catalogRevision:this.revision}),...call.result};
@@ -319,9 +341,18 @@ export class MockDaemon {
   for(const {since,...notice} of notices)for(const p of this.peers)if(p.hello && p.grants.includes('state.read') && atLeast(p.protocol,(since || OBJECTS_PROTOCOL) as Protocol))this.send(p,{jsonrpc:'2.0',method:'runtime.notice',params:notice});
  }
  /** 0.23 character, path, interaction and graphics methods; an interaction's waypoint lands in location. */
- private npcCall(method:string,params:unknown):Record<string,unknown> {
+ private npcCall(method:string,params:any,protocol:Protocol='0.23'):Record<string,unknown> {
+  // 0.25: the reserved id companion in npcs.bind, paths.draw {bind}, paths.finish and interaction.choose.
+  const companion=this.companion && atLeast(protocol,COMPANION_PROTOCOL)?this.companion:undefined;
+  if(companion && (method==='npcs.bind' && params?.id===COMPANION_ID || method==='interaction.choose' && params?.objectId===COMPANION_ID)){
+   const call=method==='npcs.bind'?companion.bind(params):companion.choose(params.interactionId);
+   if(call.changed)this.extendedCommit([]);this.notify(call.notices);return {revision:this.revision};
+  }
+  if(companion && method==='paths.draw' && params?.bind===COMPANION_ID){companion.draw();const {bind,...rest}=params;params=rest;}
   let call:NpcCall;
   try{call=this.npcs!.execute(method,params);}finally{this.notify(this.npcs!.outbox.splice(0));}
+  if(companion && method==='paths.finish'){const done=companion.finished((call.result as {id?:string|null})?.id ?? null);if(done.bound)call.result={...call.result,bound:done.bound};call.notices.push(...done.notices);call.changed=true;}
+  if(companion && method==='paths.list' && call.result)call.result={...call.result,paths:(call.result.paths as Array<{ref:string;bound:string[]}>).map(p=>companion.boundTo(p.ref) && p.bound.length<8?{...p,bound:[...p.bound,COMPANION_ID]}:p)};
   this.applyNpc(call);
   return {...(call.revision==='none'?{}:{revision:this.revision}),...call.result};
  }
