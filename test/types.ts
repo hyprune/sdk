@@ -384,3 +384,26 @@ liveClient.on('state', s=>{
  // @ts-expect-error 0.24 state has no companion key
  void s.state.companion;
 });
+
+// IPC 0.26 names tool 9 (the debug tool), adds the companion's pace and lists up to 128 pocketed windows.
+declare const debugClient: import('../src/client.js').HypruneClient<'0.26'>;
+new HypruneClient({protocol:'0.26',capabilities:['state.read','objects.control']});
+debugClient.call('companion.mode', {mode:'follow',pace:'run'});
+debugClient.call('companion.mode', {mode:'stay'});
+// @ts-expect-error pace is walk or run
+debugClient.call('companion.mode', {mode:'follow',pace:'sprint'});
+// @ts-expect-error 0.25 companion.mode has no pace
+companionClient.call('companion.mode', {mode:'follow',pace:'run'});
+debugClient.on('state', s=>{
+ const tool:1|2|3|4|5|9=s.state.editor.tool;const pace:'walk'|'run'=s.state.companion.pace;
+ const d=s.state.editor.debugTool;const layer:string|undefined=d?.layer;const card:string[]|null|undefined=d?.card;
+ const colour=d?.legend[0]?.colour;const slot9=s.state.editor.toolDefinitions[5].slot;const nine:string[]=s.state.keymap.config.modes.world.tool9;
+ void tool;void pace;void layer;void card;void colour;void slot9;void nine;
+});
+debugClient.on('tool.changed', e=>{const slot:1|2|3|4|5|9=e.slot;void slot;});
+companionClient.on('state', s=>{
+ // @ts-expect-error 0.25 editor has no debugTool
+ void s.state.editor.debugTool;
+ // @ts-expect-error 0.25 companion has no pace
+ void s.state.companion.pace;
+});
