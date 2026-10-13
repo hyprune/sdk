@@ -152,7 +152,8 @@ async function transfer(url:string,part:string,bytes:number,exact:boolean,onProg
    if(writeError) break;
    total+=chunk.length;
    if(total>bytes) {res.destroy();fail('fetch.failed',`${url}: more than the pinned ${bytes} bytes`);}
-   if(!out.write(chunk)) await new Promise<void>(r=>{out.once('drain',()=>r());out.once('error',()=>r());});
+   // Wait for drain or an error, then drop the other listener so waits don't pile up listeners.
+   if(!out.write(chunk)) await new Promise<void>(r=>{const done=()=>{out.off('drain',done);out.off('error',done);r();};out.once('drain',done);out.once('error',done);});
    const now=Date.now();
    if(onProgress && now-last>=250) {last=now;onProgress({bytes:total,total:exact?bytes:Number.isFinite(length)?length:0});}
   }
