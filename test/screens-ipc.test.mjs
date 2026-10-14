@@ -49,6 +49,7 @@ test('0.27 mock: place binds the next free workspace, configure rebinds, homes a
  const {entries}=await client.call('objects.catalog',{});
  const entry=entries.find(e=>e.ref===SCREEN);
  assert.deepEqual(entry.screen,{aspect:'16:9',size:[3.2,1.8],mountType:'hanging-wall'});
+ assert.deepEqual([entry.warnings,entry.provenance,entry.imported],[[],{license:'CC-BY-4.0',author:'unknown',source:'unknown'},null]);
  assert.ok(entry.placeable);
  assert.ok(entries.filter(e=>e.ref!==SCREEN).every(e=>e.screen===null));
  const {id}=await client.call('objects.place',{ref:SCREEN,pose});
@@ -83,6 +84,6 @@ test('0.26 peers of a 0.27 listener keep the 0.26 shapes',async t=>{
  await old.subscribe();validateState(old.snapshot,'0.26');
  assert.ok(old.snapshot.state.objects.instances.every(i=>!('screen' in i)));
  const {entries}=await old.call('objects.catalog',{});
- assert.ok(entries.every(e=>!('screen' in e)));
+ assert.ok(entries.every(e=>!('screen' in e) && !('warnings' in e) && !('provenance' in e)));
  await assert.rejects(old.call('objects.configure',{id:old.snapshot.state.objects.instances.at(-1).id,patch:{workspace:23}}));
 });

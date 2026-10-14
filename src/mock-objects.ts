@@ -78,6 +78,8 @@ const machineField=(traits:Record<string,unknown>)=>{const machine=machineOf(tra
 export const catalogEntry24=({screen,...e}:Entry):Ipc24_CatalogEntry=>({...e,machine:e.machine ?? null});
 /** An entry as a 0.22/0.23 peer sees it: no machine or screen field. */
 export const catalogEntry22=({machine,screen,...e}:Entry):Ipc22_CatalogEntry=>e;
+/** The 0.27 import fields: warnings (none in the mock), provenance (the licence; author and source unrecorded) and imported (null). */
+export const catalogImport27=(e:Entry)=>({warnings:[] as string[],provenance:e.source==='package'?null:{license:e.license || 'unknown',author:'unknown',source:'unknown'},imported:null});
 /** The screen field of a 0.27 entry: null for objects that are no workspace screen. */
 export const catalogScreen27=(e:Entry):Ipc27_CatalogScreen|null=>e.screen ?? null;
 

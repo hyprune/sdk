@@ -9,7 +9,7 @@ import {RpcError} from './client.js';
 import type {State,Snapshot} from './state.js';
 import type {Common02_Capability,Ipc02_Target,Ipc02_Transition,MethodMap} from './generated.js';
 import {QuestEngine,QUEST_REQUIREMENTS,QUEST_EVENTS,BASELINE_021} from './mock-quests.js';
-import {ObjectEngine,OBJECT_REQUIREMENTS,catalogEntry22,catalogEntry24,catalogScreen27,type Notice} from './mock-objects.js';
+import {ObjectEngine,OBJECT_REQUIREMENTS,catalogEntry22,catalogEntry24,catalogScreen27,catalogImport27,type Notice} from './mock-objects.js';
 import {liveState} from './mock-live.js';
 import {NpcEngine,NPC_REQUIREMENTS,type NpcCall,type PowerProfile} from './mock-npcs.js';
 import {CompanionEngine,COMPANION_ID,COMPANION_REQUIREMENTS,companionOf} from './mock-companion.js';
@@ -371,7 +371,7 @@ export class MockDaemon {
    // Catalog entries carry companion from 0.25 on (null for non-characters).
    call.result={...call.result,entries:atLeast(protocol,COMPANION_PROTOCOL)?entries.map(e=>({...catalogEntry24(e),companion:companionOf(e),
     // Catalog entries carry screen from 0.27 on (null for objects that are no workspace screen).
-    ...(atLeast(protocol,SCREENS_PROTOCOL)?{screen:catalogScreen27(e)}:{})})):entries.map(atLeast(protocol,LIVE_PROTOCOL)?catalogEntry24:catalogEntry22)};
+    ...(atLeast(protocol,SCREENS_PROTOCOL)?{screen:catalogScreen27(e),...catalogImport27(e)}:{})})):entries.map(atLeast(protocol,LIVE_PROTOCOL)?catalogEntry24:catalogEntry22)};
   }
   if(call.changed)this.extendedCommit([]);
   this.notify(call.notices);
