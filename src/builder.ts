@@ -41,6 +41,8 @@ export interface Status {
  lastVersion: {version: string; tag: string; commit: string} | null; suggestedVersion: string;
  remote: {name: 'origin'; url: string; kind: 'github' | 'other'; repo: string | null} | null;
  identity: {name: string; email: string} | null; sky: Project['sky'];
+ /** The unsaved changes in words, from the saved and current project files ("placed 3 objects, moved 1"). */
+ changes: string;
 }
 
 // ---- folders ----
@@ -384,13 +386,16 @@ export function status(folder: string): Status {
  const head = gitTry(folder, ['rev-parse', '--verify', '-q', 'HEAD']).stdout.trim() || null;
  const log = head ? git(folder, ['log', '-1', '--format=%H%x00%cI%x00%B']).split('\0') : null;
  const tags = versionTags(folder);
+ const saved = head ? gitTry(folder, ['show', `HEAD:${PROJECT}`]) : null;
+ let before: Project | null = null;
+ try {before = saved && saved.status === 0 ? JSON.parse(saved.stdout) : null;} catch {/* a damaged saved file: no summary */}
  return {
   projectId: basename(folder), worldId: base.id, name: project.name, folder, version: base.version, placements: project.placements.length,
   branch: gitTry(folder, ['symbolic-ref', '--short', '-q', 'HEAD']).stdout.trim() || 'HEAD', head: head?.slice(0, 12) ?? null, pending: pending(folder),
   lastSave: log ? {commit: log[0].slice(0, 12), at: log[1], message: log[2].trim()} : null,
   lastVersion: tags[0] ? {...tags[0], commit: tags[0].commit.slice(0, 12)} : null,
   suggestedVersion: tags[0] ? nextPatch(tags[0].version) : base.version,
-  remote: remoteOf(folder), identity: identity(folder), sky: project.sky,
+  remote: remoteOf(folder), identity: identity(folder), sky: project.sky, changes: changeSummary(before, project),
  };
 }
 export function listProjects(root = projectsDir()): Status[] {

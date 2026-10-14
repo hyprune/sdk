@@ -85,8 +85,9 @@ test('save: Make world (objects, screens as homes, provenance) and one commit pe
  // A wall screen 4 m ahead, turned to face +X, bound to workspace 21 (slot 01).
  const q=[0,Math.SQRT1_2,0,Math.SQRT1_2];
  place(folder,'workspace-screen-wall-16x9',{id:'u-0000a2',pose:{position:[0,1.5,-4],rotation:q},workspace:21});
- // Per file: the two copied directories (4 + 3 files) and the project file.
+ // Per file: the two copied directories (4 + 3 files) and the project file; in words from the project.
  assert.deepEqual(status(folder).pending,{added:7,modified:1,deleted:0,total:8});
+ assert.equal(status(folder).changes,'placed 2 objects');
  const first=await save(folder);
  assert.match(first.message,/^Save \d{4}-\d\d-\d\d \d\d:\d\d · placed 2 objects$/);
  assert.deepEqual(first.homes,[{slot:'01',workspace:21,placement:'u-0000a2'}]);
