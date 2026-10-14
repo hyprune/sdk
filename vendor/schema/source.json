@@ -1,7 +1,7 @@
 {
   "repository": "https://github.com/hyprune/schema",
-  "commit": "51256a1876f1908902124ba7a688bd13a69974d2",
-  "version": "0.12.0",
+  "commit": "5c95119cf9a18526fa20fe9e0f4da6d74c21cfb4",
+  "version": "0.13.0",
   "protocols": [
     "0.1",
     "0.2",
@@ -34,7 +34,7 @@
   "sha256": {
     "LICENSE": "fbca288262847f32b11b67d0a0b9cbed0b777c08e2dcfe752e920724542fb102",
     "examples/placement-input.json": "5c57e0521fe4e4f8b913012f2a8c858d8d967f1844b6db8bce9c7a72107aa571",
-    "lib/validate.mjs": "5f4c5bc0390aeb09b75281ad8d524c4be2d6a4fe41438ab74a8d0b25c8bfbd92",
+    "lib/validate.mjs": "6ffc4621f419e3e32b98132b56f2e26057e759cf3ce69110818a0aa11c0c33bb",
     "v0.10/ipc.schema.json": "ecdd7cb31c08fc6f5ebfa9c828741ab8ffb9a61a52b56275aa59f698ab3bc649",
     "v0.11/ipc.schema.json": "de2ee467a5389704d8cda65a6cde56e6da8be83decf3a09559fdcdbd152af82d",
     "v0.12/ipc.schema.json": "4e927ea77cf8a390220b25e67a26148ba57ced725ff5bc164521a01e8cf910ac",
@@ -48,7 +48,7 @@
     "v0.2/common.schema.json": "f8b00d1be570b6b285e2ba6db631347efa7499b951c59ba0ca9b5fc9fbb2b64d",
     "v0.2/ipc.schema.json": "2ffc756163665b449c6e35f09e034ca8c30ca69aaceaeaa9f44aeca1eade7399",
     "v0.2/world.schema.json": "2827f5a73689e4bf4193236bab28b979215cb809d339a4ef5cb25530abc32f5e",
-    "v0.3/common.schema.json": "15ced10ff23f366bbf19a074e584451be08af34b48c6e307ea9749190d42c68b",
+    "v0.3/common.schema.json": "7d09e00487407c05af053336adab990acb8dc91f80d15b914d8439e780e6c138",
     "v0.3/ipc.schema.json": "815e3bd2dac366bde101c9f81adf95b4f587ade4bbed42f880ce2949e9f2c5d3",
     "v0.3/world.schema.json": "56efe855b91924964b1b26a7363e080b36d7310b0263bfed0bfc605d1e880ad9",
     "v0.4/common.schema.json": "7d4411fa456019d11918d65d24d582abdf6e5b75c893d71553b2d4396354dba2",
@@ -91,12 +91,12 @@
     "registry/v0.1/release-record.schema.json": "280637adce10ae76dde68fb32aaeb7e8eec74a48606e8903093850d4c04f9294",
     "registry/v0.1/sources.schema.json": "b8ecb901fccbfd5cfb9ed4661a3667075a0701949e5e9049b84914039af08e09",
     "v0.26/ipc.schema.json": "f862812dffadbb98f8601c56b2e325ec8ca6d8b0a9b61de09df16f4cfe830358",
-    "v0.11/object.schema.json": "8262561545640e9b0c83a687d35d2bdbfaf4720412aefe719c195a430c450244",
-    "v0.11/library.schema.json": "b179a1c5a6fdfa8f7b1532c54cced05b86d4157073e7b42ebfef72c023fbcb98",
+    "v0.11/object.schema.json": "01fe7e4cc6e94c6f1ee5f8d920010ed5b1e263d03b150cb962bf2517f9ac62c2",
+    "v0.11/library.schema.json": "6302b3be8c0609a07fb7bc07250139579cbe9a87174fb5878452b603e6d63f98",
     "v0.27/ipc.schema.json": "e0e6e326775334c5b577439c4e6c6e6f8ca8502ff3f3fa32f9bbd4519b4d559e",
-    "v0.11/import.schema.json": "0f8f29a94e2d52f0adb2b774f96aa54cf29860bb72561a0c64a9b2b398078adb",
-    "v0.11/world.schema.json": "00d4683d3ba6f71a30c908eabafb3d9d4b406535e6005ebcae1aaf3460ff64be",
+    "v0.11/import.schema.json": "660599989c48182cd22d1c4c6ddbb57c860ceb0e0f3d01a4ce495e90903a8152",
+    "v0.11/world.schema.json": "40c6203b1baa203b43d84292b80e7d02b6f52377303f9d326d859a1cf5979497",
     "v0.11/common.schema.json": "07c528e1970923afe59ac176b379300ded249ca296a1149a4674e5342a9043c1",
-    "v0.11/project.schema.json": "c1392302091215e54908c9dfa98f0fa5bcb0a05c52fb18e99d954a1d820fd3e2"
+    "v0.11/project.schema.json": "120f714d030bea320479fbfff2c261df83e90670c9da9365a74f00d4b487fa64"
   }
 }

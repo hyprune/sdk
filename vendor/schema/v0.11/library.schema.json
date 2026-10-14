@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.11/library.schema.json",
-  "title": "Hyprune object library manifest 0.11 (library.json, RFC-0011) (DRAFT)",
+  "title": "Hyprune object library manifest 0.11 (library.json, RFC-0011)",
   "type": "object",
   "properties": {
     "formatVersion": {

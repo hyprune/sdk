@@ -788,7 +788,7 @@ function worldReserved(value, version) {
   const out = [], list = v => Array.isArray(v) ? v : [];
   const traitWhy = { mount: 'reserved for props that hold a window (RFC-0011 P4)', interactive: 'reserved for use actions (RFC-0011 P4)',
     mover: 'needs world format 0.10', machine: 'reserved for RFC-0013 live objects' };
-  // World 0.11 (draft): workspace screens (object format 0.11's mount) may be world objects; movers stay reserved.
+  // World 0.11: workspace screens (object format 0.11's mount) may be world objects; movers stay reserved.
   if (atLeast(version, '0.11')) { delete traitWhy.mount; traitWhy.mover = 'reserved (tracks and items are not part of world 0.11)'; }
   list(value.objectAssets).forEach((a, i) => {
     if (a?.traits && typeof a.traits === 'object') for (const [name, why] of Object.entries(traitWhy))

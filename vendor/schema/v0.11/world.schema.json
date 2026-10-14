@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.11/world.schema.json",
-  "title": "Hyprune world format 0.11 (DRAFT): panorama skies, builder worlds, object format 0.11 assets",
+  "title": "Hyprune world format 0.11: panorama skies, builder worlds, object format 0.11 assets",
   "type": "object",
   "properties": {
     "formatVersion": {
