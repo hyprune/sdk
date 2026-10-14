@@ -12,11 +12,15 @@ import {inventory,readAsset,gltfDocument} from './world.js';
 import {objectDir} from './paths.js';
 import {parseJson} from './codec.js';
 import type {HypruneClient} from './client.js';
+import {buildImport,inspectImport,CATEGORIES,type ImportOptions,type Measure} from './import.js';
 import type {Ipc22_CatalogEntry,Ipc22_LibraryRecord,LibraryReleases09_Document} from './generated.js';
 
 /** The first IPC version with the object catalog and libraries; the CLI asks for it unless told otherwise. */
 export const OBJECTS_SINCE='0.22';
 export const objectHelp=`hyprune object add <dir | file.glb> [--name N --license SPDX --author A --surface floor|wall|ceiling|any] [--replace]
+hyprune object import <file> [--inspect] [--name N --id ID --category C --tags a,b --surface floor|wall|ceiling|any]
+  [--units auto|m|cm|mm|in|ft | --scale X] [--up y|z] [--yaw 0|90|180|270] [--max-triangles N] [--max-texture PX]
+  [--collision convex|box|none] [--ktx2 auto|all|off] [--lighting lit|unlit] [--license SPDX --author A --source S] [--replace] [--json]
 hyprune object list [--json]
 hyprune library install <archive.tar.zst | id@version> [--releases releases.json] [--archive file.tar.zst]
 hyprune library list [--json]
@@ -26,6 +30,11 @@ object add checks an object directory (or wraps a bare .glb in a minimal object.
 the flags) and copies it atomically into $HYPRUNE_OBJECT_DIR, else
 $XDG_DATA_HOME/hyprune/objects/<id>/. library install id@version reads the record from a
 libraries/releases.json and needs the archive next to it or as --archive.
+object import converts a glTF/GLB (or OBJ, FBX, DAE, 3DS, PLY, STL through Assimp) into an object
+directory without Blender: units, up axis, facing and pivot; meshoptimizer decimation to
+--max-triangles (default 50000); textures shrunk to --max-texture (2048) and, over 1024 px,
+KTX2; a convex or box collision proxy; a CPU thumbnail; import.json with the provenance.
+--inspect only measures. --json prints JSON lines: {event: stage|done|error, ...}.
 IPC commands: [--socket path] [--protocol 0.22]; install/remove need objects.control.`;
 
 const SURFACES=['floor','wall','ceiling','any'] as const;
@@ -113,6 +122,56 @@ export async function addObject(path:string,options:AddOptions={}):Promise<AddRe
  }
 }
 
+export interface ImportCliOptions extends ImportOptions {replace?:boolean;root?:string}
+export interface ImportResult {id:string;ref:string;path:string;digest:string;replaced:boolean;warnings:string[];steps:string[];
+ before:Measure;after:Measure;manifest:Record<string,unknown>}
+/** `hyprune object import`: build the object in memory, then check and commit it like `object add`. */
+export async function importObject(file:string,options:ImportCliOptions={}):Promise<ImportResult> {
+ const root=resolve(options.root || objectDir()),version=sdkVersion();
+ const build=await buildImport(resolve(file),options,version);
+ let id=build.manifest.id as string;
+ // A new id when the name is taken (unless replacing): crate, crate-2, crate-3, ...
+ if(!options.replace && existsSync(join(root,id))) {
+  let n=2;while(existsSync(join(root,`${id.slice(0,60)}-${n}`)) && n<1000) n++;
+  id=`${id.slice(0,60)}-${n}`;build.manifest.id=id;
+ }
+ options.progress?.('check');
+ const {check,path,replaced}=await commit(root,id,!!options.replace,dir=>{
+  writeFileSync(join(dir,'object.glb'),build.glb);
+  writeFileSync(join(dir,'thumbnail.png'),build.thumbnail);
+  writeFileSync(join(dir,'object.json'),JSON.stringify(build.manifest,null,1)+'\n');
+  writeFileSync(join(dir,'import.json'),JSON.stringify(build.record,null,1)+'\n');
+ });
+ return {id,ref:`user/${id}`,path,digest:check.digest,replaced,warnings:[...build.warnings,...check.warnings],steps:build.steps,
+  before:build.before,after:{...build.after,gpuBytes:check.measured.gpuBytes},manifest:build.manifest};
+}
+function sdkVersion():string {
+ try {return JSON.parse(readFileSync(new URL('../../package.json',import.meta.url),'utf8')).version;} catch {return '0.0.0';}
+}
+/** Command-line flags to import options (numbers and enums checked). */
+export function importOptions(v:Record<string,any>):ImportCliOptions {
+ const pick=<T extends string>(key:string,allowed:readonly T[]):T|undefined=>{
+  if(v[key]===undefined) return undefined;
+  if(!allowed.includes(v[key])) throw new Error(`--${key} must be one of ${allowed.join(', ')}`);
+  return v[key];
+ };
+ const number=(key:string,lo:number,hi:number)=>{
+  if(v[key]===undefined) return undefined;
+  const n=Number(v[key]);if(!Number.isFinite(n) || n<lo || n>hi) throw new Error(`--${key} must be a number from ${lo} to ${hi}`);return n;
+ };
+ const yaw=number('yaw',0,270);
+ if(yaw!==undefined && ![0,90,180,270].includes(yaw)) throw new Error('--yaw must be 0, 90, 180 or 270');
+ const maxTexture=number('max-texture',256,8192);
+ if(maxTexture!==undefined && ![256,512,1024,2048,4096,8192].includes(maxTexture)) throw new Error('--max-texture must be 256, 512, 1024, 2048, 4096 or 8192');
+ if(v.id!==undefined && (!/^[a-z][a-z0-9-]{0,63}$/.test(v.id) || v.id.endsWith('-'))) throw new Error('--id must be a slug starting with a letter');
+ if(v.category!==undefined && !(CATEGORIES as readonly string[]).includes(v.category)) throw new Error(`--category must be one of ${CATEGORIES.join(', ')}`);
+ return {name:v.name,id:v.id,category:v.category,description:v.description,tags:v.tags?String(v.tags).split(',').filter(Boolean):undefined,
+  surface:pick('surface',['floor','wall','ceiling','any'] as const),units:pick('units',['auto','m','cm','mm','in','ft'] as const),scale:number('scale',1e-6,1000),
+  up:pick('up',['y','z'] as const),yaw:yaw as ImportOptions['yaw'],maxTriangles:number('max-triangles',100,2000000),maxTexture:maxTexture as ImportOptions['maxTexture'],
+  collision:pick('collision',['convex','box','none'] as const),ktx2:pick('ktx2',['auto','all','off'] as const),lighting:pick('lighting',['lit','unlit'] as const),
+  license:v.license,author:v.author,source:v.source,replace:!!v.replace};
+}
+
 /** SHA-256 of a file, streamed. */
 export function sha256File(path:string):Promise<string> {
  return new Promise((resolvePromise,reject)=>{const hash=createHash('sha256');createReadStream(path).on('error',reject).on('data',b=>hash.update(b)).on('end',()=>resolvePromise(hash.digest('hex')));});
@@ -178,7 +237,9 @@ export async function objectMain(argv:string[]):Promise<void> {
  const {values:v,positionals:p}=parseArgs({args:argv.slice(2),allowPositionals:true,options:{
   help:{type:'boolean',short:'h'},socket:{type:'string'},protocol:{type:'string'},json:{type:'boolean'},
   name:{type:'string'},license:{type:'string'},author:{type:'string'},surface:{type:'string'},replace:{type:'boolean'},
-  releases:{type:'string'},archive:{type:'string'}}});
+  releases:{type:'string'},archive:{type:'string'},inspect:{type:'boolean'},id:{type:'string'},category:{type:'string'},tags:{type:'string'},
+  description:{type:'string'},units:{type:'string'},scale:{type:'string'},up:{type:'string'},yaw:{type:'string'},'max-triangles':{type:'string'},
+  'max-texture':{type:'string'},collision:{type:'string'},ktx2:{type:'string'},lighting:{type:'string'},source:{type:'string'}}});
  if(v.help){console.log(objectHelp);return;}
  const out=(value:unknown,text:string)=>console.log(v.json?JSON.stringify(value,null,2):text);
  if(group==='object' && verb==='add') {
@@ -186,6 +247,24 @@ export async function objectMain(argv:string[]):Promise<void> {
   const r=await addObject(p[0],{name:v.name,license:v.license,author:v.author,surface:v.surface,replace:v.replace});
   for(const w of r.warnings) console.error('warning: '+w);
   return out(r,`${r.replaced?'replaced':'added'} ${r.ref} (${r.path})`);
+ }
+ if(group==='object' && verb==='import') {
+  if(!p[0]) throw new Error('object import needs a model file');
+  // --json: JSON lines on stdout ({event: stage|done|error}) for the Director's Import job.
+  const line=(value:unknown):void=>{process.stdout.write(JSON.stringify(value)+'\n');};
+  try {
+   if(v.inspect) {const r=await inspectImport(resolve(p[0]));return v.json?line({event:'done',result:r}):console.log(JSON.stringify(r,null,2));}
+   const options=importOptions(v);
+   options.progress=(stage,message)=>v.json?line({event:'stage',stage,...(message?{message}:{})}):console.error(`${stage}${message?': '+message:''}`);
+   const r=await importObject(p[0],options);
+   if(v.json) return line({event:'done',result:r});
+   for(const w of r.warnings) console.error('warning: '+w);
+   return console.log(`${r.replaced?'replaced':'imported'} ${r.ref} (${r.path}): ${r.after.triangles} triangles, ${r.steps.join('; ')}`);
+  } catch(e:any) {
+   if(!v.json) throw e;
+   line({event:'error',error:{message:String(e.message).split('\n')[0],rule:e.rule || 'import.failed'}});
+   process.exitCode=1;return;
+  }
  }
  // Everything else talks to core.
  let install:{archive:string;sha256:string}|undefined,remove:{id:string;version:string}|undefined;
