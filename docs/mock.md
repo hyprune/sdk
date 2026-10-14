@@ -198,7 +198,7 @@ and `publishedAt` null. `_status` and `_error` become the instance's `status` an
 input is in error. The mock has no stale threshold and applies no mappings.
 `publishedAt` is the publication's wall-clock time.
 
-## Companions (IPC 0.25, draft)
+## Companions (IPC 0.25)
 
 `--protocol 0.25` negotiates 0.25 next to every older version. 0.25 peers get the 0.24
 projection plus the `companion` key, and `objects.catalog` entries carry `companion`: null
