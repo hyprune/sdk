@@ -135,12 +135,24 @@ export const objectLimits = Object.freeze({
 });
 // Which traits may share an asset (RFC-0011 "Allowed combinations"; machine per RFC-0013).
 const traitPairs = {
-  decorative: ['collidable', 'movable', 'seat', 'mover', 'machine'], collidable: ['decorative', 'movable', 'seat', 'machine'],
-  movable: ['decorative', 'collidable', 'seat', 'machine'], character: [], mover: ['decorative'],
+  decorative: ['collidable', 'movable', 'seat', 'mover', 'machine', 'mount'], collidable: ['decorative', 'movable', 'seat', 'machine', 'mount'],
+  movable: ['decorative', 'collidable', 'seat', 'machine', 'mount'], character: [], mover: ['decorative'],
   seat: ['decorative', 'collidable', 'movable'], machine: ['decorative', 'collidable', 'movable'],
+  mount: ['decorative', 'collidable', 'movable'],
 };
+// A workspace screen's aspect (object format 0.11): 16:9 within 0.5 %, or 21:9 from 2.33 to
+// 2.39 (21:9, 64:27 and 43:18 panels). Anything else is null.
+export function screenAspect(size) {
+  const r = size[0] / size[1];
+  if (Math.abs(r / (16 / 9) - 1) <= 0.005) return '16:9';
+  if (r >= 2.33 && r <= 2.39) return '21:9';
+  return null;
+}
+// Smallest height of a mounted-workspace anchor at scale 1 (RFC-0014 1.6 x 0.9 m).
+export const screenLimits = Object.freeze({ minHeight: 0.9, boundsMargin: 0.1 });
 function reservedTraits(version) {
-  const reserved = { mount: 'reserved for props that hold a window (RFC-0011 P4)', interactive: 'reserved for use actions (RFC-0011 P4)' };
+  const reserved = { interactive: 'reserved for use actions (RFC-0011 P4)' };
+  if (!atLeast(version, '0.11')) reserved.mount = 'needs object format 0.11 (workspace screens)';
   if (!atLeast(version, '0.10')) Object.assign(reserved, { mover: 'needs object format 0.10', machine: 'reserved for RFC-0013 live objects (object format 0.10)' });
   return reserved;
 }
@@ -257,6 +269,7 @@ function validateObjectGltf(value, version, gltf, options, fail, warn) {
     }
   }
   for (const s of slots.stacks || []) node(s.node, `slots.stacks ${s.id}`);
+  for (const a of traits.mount?.anchors || []) if (a.frameNode !== undefined) node(a.frameNode, `traits.mount anchor ${a.id}`);
   const levelNodes = new Map();
   for (const l of slots.levels || []) {
     const where = `slots.levels ${l.id}`;
@@ -495,6 +508,32 @@ function validateObjectManifest(value, version, options, fail, warn) {
     if (p.some((v, j) => v < b.min[j] - grow || v > b.max[j] + grow)) fail(`${where}: lies outside the bounds grown by ${grow} m`);
   };
   objectTraitRules(traits, slots, fail, inside);
+  // Workspace screens (object format 0.11): one mounted-workspace anchor, its aspect and size,
+  // every anchor's rectangle inside the bounds grown by 0.1 m.
+  if (traits.mount) {
+    const quat = (q, where) => { if (Math.abs(Math.hypot(...q) - 1) > 0.002) fail(`${where}: quaternion must be normalized`); };
+    const anchors = traits.mount.anchors;
+    const ids = anchors.map(a => a.id);
+    if (new Set(ids).size !== ids.length) fail('traits.mount anchors: duplicate id');
+    if (anchors.filter(a => a.role === 'mounted-workspace').length > 1) fail('traits.mount: at most one mounted-workspace anchor');
+    for (const a of anchors) {
+      const where = `traits.mount anchor ${a.id}`, [w, h] = a.size;
+      quat(a.pose.rotation, where);
+      if (a.role === 'mounted-workspace') {
+        if (!screenAspect(a.size)) fail(`${where}: a workspace screen is 16:9 or 21:9, not ${+(w / h).toFixed(3)}:1`);
+        if (h < screenLimits.minHeight) fail(`${where}: at least ${screenLimits.minHeight} m high, is ${h}`);
+      }
+      // The rectangle's corners lie inside the bounds grown by 0.1 m.
+      const [x, y, z, q] = a.pose.rotation, p = a.pose.position;
+      const rot = v => { // q * v * q^-1
+        const tx = 2 * (y * v[2] - z * v[1]), ty = 2 * (z * v[0] - x * v[2]), tz = 2 * (x * v[1] - y * v[0]);
+        return [v[0] + q * tx + y * tz - z * ty, v[1] + q * ty + z * tx - x * tz, v[2] + q * tz + x * ty - y * tx];
+      };
+      const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => rot([sx * w / 2, sy * h / 2, 0]).map((c, j) => p[j] + c));
+      const out = corners.find(c => c.some((v, j) => v < b.min[j] - screenLimits.boundsMargin || v > b.max[j] + screenLimits.boundsMargin));
+      if (out) fail(`${where}: lies outside the bounds grown by ${screenLimits.boundsMargin} m`);
+    }
+  }
   if (traits.machine) validateMachine(value, fail);
   // Directory contents, thumbnail and measured values.
   const files = options.files;

@@ -1,0 +1,1954 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hyprune.com/schema/v0.11/object.schema.json",
+  "title": "Hyprune object manifest 0.11 (DRAFT): the mount trait for workspace screens",
+  "type": "object",
+  "properties": {
+    "formatVersion": {
+      "const": "0.11"
+    },
+    "id": {
+      "$ref": "../v0.8/common.schema.json#/$defs/slug"
+    },
+    "version": {
+      "$ref": "../v0.8/common.schema.json#/$defs/version"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "category": {
+      "enum": [
+        "furniture",
+        "lighting",
+        "plants",
+        "signage",
+        "machines",
+        "decor",
+        "characters",
+        "vehicles",
+        "other"
+      ]
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "$ref": "../v0.8/common.schema.json#/$defs/slug"
+      },
+      "minItems": 0,
+      "maxItems": 8,
+      "uniqueItems": true
+    },
+    "scene": {
+      "allOf": [
+        {
+          "$ref": "../v0.8/common.schema.json#/$defs/path"
+        },
+        {
+          "type": "string",
+          "pattern": "\\.(gltf|glb)$"
+        }
+      ]
+    },
+    "license": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "attribution": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "anyOf": [
+              {
+                "$ref": "../v0.8/common.schema.json#/$defs/path"
+              },
+              {
+                "const": "."
+              }
+            ]
+          },
+          "author": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "license": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "pattern": "^https://"
+          }
+        },
+        "required": [
+          "path",
+          "author",
+          "license"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 64
+    },
+    "bounds": {
+      "type": "object",
+      "properties": {
+        "min": {
+          "$ref": "../v0.8/common.schema.json#/$defs/vec3"
+        },
+        "max": {
+          "$ref": "../v0.8/common.schema.json#/$defs/vec3"
+        }
+      },
+      "required": [
+        "min",
+        "max"
+      ],
+      "additionalProperties": false,
+      "description": "Rest-pose AABB in asset space (metres, +Y up, front +Z)."
+    },
+    "thumbnail": {
+      "allOf": [
+        {
+          "$ref": "../v0.8/common.schema.json#/$defs/path"
+        },
+        {
+          "type": "string",
+          "pattern": "\\.png$"
+        }
+      ],
+      "description": "PNG, 256 x 256, at most 256 KiB."
+    },
+    "lighting": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "probe",
+            "unlit"
+          ]
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "additionalProperties": false
+    },
+    "traits": {
+      "type": "object",
+      "properties": {
+        "decorative": {
+          "type": "object",
+          "properties": {
+            "animations": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/animation"
+              },
+              "minItems": 1,
+              "maxItems": 16
+            }
+          },
+          "required": [
+            "animations"
+          ],
+          "additionalProperties": false
+        },
+        "collidable": {
+          "type": "object",
+          "properties": {
+            "node": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "node"
+          ],
+          "additionalProperties": false,
+          "description": "The 0.8 static collision proxy: a mesh node, not animated, not in an animated subtree."
+        },
+        "movable": {
+          "type": "object",
+          "properties": {
+            "surfaces": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "floor",
+                  "wall",
+                  "ceiling",
+                  "any"
+                ]
+              },
+              "minItems": 1,
+              "maxItems": 4,
+              "uniqueItems": true
+            },
+            "upright": {
+              "type": "boolean"
+            },
+            "scale": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "maximum": 4,
+                "minimum": 0.25
+              },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "additionalProperties": false,
+          "description": "Offered for user placement. Defaults: surfaces [\"floor\"], upright true for floor and ceiling, scale [1, 1]."
+        },
+        "character": {
+          "type": "object",
+          "properties": {
+            "clips": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              "properties": {
+                "walk": {
+                  "type": "object",
+                  "properties": {
+                    "speed": {
+                      "type": "number",
+                      "maximum": 15,
+                      "exclusiveMinimum": 0.05
+                    },
+                    "seatHeight": {
+                      "type": "number",
+                      "maximum": 1,
+                      "minimum": 0.2
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "Values the import step measured; speed must match the clip's extras.speed within 2%."
+                },
+                "idle": {
+                  "type": "object",
+                  "properties": {
+                    "speed": {
+                      "type": "number",
+                      "maximum": 15,
+                      "exclusiveMinimum": 0.05
+                    },
+                    "seatHeight": {
+                      "type": "number",
+                      "maximum": 1,
+                      "minimum": 0.2
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "Values the import step measured; speed must match the clip's extras.speed within 2%."
+                }
+              },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "speed": {
+                    "type": "number",
+                    "maximum": 15,
+                    "exclusiveMinimum": 0.05
+                  },
+                  "seatHeight": {
+                    "type": "number",
+                    "maximum": 1,
+                    "minimum": 0.2
+                  }
+                },
+                "additionalProperties": false,
+                "description": "Values the import step measured; speed must match the clip's extras.speed within 2%."
+              },
+              "required": [
+                "walk",
+                "idle"
+              ],
+              "maxProperties": 64
+            },
+            "height": {
+              "type": "number",
+              "maximum": 2.2,
+              "minimum": 1.2
+            },
+            "radius": {
+              "type": "number",
+              "maximum": 0.5,
+              "minimum": 0.25
+            },
+            "accent": {
+              "type": "boolean"
+            },
+            "interactions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/interaction"
+              },
+              "minItems": 1,
+              "maxItems": 8
+            }
+          },
+          "required": [
+            "clips",
+            "height"
+          ],
+          "additionalProperties": false,
+          "description": "RFC-0010 character: clips with measured values (walk and idle required), height and radius in metres."
+        },
+        "seat": {
+          "type": "object",
+          "properties": {
+            "anchors": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/seatAnchor"
+              },
+              "minItems": 1,
+              "maxItems": 8
+            },
+            "capacity": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            }
+          },
+          "required": [
+            "anchors"
+          ],
+          "additionalProperties": false
+        },
+        "mover": {
+          "type": "object",
+          "properties": {
+            "speed": {
+              "type": "number",
+              "maximum": 30,
+              "exclusiveMinimum": 0.05
+            },
+            "accel": {
+              "type": "number",
+              "maximum": 20,
+              "minimum": 0.1
+            },
+            "bank": {
+              "type": "object",
+              "properties": {
+                "max": {
+                  "type": "number",
+                  "maximum": 45,
+                  "minimum": 0
+                },
+                "gain": {
+                  "type": "number",
+                  "maximum": 10,
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "max",
+                "gain"
+              ],
+              "additionalProperties": false
+            },
+            "pitch": {
+              "enum": [
+                "follow",
+                "level"
+              ]
+            },
+            "offset": {
+              "$ref": "../v0.8/common.schema.json#/$defs/vec3"
+            },
+            "item": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "speed"
+          ],
+          "additionalProperties": false,
+          "description": "Rides track paths; item: true makes it a pooled item (at most 2,000 triangles, 1 MiB)."
+        },
+        "machine": {
+          "type": "object",
+          "properties": {
+            "primary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "pattern": "^[a-z][A-Za-z0-9]*$"
+            },
+            "inputs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/input"
+              },
+              "minItems": 1,
+              "maxItems": 16
+            },
+            "drives": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40,
+                    "pattern": "^[a-z][A-Za-z0-9]*(\\.[1-9][0-9]?)?$"
+                  },
+                  "target": {
+                    "type": "string",
+                    "maxLength": 160,
+                    "pattern": "^(animation|state|emission|label|visible|count|spawn|effect|position|level):[^:\\s]{1,128}$"
+                  },
+                  "map": {
+                    "$ref": "#/$defs/mapping"
+                  }
+                },
+                "required": [
+                  "input",
+                  "target"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 0,
+              "maxItems": 32
+            },
+            "positions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "node": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "range": {
+                    "type": "array",
+                    "items": {
+                      "type": "number",
+                      "maximum": 4,
+                      "minimum": 0
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "required": [
+                  "node",
+                  "range"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1,
+              "maxItems": 16
+            },
+            "recipes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+                  },
+                  "fields": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40,
+                      "pattern": "^[a-z][A-Za-z0-9]*(\\.[1-9][0-9]?)?$"
+                    },
+                    "additionalProperties": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 256,
+                          "pattern": "^(/.*)?$"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "length": {
+                              "type": "string",
+                              "maxLength": 256,
+                              "pattern": "^(/.*)?$"
+                            }
+                          },
+                          "required": [
+                            "length"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "countWhere": {
+                              "type": "object",
+                              "properties": {
+                                "array": {
+                                  "type": "string",
+                                  "maxLength": 256,
+                                  "pattern": "^(/.*)?$"
+                                },
+                                "pointer": {
+                                  "type": "string",
+                                  "maxLength": 256,
+                                  "pattern": "^(/.*)?$"
+                                },
+                                "equals": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "maxLength": 256
+                                    },
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "boolean"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "array",
+                                "pointer",
+                                "equals"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "countWhere"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "first": {
+                              "type": "object",
+                              "properties": {
+                                "array": {
+                                  "type": "string",
+                                  "maxLength": 256,
+                                  "pattern": "^(/.*)?$"
+                                },
+                                "pointer": {
+                                  "type": "string",
+                                  "maxLength": 256,
+                                  "pattern": "^(/.*)?$"
+                                },
+                                "equals": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "maxLength": 256
+                                    },
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "boolean"
+                                    }
+                                  ]
+                                },
+                                "select": {
+                                  "type": "string",
+                                  "maxLength": 256,
+                                  "pattern": "^(/.*)?$"
+                                }
+                              },
+                              "required": [
+                                "array",
+                                "pointer",
+                                "equals",
+                                "select"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "first"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "minProperties": 1,
+                    "maxProperties": 16
+                  },
+                  "maps": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40,
+                      "pattern": "^[a-z][A-Za-z0-9]*(\\.[1-9][0-9]?)?$"
+                    },
+                    "additionalProperties": {
+                      "$ref": "#/$defs/mapping"
+                    },
+                    "maxProperties": 16
+                  }
+                },
+                "required": [
+                  "name",
+                  "fields"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1,
+              "maxItems": 8
+            }
+          },
+          "required": [
+            "inputs",
+            "drives"
+          ],
+          "additionalProperties": false,
+          "description": "RFC-0013 machine (draft): typed inputs, drives from inputs to slot targets, value-driven positions and source recipes."
+        },
+        "mount": {
+          "type": "object",
+          "properties": {
+            "anchors": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/mountAnchor"
+              },
+              "minItems": 1,
+              "maxItems": 4
+            }
+          },
+          "required": [
+            "anchors"
+          ],
+          "additionalProperties": false,
+          "description": "RFC-0014/RFC-0011 workspace screens: 1-4 anchors, at most one mounted-workspace. Combines with decorative, collidable and movable."
+        },
+        "interactive": {
+          "description": "Reserved (RFC-0011 P4): use actions on ordinary objects. Rejected in object format 0.10.",
+          "not": {}
+        }
+      },
+      "additionalProperties": false,
+      "description": "Trait name to trait data. Unknown or reserved names reject the object."
+    },
+    "companion": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "followDistance": {
+          "type": "number",
+          "minimum": 1.5,
+          "maximum": 2.5
+        },
+        "idles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "maxItems": 4,
+          "uniqueItems": true
+        },
+        "say": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+          },
+          "maxItems": 8
+        }
+      },
+      "additionalProperties": false,
+      "description": "Companion settings (RFC-0010 companions amendment, draft): display name, follow distance, idle variants (clips of traits.character) and Talk lines. Characters only."
+    },
+    "slots": {
+      "type": "object",
+      "properties": {
+        "states": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "../v0.8/common.schema.json#/$defs/slug"
+              },
+              "materials": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "minItems": 1,
+                "maxItems": 16,
+                "uniqueItems": true
+              },
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "minItems": 1,
+                "maxItems": 16,
+                "uniqueItems": true
+              },
+              "palette": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "$ref": "../v0.8/common.schema.json#/$defs/slug"
+                    },
+                    "colour": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "maximum": 1,
+                        "minimum": 0
+                      },
+                      "minItems": 3,
+                      "maxItems": 3,
+                      "description": "Linear RGB, 0-1."
+                    },
+                    "emission": {
+                      "type": "number",
+                      "maximum": 16,
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "colour",
+                    "emission"
+                  ],
+                  "additionalProperties": false
+                },
+                "minItems": 1,
+                "maxItems": 16
+              }
+            },
+            "required": [
+              "id",
+              "palette"
+            ],
+            "additionalProperties": false,
+            "oneOf": [
+              {
+                "properties": {
+                  "materials": {
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "materials"
+                ]
+              },
+              {
+                "properties": {
+                  "nodes": {
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "nodes"
+                ]
+              }
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "../v0.8/common.schema.json#/$defs/slug"
+              },
+              "pose": {
+                "$ref": "#/$defs/slotPose"
+              },
+              "size": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "maximum": 16,
+                  "exclusiveMinimum": 0
+                },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "maxChars": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 64
+              },
+              "font": {
+                "enum": [
+                  "sans",
+                  "mono"
+                ]
+              },
+              "align": {
+                "enum": [
+                  "left",
+                  "center",
+                  "right"
+                ]
+              },
+              "colour": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "maximum": 1,
+                  "minimum": 0
+                },
+                "minItems": 3,
+                "maxItems": 3,
+                "description": "Linear RGB, 0-1."
+              },
+              "plate": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "maximum": 1,
+                  "minimum": 0
+                },
+                "minItems": 3,
+                "maxItems": 3,
+                "description": "Linear RGB, 0-1."
+              }
+            },
+            "required": [
+              "id",
+              "pose",
+              "size",
+              "maxChars"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "spawns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "../v0.8/common.schema.json#/$defs/slug"
+              },
+              "pose": {
+                "$ref": "#/$defs/slotPose"
+              },
+              "track": {
+                "$ref": "../v0.8/common.schema.json#/$defs/slug"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "../v0.8/common.schema.json#/$defs/slug"
+                },
+                "minItems": 1,
+                "maxItems": 16,
+                "uniqueItems": true
+              },
+              "maxRate": {
+                "type": "number",
+                "maximum": 10,
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": [
+              "id",
+              "pose"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "effects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "../v0.8/common.schema.json#/$defs/slug"
+              },
+              "pose": {
+                "$ref": "#/$defs/slotPose"
+              },
+              "kind": {
+                "enum": [
+                  "burst",
+                  "pulse",
+                  "flash",
+                  "ring"
+                ]
+              },
+              "colour": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "maximum": 1,
+                  "minimum": 0
+                },
+                "minItems": 3,
+                "maxItems": 3,
+                "description": "Linear RGB, 0-1."
+              },
+              "durationMs": {
+                "type": "integer",
+                "minimum": 200,
+                "maximum": 3000
+              }
+            },
+            "required": [
+              "id",
+              "pose"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "tracks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "../v0.8/common.schema.json#/$defs/slug"
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "position": {
+                      "$ref": "../v0.8/common.schema.json#/$defs/vec3"
+                    },
+                    "type": {
+                      "enum": [
+                        "line",
+                        "curve",
+                        "arc"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "position",
+                    "type"
+                  ],
+                  "additionalProperties": false
+                },
+                "minItems": 2,
+                "maxItems": 32
+              },
+              "speed": {
+                "type": "number",
+                "maximum": 30,
+                "minimum": 0.1
+              },
+              "items": {
+                "type": "object",
+                "properties": {
+                  "assets": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "../v0.8/common.schema.json#/$defs/slug"
+                    },
+                    "minItems": 1,
+                    "maxItems": 16,
+                    "uniqueItems": true
+                  },
+                  "max": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 256
+                  },
+                  "spacing": {
+                    "type": "number",
+                    "maximum": 10,
+                    "exclusiveMinimum": 0
+                  },
+                  "overflow": {
+                    "enum": [
+                      "refuse",
+                      "drop-oldest"
+                    ]
+                  }
+                },
+                "required": [
+                  "assets",
+                  "max"
+                ],
+                "additionalProperties": false
+              },
+              "sink": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "points"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 4
+        },
+        "stacks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "../v0.8/common.schema.json#/$defs/slug"
+              },
+              "node": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "cap": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              },
+              "layout": {
+                "type": "object",
+                "properties": {
+                  "grid": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 64
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "spacing": {
+                    "type": "array",
+                    "items": {
+                      "type": "number",
+                      "maximum": 10,
+                      "minimum": -10
+                    },
+                    "minItems": 3,
+                    "maxItems": 3,
+                    "description": "Metres between copies per axis; a negative component fills from the node towards -axis. Non-zero where that axis's grid is above 1."
+                  },
+                  "fill": {
+                    "enum": [
+                      "xyz",
+                      "xzy",
+                      "yxz",
+                      "yzx",
+                      "zxy",
+                      "zyx"
+                    ]
+                  }
+                },
+                "required": [
+                  "grid",
+                  "spacing",
+                  "fill"
+                ],
+                "additionalProperties": false
+              },
+              "rate": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000,
+                "description": "Copies per second the shown count moves toward the target; 0 or absent: at once."
+              }
+            },
+            "required": [
+              "id",
+              "node",
+              "layout",
+              "cap"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "toggles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "../v0.8/common.schema.json#/$defs/slug"
+              },
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "minItems": 1,
+                "maxItems": 16,
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "id",
+              "nodes"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "../v0.8/common.schema.json#/$defs/slug"
+              },
+              "node": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "mode": {
+                "enum": [
+                  "fill",
+                  "slide"
+                ]
+              },
+              "axis": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "length": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 10
+              },
+              "surface": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "settle": {
+                "enum": [
+                  "ease",
+                  "spring"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "node",
+              "mode",
+              "length"
+            ],
+            "additionalProperties": false,
+            "not": {
+              "properties": {
+                "mode": {
+                  "const": "slide"
+                },
+                "surface": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "mode",
+                "surface"
+              ]
+            },
+            "description": "A subtree scaled (fill) or moved (slide) by level:<id>, 0-1. axis: asset-space unit vector, default [0, 1, 0]; surface: fill only; settle default ease."
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "ports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "$ref": "../v0.8/common.schema.json#/$defs/slug"
+              },
+              "pose": {
+                "$ref": "#/$defs/slotPose"
+              },
+              "direction": {
+                "enum": [
+                  "in",
+                  "out"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "pose",
+              "direction"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 8
+        }
+      },
+      "additionalProperties": false,
+      "description": "Authored parts that RFC-0013 drives."
+    }
+  },
+  "required": [
+    "formatVersion",
+    "id",
+    "version",
+    "name",
+    "category",
+    "scene",
+    "license",
+    "attribution",
+    "bounds",
+    "traits"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "animation": {
+      "type": "object",
+      "properties": {
+        "node": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "type": {
+          "enum": [
+            "spin",
+            "orbit",
+            "bob"
+          ]
+        },
+        "axis": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "maximum": 1.001,
+            "minimum": -1.001
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "pivot": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "maximum": 10000,
+            "minimum": -10000
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "amplitude": {
+          "type": "number",
+          "maximum": 10,
+          "exclusiveMinimum": 0
+        },
+        "period": {
+          "type": "number",
+          "maximum": 3600,
+          "minimum": 0.5
+        },
+        "phase": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMaximum": 1
+        }
+      },
+      "required": [
+        "node",
+        "type",
+        "axis",
+        "period"
+      ],
+      "additionalProperties": false,
+      "description": "A world 0.8 declarative node animation (spin, orbit or bob)."
+    },
+    "slotPose": {
+      "$ref": "../v0.8/common.schema.json#/$defs/pose"
+    },
+    "interaction": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "../v0.8/common.schema.json#/$defs/slug"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "action": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "say"
+                },
+                "lines": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+                  },
+                  "minItems": 1,
+                  "maxItems": 8
+                }
+              },
+              "required": [
+                "type",
+                "lines"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "panel"
+                },
+                "panel": {
+                  "$ref": "../v0.8/common.schema.json#/$defs/slug"
+                }
+              },
+              "required": [
+                "type",
+                "panel"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "action"
+      ],
+      "additionalProperties": false,
+      "description": "Asset-level character interaction: only say and panel, which reference nothing in a world."
+    },
+    "seatAnchor": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "../v0.8/common.schema.json#/$defs/slug"
+        },
+        "position": {
+          "$ref": "../v0.8/common.schema.json#/$defs/vec3"
+        },
+        "yaw": {
+          "type": "number",
+          "maximum": 360,
+          "minimum": -360
+        },
+        "height": {
+          "type": "number",
+          "maximum": 1,
+          "minimum": 0.2
+        },
+        "use": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "sit"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true
+        },
+        "approach": {
+          "type": "number",
+          "maximum": 2,
+          "minimum": 0.3
+        }
+      },
+      "required": [
+        "id",
+        "position",
+        "yaw",
+        "height"
+      ],
+      "additionalProperties": false,
+      "description": "Where the sitter's root stands at the start of sit (asset space), facing yaw degrees about +Y from +Z. perch, lean and ground uses are reserved."
+    },
+    "mapping": {
+      "type": "object",
+      "properties": {
+        "cases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "equals": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              },
+              "in": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 256
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "minItems": 1,
+                "maxItems": 16
+              },
+              "to": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "to"
+            ],
+            "additionalProperties": false,
+            "oneOf": [
+              {
+                "properties": {
+                  "equals": {}
+                },
+                "required": [
+                  "equals"
+                ]
+              },
+              {
+                "properties": {
+                  "in": {}
+                },
+                "required": [
+                  "in"
+                ]
+              }
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 16
+        },
+        "thresholds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "below": {
+                "type": "number"
+              },
+              "atLeast": {
+                "type": "number"
+              },
+              "to": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "to"
+            ],
+            "additionalProperties": false,
+            "oneOf": [
+              {
+                "properties": {
+                  "below": {}
+                },
+                "required": [
+                  "below"
+                ]
+              },
+              {
+                "properties": {
+                  "atLeast": {}
+                },
+                "required": [
+                  "atLeast"
+                ]
+              }
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 16
+        },
+        "else": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "scale": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "to": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ],
+          "additionalProperties": false
+        },
+        "clamp": {
+          "type": "boolean"
+        },
+        "round": {
+          "enum": [
+            "floor",
+            "ceil",
+            "nearest"
+          ]
+        },
+        "becomes": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "from": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "counter": {
+          "const": true
+        },
+        "format": {
+          "type": "object",
+          "properties": {
+            "decimals": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 6
+            },
+            "compact": {
+              "type": "boolean"
+            },
+            "unit": {
+              "type": "string",
+              "maxLength": 16,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+            }
+          },
+          "additionalProperties": false
+        },
+        "average": {
+          "type": "object",
+          "properties": {
+            "windowS": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 3600
+            },
+            "override": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "pattern": "^[a-z][A-Za-z0-9]*(\\.[1-9][0-9]?)?$"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Running average modifier: the time-weighted mean of the value over the last windowS seconds (default 60) of fresh data; the mapping's form applies to it. override (drives only): another non-event input whose value, while present, replaces the average."
+        }
+      },
+      "additionalProperties": false,
+      "description": "RFC-0013 mapping language: direct ({}), cases, thresholds, scale, becomes, counter or format; average modifies the value forms (not becomes or counter).",
+      "not": {
+        "anyOf": [
+          {
+            "properties": {
+              "average": {
+                "type": "object"
+              },
+              "becomes": {}
+            },
+            "required": [
+              "average",
+              "becomes"
+            ]
+          },
+          {
+            "properties": {
+              "average": {
+                "type": "object"
+              },
+              "counter": {
+                "const": true
+              }
+            },
+            "required": [
+              "average",
+              "counter"
+            ]
+          }
+        ]
+      }
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-z][A-Za-z0-9]*$"
+        },
+        "type": {
+          "enum": [
+            "enum",
+            "int",
+            "number",
+            "bool",
+            "text",
+            "event",
+            "items"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "explain": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "repeat": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 16
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "$ref": "../v0.8/common.schema.json#/$defs/slug"
+          },
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "states": {
+          "type": "array",
+          "items": {
+            "$ref": "../v0.8/common.schema.json#/$defs/slug"
+          },
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "label",
+        "explain"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "enum"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "values": {
+                "type": "array"
+              }
+            },
+            "required": [
+              "values"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "int",
+                  "number"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "min",
+              "max"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "items"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "states": {
+                "type": "array"
+              }
+            },
+            "required": [
+              "states"
+            ]
+          }
+        }
+      ],
+      "description": "A typed machine input (RFC-0013). repeat makes indexed inputs id.1 ... id.N."
+    },
+    "mountAnchor": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "../v0.8/common.schema.json#/$defs/slug"
+        },
+        "role": {
+          "enum": [
+            "mounted-workspace",
+            "tool-mount"
+          ]
+        },
+        "mountType": {
+          "enum": [
+            "facade-wall",
+            "hanging-wall",
+            "wall-inset-console",
+            "banner",
+            "lectern",
+            "operator-desk",
+            "field-rig",
+            "kiosk-pillar",
+            "globe",
+            "crate",
+            "blast-door-screen",
+            "terminal-bench",
+            "radar-dish"
+          ]
+        },
+        "pose": {
+          "$ref": "../v0.8/common.schema.json#/$defs/pose"
+        },
+        "size": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 16
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "screenType": {
+          "$ref": "../v0.8/common.schema.json#/$defs/id"
+        },
+        "frameNode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "id",
+        "role",
+        "mountType",
+        "pose",
+        "size"
+      ],
+      "additionalProperties": false,
+      "description": "A screen rectangle in asset space (front +Z, metres). A mounted-workspace anchor shows a workspace like a home wall: 16:9 (within 0.5%) or 21:9 (aspect 2.33 to 2.39), at least 0.9 m high at scale 1. tool-mount anchors are inert in 0.11."
+    }
+  }
+}

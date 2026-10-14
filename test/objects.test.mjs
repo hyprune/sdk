@@ -76,7 +76,7 @@ test('object thumbnail must be a 256 x 256 PNG',async t=>{
 });
 test('object rejects reserved traits and over-limit directories',async t=>{
  const {dir}=await fixture(t);
- await edit(join(dir,'object.json'),m=>m.traits.mount={});await assert.rejects(validateObject(dir),/traits\.mount: reserved/);
+ await edit(join(dir,'object.json'),m=>m.traits.mount={});await assert.rejects(validateObject(dir),/traits\.mount: needs object format 0\.11/);
  await edit(join(dir,'object.json'),m=>{delete m.traits.mount;m.traits.mover={speed:2};});await assert.rejects(validateObject(dir),/traits\.mover: needs object format 0\.10/);
  await edit(join(dir,'object.json'),m=>delete m.traits.mover);
  for(let i=0;i<objectLimits.files;i++) await writeFile(join(dir,`extra-${i}.txt`),'x');

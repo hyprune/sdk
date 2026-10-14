@@ -407,3 +407,26 @@ companionClient.on('state', s=>{
  // @ts-expect-error 0.25 companion has no pace
  void s.state.companion.pace;
 });
+
+// IPC 0.27: workspace screens on catalog entries and instances; objects.place/configure take a workspace.
+declare const screensClient: import('../src/client.js').HypruneClient<'0.27'>;
+new HypruneClient({protocol:'0.27',capabilities:['state.read','objects.control']});
+screensClient.call('objects.configure', {id:'u-7c2e91',patch:{workspace:23}});
+screensClient.call('objects.configure', {id:'u-7c2e91',patch:{workspace:'next-free'}});
+screensClient.call('objects.configure', {id:'u-7c2e91',patch:{workspace:null}});
+screensClient.call('objects.place', {ref:'user/workspace-screen-wall-16x9',workspace:'next-free'});
+// @ts-expect-error a workspace is a number, next-free or null
+screensClient.call('objects.configure', {id:'u-7c2e91',patch:{workspace:'next'}});
+// @ts-expect-error 0.26 objects.configure has no workspace
+debugClient.call('objects.configure', {id:'u-7c2e91',patch:{workspace:23}});
+screensClient.on('state', s=>{
+ const screen=s.state.objects.instances[0]?.screen;
+ const workspace:number|null|undefined=screen?.workspace;const home:string|null|undefined=screen?.home;
+ const aspect:'16:9'|'21:9'|undefined=screen?.aspect;
+ void workspace;void home;void aspect;
+});
+screensClient.call('objects.catalog', {}).then(r=>{const s=r.entries[0]?.screen;const size:number[]|undefined=s?.size;void size;});
+debugClient.on('state', s=>{
+ // @ts-expect-error 0.26 instances have no screen
+ void s.state.objects.instances[0].screen;
+});
