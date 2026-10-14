@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hyprune.com/schema/v0.11/project.schema.json",
+  "title": "Hyprune builder project (builder/project.json, RFC-0014), projectVersion 0.1, published with world format 0.11 (DRAFT)",
+  "type": "object",
+  "properties": {
+    "projectVersion": {
+      "const": "0.1"
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "starter": {
+      "const": "flat-land@0.1"
+    },
+    "base": {
+      "const": "builder/base.json"
+    },
+    "sky": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "common.schema.json#/$defs/path"
+            }
+          ]
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "required": [
+        "image",
+        "license",
+        "author",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "placements": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^u-[0-9a-f]{6}$"
+          },
+          "ref": {
+            "type": "string",
+            "pattern": "^world/[a-z][a-z0-9-]{0,63}$"
+          },
+          "pose": {
+            "$ref": "common.schema.json#/$defs/pose"
+          },
+          "scale": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 100
+          },
+          "workspace": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9999
+          },
+          "locked": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "ref",
+          "pose",
+          "scale"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "releaseUpload": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "projectVersion",
+    "id",
+    "name",
+    "starter",
+    "base",
+    "sky",
+    "placements"
+  ],
+  "additionalProperties": false,
+  "description": "The builder's source of truth: core writes placements in editor mode; the hyprune CLI writes the rest and makes world.json from builder/base.json and these placements on Save."
+}

@@ -271,6 +271,16 @@
         },
         "companion": {
           "$ref": "#/$defs/companionState"
+        },
+        "builder": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/builderState"
+            }
+          ]
         }
       },
       "required": [
@@ -295,7 +305,8 @@
         "objects",
         "npcs",
         "live",
-        "companion"
+        "companion",
+        "builder"
       ],
       "additionalProperties": false
     },
@@ -1750,6 +1761,16 @@
                 },
                 "companion": {
                   "$ref": "#/$defs/companionState"
+                },
+                "builder": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/$defs/builderState"
+                    }
+                  ]
                 }
               },
               "required": [],
@@ -16066,7 +16087,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 256,
-      "pattern": "^(package/[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?|library/[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+@(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?/[a-z][a-z0-9-]*|user/[a-z][a-z0-9-]*)$"
+      "pattern": "^(package/[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?|library/[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+@(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?/[a-z][a-z0-9-]*|user/[a-z][a-z0-9-]*|world/[a-z][a-z0-9-]*)$"
     },
     "objectId": {
       "type": "string",
@@ -16449,7 +16470,8 @@
           "enum": [
             "package",
             "library",
-            "user"
+            "user",
+            "world"
           ]
         },
         "id": {
@@ -20464,6 +20486,81 @@
       ],
       "additionalProperties": false,
       "description": "From import.json: when and from which file it was imported."
+    },
+    "builderState": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "worldId": {
+          "$ref": "https://hyprune.com/schema/v0.6/common.schema.json#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "folder": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 4096,
+          "pattern": "^/"
+        },
+        "mode": {
+          "const": "edit"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "placements": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        },
+        "sky": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            }
+          ]
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          ]
+        }
+      },
+      "required": [
+        "projectId",
+        "worldId",
+        "name",
+        "folder",
+        "mode",
+        "revision",
+        "placements",
+        "sky",
+        "error"
+      ],
+      "additionalProperties": false,
+      "description": "A world folder loaded in editor mode (RFC-0014): its placements are written to builder/project.json (revision counts the writes: pending changes for the next Save). error: the last write that failed."
     }
   },
   "anyOf": [

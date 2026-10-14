@@ -4,7 +4,7 @@ import parseSpdx from 'spdx-expression-parse';
 
 const names = ['common', 'world', 'extension', 'screen-type', 'ipc'];
 // Object, library and library release record schemas (RFC-0011) live in v0.N directories only.
-const manifestKinds = ['object', 'library', 'library-releases', 'import'];
+const manifestKinds = ['object', 'library', 'library-releases', 'import', 'project'];
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 const base = 'https://hyprune.com/schema/v0/';
 for (const name of names) {
@@ -620,7 +620,7 @@ function validateLibraryReleases(value, fail) {
 function validateManifestKind(kind, value, method, version, options) {
   if (method) throw new Error('Method context is only valid for IPC');
   // import.json (RFC-0014) has its own importVersion; its schema lives in the newest object format directory with one.
-  const own = kind === 'library-releases' || kind === 'import';
+  const own = kind === 'library-releases' || kind === 'import' || kind === 'project';
   const formats = own ? versions.filter(v => has(v, kind)) : objectFormats;
   version ??= own ? formats.at(-1) : formats.includes(value?.formatVersion) ? value.formatVersion : formats.at(-1);
   if (!formats.includes(version)) throw new Error(`Unknown ${kind} format: ${version}`);
@@ -643,6 +643,17 @@ function validateManifestKind(kind, value, method, version, options) {
   const spdx = (text, label) => { try { parseSpdx(text); } catch { fail(`${label}: invalid SPDX expression`); } };
   if (kind === 'import') {
     spdx(value.license.spdx, 'license.spdx');
+    return { valid: errors.length === 0, errors, warnings };
+  }
+  if (kind === 'project') {
+    // builder/project.json (RFC-0014): unique placement ids, unit quaternions, one screen per workspace.
+    const ids = new Set(), workspaces = new Set();
+    for (const p of value.placements) {
+      if (ids.has(p.id)) fail(`placements: duplicate id ${p.id}`); ids.add(p.id);
+      if (Math.abs(Math.hypot(...p.pose.rotation) - 1) > 0.002) fail(`placements ${p.id}: quaternion must be normalized`);
+      if (p.workspace !== undefined) { if (workspaces.has(p.workspace)) fail(`placements ${p.id}: workspace ${p.workspace} is shown by another screen`); workspaces.add(p.workspace); }
+    }
+    spdx(value.sky.license, 'sky.license');
     return { valid: errors.length === 0, errors, warnings };
   }
   if (kind !== 'library-releases') {
@@ -777,6 +788,8 @@ function worldReserved(value, version) {
   const out = [], list = v => Array.isArray(v) ? v : [];
   const traitWhy = { mount: 'reserved for props that hold a window (RFC-0011 P4)', interactive: 'reserved for use actions (RFC-0011 P4)',
     mover: 'needs world format 0.10', machine: 'reserved for RFC-0013 live objects' };
+  // World 0.11 (draft): workspace screens (object format 0.11's mount) may be world objects; movers stay reserved.
+  if (atLeast(version, '0.11')) { delete traitWhy.mount; traitWhy.mover = 'reserved (tracks and items are not part of world 0.11)'; }
   list(value.objectAssets).forEach((a, i) => {
     if (a?.traits && typeof a.traits === 'object') for (const [name, why] of Object.entries(traitWhy))
       if (Object.hasOwn(a.traits, name)) out.push([`/objectAssets/${i}`, `objectAssets ${a.id}: traits.${name}: ${why}; rejected in world ${version}`]);

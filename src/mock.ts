@@ -155,13 +155,14 @@ export class MockDaemon {
  /**
   * The 0.27 projection: the 0.26 one plus each instance's screen and, for every bound screen of the
   * loaded world, a home in mounts (area screen-<id>, its anchor and the binding, after the world's own).
+  * builder is null: the mock loads no world folder (RFC-0014 editor mode is core's).
   */
  screensView(snapshot:Snapshot):Snapshot<typeof SCREENS_PROTOCOL> {
   const base=this.debugToolView(snapshot),s=base.state,worldId=s.world?.id ?? null;
   const instances=s.objects.instances.map(i=>({...i,screen:worldId && i.source==='user'?this.objects.instanceScreen(worldId,i.id):null}));
   const homes=this.objects.screenHomes(worldId),mounts=s.mounts;
   const taken=new Set(mounts.bindings.map(b=>b.id)),bound=homes.filter(h=>!taken.has(h.workspace));
-  return {...base,state:{...s,objects:{...s.objects,instances},mounts:{...mounts,
+  return {...base,state:{...s,builder:null,objects:{...s.objects,instances},mounts:{...mounts,
    areas:[...mounts.areas,...bound.map(h=>({id:h.area,workspaceSlot:String(h.workspace).padStart(2,'0'),primaryAnchor:h.area,toolAnchors:[],dataAnchors:[],theme:h.name,spawnId:h.area}))],
    anchors:[...mounts.anchors,...bound.map(h=>({id:h.area,pose:h.pose,size:h.size,mount:{type:h.mountType,role:'mounted-workspace',interaction:'focus-in'},areaId:h.area}))],
    bindings:[...mounts.bindings,...bound.map(h=>({id:h.workspace,worldId:worldId!,areaId:h.area}))]}}} as Snapshot<typeof SCREENS_PROTOCOL>;
