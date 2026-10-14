@@ -9,7 +9,7 @@ import {RpcError} from './client.js';
 import type {State,Snapshot} from './state.js';
 import type {Common02_Capability,Ipc02_Target,Ipc02_Transition,MethodMap} from './generated.js';
 import {QuestEngine,QUEST_REQUIREMENTS,QUEST_EVENTS,BASELINE_021} from './mock-quests.js';
-import {ObjectEngine,OBJECT_REQUIREMENTS,catalogEntry22,catalogEntry24,type Notice} from './mock-objects.js';
+import {ObjectEngine,OBJECT_REQUIREMENTS,catalogEntry22,catalogEntry24,catalogScreen27,type Notice} from './mock-objects.js';
 import {liveState} from './mock-live.js';
 import {NpcEngine,NPC_REQUIREMENTS,type NpcCall,type PowerProfile} from './mock-npcs.js';
 import {CompanionEngine,COMPANION_ID,COMPANION_REQUIREMENTS,companionOf} from './mock-companion.js';
@@ -34,11 +34,13 @@ export const LIVE_PROTOCOL='0.24' satisfies Protocol;
 export const COMPANION_PROTOCOL='0.25' satisfies Protocol;
 /** The debug tool (tool 9 named on the wire), the companion's pace and the 128-item pocket list. */
 export const DEBUG_TOOL_PROTOCOL='0.26' satisfies Protocol;
+/** Workspace screens (object format 0.11): catalog and instance screen fields, objects.place/configure workspace. */
+export const SCREENS_PROTOCOL='0.27' satisfies Protocol;
 /**
  * The projections the mock serves: 0.1, 0.2 and the feature versions it models. A listener
  * started at version V negotiates every one of these up to V (compared with atLeast).
  */
-export const MOCK_PROTOCOLS=['0.1','0.2',QUEST_PROTOCOL,OBJECTS_PROTOCOL,NPCS_PROTOCOL,LIVE_PROTOCOL,COMPANION_PROTOCOL,DEBUG_TOOL_PROTOCOL] as const;
+export const MOCK_PROTOCOLS=['0.1','0.2',QUEST_PROTOCOL,OBJECTS_PROTOCOL,NPCS_PROTOCOL,LIVE_PROTOCOL,COMPANION_PROTOCOL,DEBUG_TOOL_PROTOCOL,SCREENS_PROTOCOL] as const;
 export type MockProtocol=typeof MOCK_PROTOCOLS[number];
 /** Developer grants a listener at `protocol` can hand out. */
 export function grantsFor(protocol:Protocol):Capability[] {
@@ -54,6 +56,8 @@ export const LIVE_GRANTS:Capability[]=grantsFor(LIVE_PROTOCOL);
 export const COMPANION_GRANTS:Capability[]=grantsFor(COMPANION_PROTOCOL);
 /** IPC 0.26 adds no grant. */
 export const DEBUG_TOOL_GRANTS:Capability[]=grantsFor(DEBUG_TOOL_PROTOCOL);
+/** IPC 0.27 adds no grant. */
+export const SCREENS_GRANTS:Capability[]=grantsFor(SCREENS_PROTOCOL);
 export const REQUIREMENTS:Record<string,Capability|undefined>={
  'session.hello':undefined,'session.ping':undefined,'state.subscribe':'state.read','state.snapshot':'state.read','state.unsubscribe':'state.read',
  'world.load':'world.control','surface.focus':'surface.control','movement.set':'movement.control','shell.claim':'shell.control','shell.release':'shell.control','shell.overlay':'shell.control','runtime.exit':'runtime.control',
@@ -116,7 +120,7 @@ export class MockDaemon {
   if(!(MOCK_PROTOCOLS as readonly string[]).includes(this.protocol)) throw new Error('Unsupported protocol');
   this.scenario=structuredClone(options.scenario || DEFAULT_SCENARIO);this.state=structuredClone(this.scenario.state);
   this.objects=new ObjectEngine(()=>({id:this.state.world?.id ?? null,active:this.state.runtime.active,zones:this.state.location.zones,obstacles:this.scenario.obstacles || [],
-   position:this.state.movement.position,orientation:this.state.movement.orientation}),{objectDir:options.objectDir,characters:atLeast(this.protocol,NPCS_PROTOCOL)});
+   position:this.state.movement.position,orientation:this.state.movement.orientation}),{objectDir:options.objectDir,characters:atLeast(this.protocol,NPCS_PROTOCOL),screens:atLeast(this.protocol,SCREENS_PROTOCOL)});
   if(atLeast(this.protocol,NPCS_PROTOCOL))this.npcs=new NpcEngine(this.objects,()=>({id:this.state.world?.id ?? null,active:this.state.runtime.active,zones:this.state.location.zones,
    obstacles:this.scenario.obstacles || [],position:this.state.movement.position,orientation:this.state.movement.orientation}));
   if(this.npcs && atLeast(this.protocol,COMPANION_PROTOCOL))this.companion=new CompanionEngine(this.objects,this.npcs,()=>({id:this.state.world?.id ?? null,
@@ -141,11 +145,26 @@ export class MockDaemon {
  /** The snapshot as a peer at `protocol` (0.2 or newer) sees it: no key of a newer version ever reaches an older peer. */
  project(snapshot:Snapshot,protocol:Protocol):Snapshot<Protocol> {
   if(!atLeast(protocol,QUEST_PROTOCOL))return snapshot;
+  if(atLeast(protocol,SCREENS_PROTOCOL))return this.screensView(snapshot);
   if(atLeast(protocol,DEBUG_TOOL_PROTOCOL))return this.debugToolView(snapshot);
   if(atLeast(protocol,COMPANION_PROTOCOL))return this.companionView(snapshot);
   if(atLeast(protocol,LIVE_PROTOCOL))return this.liveView(snapshot);
   if(atLeast(protocol,NPCS_PROTOCOL))return this.npcsView(snapshot);
   return atLeast(protocol,OBJECTS_PROTOCOL)?this.objectsView(snapshot):this.questView(snapshot);
+ }
+ /**
+  * The 0.27 projection: the 0.26 one plus each instance's screen and, for every bound screen of the
+  * loaded world, a home in mounts (area screen-<id>, its anchor and the binding, after the world's own).
+  */
+ screensView(snapshot:Snapshot):Snapshot<typeof SCREENS_PROTOCOL> {
+  const base=this.debugToolView(snapshot),s=base.state,worldId=s.world?.id ?? null;
+  const instances=s.objects.instances.map(i=>({...i,screen:worldId && i.source==='user'?this.objects.instanceScreen(worldId,i.id):null}));
+  const homes=this.objects.screenHomes(worldId),mounts=s.mounts;
+  const taken=new Set(mounts.bindings.map(b=>b.id)),bound=homes.filter(h=>!taken.has(h.workspace));
+  return {...base,state:{...s,objects:{...s.objects,instances},mounts:{...mounts,
+   areas:[...mounts.areas,...bound.map(h=>({id:h.area,workspaceSlot:String(h.workspace).padStart(2,'0'),primaryAnchor:h.area,toolAnchors:[],dataAnchors:[],theme:h.name,spawnId:h.area}))],
+   anchors:[...mounts.anchors,...bound.map(h=>({id:h.area,pose:h.pose,size:h.size,mount:{type:h.mountType,role:'mounted-workspace',interaction:'focus-in'},areaId:h.area}))],
+   bindings:[...mounts.bindings,...bound.map(h=>({id:h.workspace,worldId:worldId!,areaId:h.area}))]}}} as Snapshot<typeof SCREENS_PROTOCOL>;
  }
  /**
   * The 0.26 projection: the 0.25 one plus the companion's pace, the slot-9 tool definition, the
@@ -350,7 +369,9 @@ export class MockDaemon {
   if(method==='objects.catalog' && call.result){
    const entries=call.result.entries as Parameters<typeof catalogEntry24>[0][];
    // Catalog entries carry companion from 0.25 on (null for non-characters).
-   call.result={...call.result,entries:atLeast(protocol,COMPANION_PROTOCOL)?entries.map(e=>({...catalogEntry24(e),companion:companionOf(e)})):entries.map(atLeast(protocol,LIVE_PROTOCOL)?catalogEntry24:catalogEntry22)};
+   call.result={...call.result,entries:atLeast(protocol,COMPANION_PROTOCOL)?entries.map(e=>({...catalogEntry24(e),companion:companionOf(e),
+    // Catalog entries carry screen from 0.27 on (null for objects that are no workspace screen).
+    ...(atLeast(protocol,SCREENS_PROTOCOL)?{screen:catalogScreen27(e)}:{})})):entries.map(atLeast(protocol,LIVE_PROTOCOL)?catalogEntry24:catalogEntry22)};
   }
   if(call.changed)this.extendedCommit([]);
   this.notify(call.notices);

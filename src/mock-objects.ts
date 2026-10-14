@@ -12,7 +12,7 @@ import {RpcError} from './client.js';
 import {validateObject,validateLibrary,USER_FOLDER_OBJECTS,type ObjectManifest} from './object.js';
 import {objectFormats} from './validation.js';
 import type {Ipc22_CatalogEntry,Ipc22_ObjectBounds,Ipc22_LibraryRecord,Ipc22_ObjectPocketItem,Ipc22_ObjectPose,Ipc22_ObjectRule,
- Ipc22_ObjectsState,Ipc22_ObjectTraitName,Ipc23_ObjectInstance,Ipc23_ObjectsState,Ipc23_NpcActivity,Ipc24_CatalogEntry,Ipc24_CatalogMachine,World09_InstanceInteraction} from './generated.js';
+ Ipc22_ObjectsState,Ipc22_ObjectTraitName,Ipc23_ObjectInstance,Ipc23_ObjectsState,Ipc23_NpcActivity,Ipc24_CatalogEntry,Ipc24_CatalogMachine,Ipc27_CatalogScreen,Ipc27_InstanceScreen,World09_InstanceInteraction} from './generated.js';
 import {machineOf} from './mock-live.js';
 
 /** Grant per 0.22 method (RFC-0011 P1): reads need state.read, every change objects.control. */
@@ -23,8 +23,8 @@ export const OBJECT_REQUIREMENTS={
 } as const;
 /** User-placement limits per world (RFC-0011 "Budgets and limits"). */
 export const OBJECT_LIMITS:Ipc22_ObjectsState['limits']={placements:128,assets:32,triangles:400_000,gpuBytes:201_326_592,collisionTriangles:10_000};
-/** Traits a P1 placement may carry; seat anchors and machine are inert (the static body places). */
-export const PLACEABLE_TRAITS:readonly string[]=['decorative','collidable','movable','seat','machine'];
+/** Traits a placement may carry; seat anchors and machine are inert (the static body places); mount makes a workspace screen (0.27). */
+export const PLACEABLE_TRAITS:readonly string[]=['decorative','collidable','movable','seat','machine','mount'];
 export const REASONS={
  character:'character: user characters arrive with routes (RFC-0011 P2)',
  mover:'mover: tracks and items need world format 0.10 (RFC-0011 P3)',
@@ -32,8 +32,8 @@ export const REASONS={
 } as const;
 const POCKET_MAX=16,SCAN_MS=1000;
 
-/** A catalog entry; machine entries keep their 0.24 machine field, which older projections drop (mock.ts). */
-type Entry=Ipc22_CatalogEntry & {machine?:Ipc24_CatalogMachine};
+/** A catalog entry; machine entries keep their 0.24 machine field and screens their 0.27 screen field, which older projections drop (mock.ts). */
+type Entry=Ipc22_CatalogEntry & {machine?:Ipc24_CatalogMachine;screen?:Ipc27_CatalogScreen};
 type Pose=Ipc22_ObjectPose;
 type Vec3=[number,number,number];
 type Box={min:number[];max:number[]};
@@ -64,13 +64,22 @@ export function manifestEntry(m:ObjectManifest,ref:string,source:'library'|'user
  const traits=m.traits as Record<string,any>,movable=traits.movable;
  return entry({ref,source,id:m.id,version:m.version,formatVersion:m.formatVersion,name:m.name,description:m.description ?? null,category:m.category,tags:m.tags || [],
   traits:Object.keys(traits) as Ipc22_ObjectTraitName[],surfaces:movable?movable.surfaces || ['floor']:null,scale:movable?movable.scale || [1,1]:null,
-  bounds:structuredClone(m.bounds),license:m.license,...machineField(traits),...extra});
+  bounds:structuredClone(m.bounds),license:m.license,...machineField(traits),...screenField(traits),...extra});
 }
+/** A workspace screen's mounted-workspace anchor (object format 0.11): aspect, size at scale 1 and mount type. */
+export function screenOf(traits:Record<string,any>):Ipc27_CatalogScreen|null {
+ const a=(traits.mount?.anchors || []).find((x:any)=>x.role==='mounted-workspace');if(!a) return null;
+ const r=a.size[0]/a.size[1],aspect=Math.abs(r/(16/9)-1)<=0.005?'16:9':r>=2.33 && r<=2.39?'21:9':null;
+ return aspect?{aspect,size:[a.size[0],a.size[1]],mountType:a.mountType}:null;
+}
+const screenField=(traits:Record<string,unknown>)=>{const screen=screenOf(traits as Record<string,any>);return screen?{screen}:{};};
 const machineField=(traits:Record<string,unknown>)=>{const machine=machineOf(traits);return machine?{machine}:{};};
-/** An entry as a 0.24 peer sees it: machine is null for entries without the machine trait. */
-export const catalogEntry24=(e:Entry):Ipc24_CatalogEntry=>({...e,machine:e.machine ?? null});
-/** An entry as a 0.22/0.23 peer sees it: no machine field. */
-export const catalogEntry22=({machine,...e}:Entry):Ipc22_CatalogEntry=>e;
+/** An entry as a 0.24 peer sees it: machine is null for entries without the machine trait; no screen field. */
+export const catalogEntry24=({screen,...e}:Entry):Ipc24_CatalogEntry=>({...e,machine:e.machine ?? null});
+/** An entry as a 0.22/0.23 peer sees it: no machine or screen field. */
+export const catalogEntry22=({machine,screen,...e}:Entry):Ipc22_CatalogEntry=>e;
+/** The screen field of a 0.27 entry: null for objects that are no workspace screen. */
+export const catalogScreen27=(e:Entry):Ipc27_CatalogScreen|null=>e.screen ?? null;
 
 // ---- fixtures ----
 const lib='com.hyprune.starter',libVersion='0.1.0',libKey=`${lib}@${libVersion}`;
@@ -88,6 +97,10 @@ const FIXTURE_LIBRARY:Entry[]=[
  starter('guide','Guide',{category:'characters',traits:['character'],bounds:box(0.6,1.8,0.4),triangles:12_000,gpuBytes:4_194_304}),
  starter('mine-cart','Mine cart',{category:'vehicles',formatVersion:'0.10',traits:['decorative','mover'],bounds:box(1,1.1,1.6),triangles:2000,gpuBytes:524_288})
 ];
+/** A user-folder workspace screen (0.27 listeners). */
+const FIXTURE_SCREEN:Entry=entry({ref:'user/workspace-screen-wall-16x9',source:'user',id:'workspace-screen-wall-16x9',name:'Wall screen 16:9',category:'signage',
+ version:'1.0.0',formatVersion:'0.11',traits:['mount','collidable','movable'],surfaces:['wall'],scale:[0.5,2],bounds:{min:[-1.68,-0.98,0],max:[1.68,0.98,0.085]},
+ triangles:72,gpuBytes:4096,collisionTriangles:12,license:'CC-BY-4.0',screen:{aspect:'16:9',size:[3.2,1.8],mountType:'hanging-wall'}});
 const FIXTURE_USER:Entry[]=[
  entry({ref:'user/desk-plant',source:'user',id:'desk-plant',name:'Desk plant',category:'plants',version:'1.0.0',formatVersion:'0.9',traits:['decorative','movable'],
   surfaces:['floor'],scale:[0.5,2],bounds:box(0.3,0.5,0.3),triangles:900,gpuBytes:131_072,license:'CC0-1.0'}),
@@ -147,7 +160,9 @@ const round=(n:number)=>Math.round(n*1e6)/1e6;
 const inside=(b:Box,p:number[],grow=0)=>p.every((v,i)=>v>=b.min[i]-grow && v<=b.max[i]+grow);
 const overlap=(a:Box,b:Box)=>[0,1,2].every(i=>a.min[i]<b.max[i] && a.max[i]>b.min[i]);
 
-export interface Placement {id:string;ref:string;areaId:string;pose:Pose;scale:number;locked:boolean;npc?:CharacterData}
+export interface Placement {id:string;ref:string;areaId:string;pose:Pose;scale:number;locked:boolean;npc?:CharacterData;workspace?:number}
+/** The mock's workspace_base and room workspace: screens bind above it (IPC 0.27). */
+export const SCREEN_BASE=20;
 interface Override {pose?:Pose;scale?:number;hidden?:boolean;locked?:boolean}
 /** A character's moment-to-moment state from the NPC engine (a route pose, the activity). */
 export interface CharacterLive {pose?:Pose;activity:Ipc23_NpcActivity|null}
@@ -167,9 +182,34 @@ export class ObjectEngine {
  live?:(worldId:string,id:string)=>CharacterLive|undefined;
  /**
   * world: the mock's loaded world, zones, obstacles and player pose; objectDir: a user folder to list
-  * instead of the fixture; characters: the 0.23 fixture characters and character placements.
+  * instead of the fixture; characters: the 0.23 fixture characters and character placements; screens:
+  * workspace screens (0.27): the fixture wall screen and the workspace of objects.place/configure.
   */
- constructor(private readonly world:()=>ObjectWorld,readonly options:{objectDir?:string;characters?:boolean}={}) {this.user=options.objectDir?[]:structuredClone(FIXTURE_USER);}
+ constructor(private readonly world:()=>ObjectWorld,readonly options:{objectDir?:string;characters?:boolean;screens?:boolean}={}) {
+  this.user=options.objectDir?[]:structuredClone([...FIXTURE_USER,...(options.screens?[FIXTURE_SCREEN]:[])]);
+ }
+ /** A placed screen's 0.27 instance field (null for other objects): its workspace and, while bound, its home area. */
+ instanceScreen(worldId:string,id:string):Ipc27_InstanceScreen|null {
+  const p=(this.placements.get(worldId) || []).find(x=>x.id===id),e=p && this.resolve(p.ref);
+  if(!p || !e?.screen) return null;
+  return {workspace:p.workspace ?? null,home:p.workspace?`screen-${p.id}`:null,aspect:e.screen.aspect,size:[e.screen.size[0]*p.scale,e.screen.size[1]*p.scale]};
+ }
+ /** Bound screens of a world: workspace, home area id, anchor pose and size. */
+ screenHomes(worldId:string|null):Array<{workspace:number;area:string;pose:Pose;size:[number,number];mountType:string;name:string}> {
+  if(!worldId) return [];
+  return (this.placements.get(worldId) || []).flatMap(p=>{const e=this.resolve(p.ref);
+   return e?.screen && p.workspace?[{workspace:p.workspace,area:`screen-${p.id}`,pose:structuredClone(p.pose),size:[e.screen.size[0]*p.scale,e.screen.size[1]*p.scale] as [number,number],mountType:e.screen.mountType,name:e.name}]:[];});
+ }
+ /** A workspace param (number, next-free or null) for a screen of this world; refuses one another screen or the room holds. */
+ private screenWorkspace(worldId:string,value:unknown,except:string):number|undefined {
+  if(value===null) return undefined;
+  const taken=new Set((this.placements.get(worldId) || []).filter(p=>p.id!==except && p.workspace).map(p=>p.workspace!));
+  if(value==='next-free'){for(let id=SCREEN_BASE+1;id<=9999;id++) if(!taken.has(id)) return id;throw new RpcError(-32008,'no free workspace up to 9999',{retryable:false,rule:'budget'});}
+  const id=value as number;
+  if(id===SCREEN_BASE) throw new RpcError(-32005,`workspace ${id} is the room workspace`,{retryable:false,rule:'workspace.reserved'});
+  if(taken.has(id)) throw new RpcError(-32005,`workspace ${id} is another screen`,{retryable:false,rule:'workspace.taken'});
+  return id;
+ }
 
  // ---- state ----
  /** The 0.23 objects state; older projections drop the character fields (mock.ts). */
@@ -393,12 +433,15 @@ export class ObjectEngine {
     const list=this.placements.get(w.id) || [],id=this.newId(w.id);
     const pose:Pose=params.pose?structuredClone(params.pose):this.spawnPose(e,scale);
     const placement:Placement={id,ref:e.ref,areaId:this.areaOf(pose.position),pose,scale,locked:false};
+    if(this.options.screens && e.screen) placement.workspace=this.screenWorkspace(w.id,'workspace' in params?params.workspace:'next-free',id);
+    else if(params.workspace!==undefined && params.workspace!==null) throw new RpcError(-32005,`${e.name} is not a workspace screen`);
     this.budget([...list,placement]);
     if(params.pose){const rule=this.rule(e,pose,scale);if(rule) this.refuse(rule,`${e.name} cannot go there`);}
     this.placements.set(w.id,[...list,placement]);
     // Placing a ref that is in the pocket uses that pocket item (the mock has no tool 5).
     const item=this.pocketItems.findIndex(i=>i.ref===e.ref);if(item>=0) this.pocketItems.splice(item,1);
     notices.push({level:'info',code:'object.placed',message:`${e.name} placed`});
+    if(placement.workspace) notices.push({level:'info',code:'screen.bound',message:`${e.name} shows workspace ${placement.workspace}`,since:'0.27'});
     return {result:{id},changed:true,notices};
    }
    case 'objects.transform':{
@@ -456,6 +499,14 @@ export class ObjectEngine {
    }
    case 'objects.configure':{
     const w=this.requireWorld(),found=this.find(w.id,params.id),{placement,authored}=found;this.protectedCharacter(found);
+    if(params.patch.workspace!==undefined){
+     const e=placement && this.resolve(placement.ref);
+     if(!this.options.screens || !placement || !e?.screen) throw new RpcError(-32005,`${params.id} is not a workspace screen`);
+     if(placement.locked && params.patch.locked===undefined) throw new RpcError(-32005,`locked: ${placement.id} is locked`);
+     placement.workspace=this.screenWorkspace(w.id,params.patch.workspace,placement.id);
+     notices.push(placement.workspace?{level:'info',code:'screen.bound',message:`${e.name} shows workspace ${placement.workspace}`,since:'0.27'}
+      :{level:'info',code:'screen.unbound',message:`${e.name} shows no workspace`,since:'0.27'});
+    }
     if(params.patch.locked!==undefined){if(placement) placement.locked=params.patch.locked;else this.override(w.id,authored!.id).locked=params.patch.locked;}
     return {changed:true,notices};
    }

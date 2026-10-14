@@ -27,7 +27,7 @@ const until=async(fn,ms=2000)=>{const end=Date.now()+ms;while(!fn()){if(Date.now
 
 test('0.26 constants: protocol list, no new grant',()=>{
  assert.ok(PROTOCOLS.includes('0.26'));
- assert.equal(DEBUG_TOOL_PROTOCOL,'0.26');assert.equal(MOCK_PROTOCOLS.at(-1),'0.26');
+ assert.equal(DEBUG_TOOL_PROTOCOL,'0.26');assert.ok(MOCK_PROTOCOLS.includes('0.26'));
  assert.deepEqual(DEBUG_TOOL_GRANTS,COMPANION_GRANTS);
  assert.equal(DEBUG_TOOL_DEFINITION.slot,9);
 });

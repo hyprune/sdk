@@ -1,6 +1,6 @@
 # Mock daemon and shell development
 
-Build with `npm ci`, then `npm run mock`. The default is real IPC **0.2**, with all 26 methods filtered by grants, seven-key snapshots/deltas and subscribed-reader UI/data/location hints. The same listener accepts 0.1 with frozen method discovery and five-key projections; `--protocol 0.1` makes it legacy-only; `--protocol 0.21`, `0.22`, `0.23`, `0.24`, `0.25` and `0.26` add the quest, object, character, live, companion and debug-tool projections below. `0.1-mock.1` and `--experimental` have been retired.
+Build with `npm ci`, then `npm run mock`. The default is real IPC **0.2**, with all 26 methods filtered by grants, seven-key snapshots/deltas and subscribed-reader UI/data/location hints. The same listener accepts 0.1 with frozen method discovery and five-key projections; `--protocol 0.1` makes it legacy-only; `--protocol 0.21`, `0.22`, `0.23`, `0.24`, `0.25`, `0.26` and `0.27` add the quest, object, character, live, companion, debug-tool and workspace-screen projections below. `0.1-mock.1` and `--experimental` have been retired.
 
 Use a private development socket:
 
@@ -227,6 +227,19 @@ it stays across modes and companions. The mock pockets no windows, so the 128-it
 list only shows in validation. No new grant: `DEBUG_TOOL_GRANTS` equals
 `COMPANION_GRANTS`.
 
+## Workspace screens (IPC 0.27)
+
+`--protocol 0.27` negotiates 0.27 next to every older version. The fixture user folder gains
+`user/workspace-screen-wall-16x9` (object format 0.11, a 3.2 × 1.8 m mounted-workspace
+anchor). 0.27 peers get the 0.26 projection plus `screen` on catalog entries and object
+instances. `objects.place` binds a screen to the next free workspace above 20 (or the
+`workspace` it names; null leaves it empty); `objects.configure {patch: {workspace}}`
+rebinds it. Workspace 20 (the room) is refused with rule `workspace.reserved`, another
+screen's with `workspace.taken`. Each bound screen of the loaded world appears in `mounts`
+as area `screen-<id>` with its anchor (at the placement pose, a simplification) and binding.
+Notices `screen.bound` and `screen.unbound` reach 0.27 peers. No new grant:
+`SCREENS_GRANTS` equals `DEBUG_TOOL_GRANTS`.
+
 ## Scenario files
 
 `observatory.json` provides surfaces, zones, waypoint, a looping pose path and timed notices. `surface-lifecycle.json` removes/re-adds surfaces. `warp.json` demonstrates navigation and world loading using real methods.
@@ -245,4 +258,4 @@ list only shows in validation. No new grant: `DEBUG_TOOL_GRANTS` equals
 
 Starting state, targets, transactions, commands and timing are checked before listening. Deltas coalesce to at most 30 Hz, retain each peer's baseline and replace complete keys. Snapshot/subscribe responses precede later deltas. Oversized resource creation rejects before commit.
 
-Programmatic harnesses can use `commit`, `runAction`, `objects` (the 0.22 engine), `npcs` (the 0.23 engine), `project(snapshot, protocol)` (0.24: `liveView`, 0.25: `companionView`, 0.26: `debugToolView`), `companion` (the 0.25 engine), `hold`, `escape`, `use`, `drawPoint`, `setPowerProfile`, `disconnectClients`, `revokeClients`, `stop`. Restart creates a new session. Scenarios use real timers, not deterministic physics replay. No scenario action installs an extension, loads arbitrary code or injects input into the owner's compositor.
+Programmatic harnesses can use `commit`, `runAction`, `objects` (the 0.22 engine), `npcs` (the 0.23 engine), `project(snapshot, protocol)` (0.24: `liveView`, 0.25: `companionView`, 0.26: `debugToolView`, 0.27: `screensView`), `companion` (the 0.25 engine), `hold`, `escape`, `use`, `drawPoint`, `setPowerProfile`, `disconnectClients`, `revokeClients`, `stop`. Restart creates a new session. Scenarios use real timers, not deterministic physics replay. No scenario action installs an extension, loads arbitrary code or injects input into the owner's compositor.
