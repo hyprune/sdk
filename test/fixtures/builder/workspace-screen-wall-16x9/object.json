@@ -1,0 +1,82 @@
+{
+ "formatVersion": "0.11",
+ "id": "workspace-screen-wall-16x9",
+ "version": "1.0.0",
+ "name": "Wall screen 16:9",
+ "description": "A slim bezel that hangs on a wall and shows a workspace.",
+ "category": "signage",
+ "tags": [
+  "screen",
+  "workspace",
+  "display",
+  "widescreen"
+ ],
+ "scene": "object.glb",
+ "license": "CC-BY-4.0",
+ "attribution": [
+  {
+   "path": ".",
+   "author": "Hyprune contributors",
+   "license": "CC-BY-4.0",
+   "source": "https://github.com/hyprune/worlds"
+  }
+ ],
+ "bounds": {
+  "min": [
+   -1.68,
+   -0.98,
+   0.0
+  ],
+  "max": [
+   1.68,
+   0.98,
+   0.085
+  ]
+ },
+ "thumbnail": "thumbnail.png",
+ "lighting": {
+  "mode": "probe"
+ },
+ "traits": {
+  "mount": {
+   "anchors": [
+    {
+     "id": "screen",
+     "role": "mounted-workspace",
+     "mountType": "hanging-wall",
+     "pose": {
+      "position": [
+       0,
+       0,
+       0.06
+      ],
+      "rotation": [
+       0,
+       0,
+       0,
+       1
+      ]
+     },
+     "size": [
+      3.2,
+      1.8
+     ],
+     "screenType": "com.hyprune.window",
+     "frameNode": "bezel"
+    }
+   ]
+  },
+  "collidable": {
+   "node": "proxy"
+  },
+  "movable": {
+   "surfaces": [
+    "wall"
+   ],
+   "scale": [
+    0.5,
+    2
+   ]
+  }
+ }
+}

@@ -1,0 +1,65 @@
+{
+ "importVersion": "0.1",
+ "source": {
+  "name": "barrel.gltf",
+  "format": "gltf",
+  "bytes": 2046,
+  "sha256": "964e49450120621fdbb053d78c0c1d4e2063f554c8456d6c55de7e1bbbd7572d"
+ },
+ "converter": {
+  "name": "hyprune object import",
+  "version": "0.10.0",
+  "backend": "gltf"
+ },
+ "options": {
+  "units": "cm",
+  "scale": 0.01,
+  "up": "z",
+  "yaw": 0,
+  "surface": "floor",
+  "maxTriangles": 2000,
+  "maxTexture": 512,
+  "collision": "convex",
+  "ktx2": "all",
+  "lighting": "lit"
+ },
+ "measured": {
+  "before": {
+   "triangles": 12544,
+   "maxTexture": 2048,
+   "gpuBytes": 11545931,
+   "collisionTriangles": null,
+   "extent": [
+    82,
+    82,
+    120
+   ]
+  },
+  "after": {
+   "triangles": 2000,
+   "maxTexture": 512,
+   "gpuBytes": 238675,
+   "collisionTriangles": 938,
+   "extent": [
+    0.82,
+    1.2,
+    0.8195
+   ]
+  }
+ },
+ "steps": [
+  "read GLTF",
+  "units cm (x0.01), Z-up turned to Y-up, pivot at the base",
+  "decimated 12544 -> 2000 triangles",
+  "shrank 1 texture(s) to 512 px",
+  "convex hull collision proxy, 938 triangles",
+  "KTX2 (Basis Universal): 1 texture(s)",
+  "meshopt compression, quantised geometry"
+ ],
+ "license": {
+  "spdx": "CC0-1.0",
+  "author": "Hyprune contributors",
+  "source": "https://github.com/hyprune/sdk"
+ },
+ "importedAt": "2026-10-14T19:10:03Z"
+}

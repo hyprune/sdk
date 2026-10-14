@@ -1,0 +1,51 @@
+{
+ "formatVersion": "0.11",
+ "id": "barrel",
+ "version": "1.0.0",
+ "name": "Barrel",
+ "category": "other",
+ "tags": [
+  "imported"
+ ],
+ "scene": "object.glb",
+ "license": "CC0-1.0",
+ "attribution": [
+  {
+   "path": ".",
+   "author": "Hyprune contributors",
+   "license": "CC0-1.0",
+   "source": "https://github.com/hyprune/sdk"
+  }
+ ],
+ "bounds": {
+  "min": [
+   -0.41,
+   0,
+   -0.41
+  ],
+  "max": [
+   0.41,
+   1.2,
+   0.4095
+  ]
+ },
+ "thumbnail": "thumbnail.png",
+ "lighting": {
+  "mode": "probe"
+ },
+ "traits": {
+  "collidable": {
+   "node": "proxy"
+  },
+  "movable": {
+   "surfaces": [
+    "floor"
+   ],
+   "upright": true,
+   "scale": [
+    0.25,
+    4
+   ]
+  }
+ }
+}
