@@ -102,7 +102,8 @@ test('save: Make world (objects, screens as homes, provenance) and one commit pe
  // Facing -X, towards the screen: -Z turned +90 degrees about +Y.
  assert.deepEqual(home.pose.rotation,[0,0.7071,0,0.7071]);
  assert.equal(world.license,'CC0-1.0 AND CC-BY-4.0');
- assert.deepEqual(world.attribution.map(a=>a.path),['.','starter','sky/panorama.jpg','objects/barrel','objects/workspace-screen-wall-16x9']);
+ assert.deepEqual(world.attribution.map(a=>a.path),['.','starter/land.glb','sky/panorama.jpg','objects/barrel/import.json','objects/barrel/object.glb','objects/barrel/object.json',
+  'objects/barrel/thumbnail.png','objects/workspace-screen-wall-16x9/object.glb','objects/workspace-screen-wall-16x9/object.json','objects/workspace-screen-wall-16x9/thumbnail.png'],'per file, as core resolves them');
  assert.match(readFileSync(join(folder,'ATTRIBUTION.md'),'utf8'),/objects\/workspace-screen-wall-16x9` \| Hyprune contributors \| CC-BY-4.0/);
  // The second save: move the barrel, unbind nothing; a user message.
  const project=readProject(folder);project.placements[0].pose.position=[3,0,-3];

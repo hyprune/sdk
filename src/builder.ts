@@ -326,18 +326,24 @@ export async function make(folder: string): Promise<Made> {
  if (sky.image) attribution.push({path: sky.image, author: sky.author, license: sky.license, ...(sky.source.startsWith('https://') ? {source: sky.source} : {})});
  for (const [id, o] of objects) for (const a of (o.attribution ?? [{path: '.', author: 'unknown', license: o.license ?? 'LicenseRef-unknown'}]))
   attribution.push({...a, path: a.path === '.' ? `objects/${id}` : `objects/${id}/${a.path}`});
- m.attribution = attribution;
+ // Core resolves each attribution path to a file: directories become one entry per file.
+ m.attribution = attribution.flatMap(a => a.path !== '.' && existsSync(join(folder, a.path)) && statSync(join(folder, a.path)).isDirectory()
+  ? filesUnder(folder, a.path).map(path => ({...a, path})) : [a]);
  m.license = spdxAnd(attribution.map(a => a.license));
  const check = validateManifest('world', m, undefined, m.formatVersion);
  if (!check.valid) fail('make.invalid', check.errors.join('; '));
  writeJson(join(folder, 'world.json'), m);
- writeFileSync(join(folder, 'ATTRIBUTION.md'), attributionText(m));
+ writeFileSync(join(folder, 'ATTRIBUTION.md'), attributionText(m.name, attribution));
  writeFileSync(join(folder, 'LICENSE'), licenseText(m));
  return {manifest: m, homes, warnings};
 }
-function attributionText(m: Record<string, any>): string {
- const rows = m.attribution.map((a: any) => `| \`${a.path}\` | ${a.author.replaceAll('|', '\\|')} | ${a.license} | ${a.source ?? ''} |`);
- return `# ${m.name}: attribution\n\nWritten by the Hyprune builder from each part's recorded provenance.\n\n| Path | Author | Licence | Source |\n| --- | --- | --- | --- |\n${rows.join('\n')}\n`;
+function filesUnder(folder: string, dir: string): string[] {
+ return readdirSync(join(folder, dir), {withFileTypes: true}).sort((a, b) => a.name < b.name ? -1 : 1)
+  .flatMap(e => e.isDirectory() ? filesUnder(folder, `${dir}/${e.name}`) : e.isFile() ? [`${dir}/${e.name}`] : []);
+}
+function attributionText(name: string, attribution: Array<Record<string, string>>): string {
+ const rows = attribution.map((a: any) => `| \`${a.path}\` | ${a.author.replaceAll('|', '\\|')} | ${a.license} | ${a.source ?? ''} |`);
+ return `# ${name}: attribution\n\nWritten by the Hyprune builder from each part's recorded provenance.\n\n| Path | Author | Licence | Source |\n| --- | --- | --- | --- |\n${rows.join('\n')}\n`;
 }
 function licenseText(m: Record<string, any>): string {
  const ids = [...new Set<string>(m.attribution.map((a: any) => a.license))];
