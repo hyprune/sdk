@@ -7,7 +7,7 @@
 import {execFileSync,spawnSync} from 'node:child_process';
 import {copyFileSync,existsSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,renameSync,rmSync,statSync,writeFileSync} from 'node:fs';
 import {homedir,tmpdir} from 'node:os';
-import {dirname,join,resolve} from 'node:path';
+import {basename,dirname,join,resolve} from 'node:path';
 import {validateManifest} from './validation.js';
 import {validateWorld} from './world.js';
 import {decodeImage,encodeJpeg,fitInside,imageMime,type Rgba} from './pixels.js';
@@ -34,6 +34,7 @@ export interface Project {
 }
 export interface Pending {added: number; modified: number; deleted: number; total: number}
 export interface Status {
+ /** The folder's name (the slug); the project file's id is local.<slug>. */
  projectId: string; worldId: string; name: string; folder: string; version: string; placements: number;
  branch: string; head: string | null; pending: Pending;
  lastSave: {commit: string; message: string; at: string} | null;
@@ -248,7 +249,7 @@ export async function createProject(name: string, o: CreateOptions = {}): Promis
   if (!identity(folder)) fail('git.identity', 'git has no commit name and email: pass --git-name and --git-email (stored in this world folder only)');
   git(folder, ['add', '-A']);
   git(folder, ['commit', '-q', '-F', '-'], {input: `Create ${display} from the Flat land starter\n`});
-  return {projectId: worldId, worldId, name: display, folder, commit: git(folder, ['rev-parse', 'HEAD']).trim()};
+  return {projectId: slug, worldId, name: display, folder, commit: git(folder, ['rev-parse', 'HEAD']).trim()};
  } catch (e) {
   rmSync(folder, {recursive: true, force: true});
   throw e;
@@ -384,7 +385,7 @@ export function status(folder: string): Status {
  const log = head ? git(folder, ['log', '-1', '--format=%H%x00%cI%x00%B']).split('\0') : null;
  const tags = versionTags(folder);
  return {
-  projectId: project.id, worldId: base.id, name: project.name, folder, version: base.version, placements: project.placements.length,
+  projectId: basename(folder), worldId: base.id, name: project.name, folder, version: base.version, placements: project.placements.length,
   branch: gitTry(folder, ['symbolic-ref', '--short', '-q', 'HEAD']).stdout.trim() || 'HEAD', head: head?.slice(0, 12) ?? null, pending: pending(folder),
   lastSave: log ? {commit: log[0].slice(0, 12), at: log[1], message: log[2].trim()} : null,
   lastVersion: tags[0] ? {...tags[0], commit: tags[0].commit.slice(0, 12)} : null,

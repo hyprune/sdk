@@ -52,8 +52,9 @@ test('create: a git repository with the Flat land starter, made and saved once',
  await assert.rejects(createProject('No identity',{root:dir}),code('git.identity'));
  assert.ok(!existsSync(join(dir,'no-identity')),'a failed create leaves no folder');
  const c=await createProject('Harbour Plaza',{root:dir,identity:ME});
- assert.deepEqual([c.projectId,c.worldId,c.folder],['local.harbour-plaza','local.harbour-plaza',join(dir,'harbour-plaza')]);
- assert.equal((await createProject('Harbour plaza',{root:dir,identity:ME})).projectId,'local.harbour-plaza-2');
+ assert.deepEqual([c.projectId,c.worldId,c.folder],['harbour-plaza','local.harbour-plaza',join(dir,'harbour-plaza')]);
+ assert.equal(readProject(c.folder).id,'local.harbour-plaza');
+ assert.equal((await createProject('Harbour plaza',{root:dir,identity:ME})).projectId,'harbour-plaza-2');
  assert.equal(gitIn(c.folder,'log','--format=%s'),'Create Harbour Plaza from the Flat land starter');
  assert.equal(gitIn(c.folder,'status','--porcelain'),'');
  const files=gitIn(c.folder,'ls-files').split('\n').sort();
@@ -71,7 +72,7 @@ test('create: a git repository with the Flat land starter, made and saved once',
  assert.equal(checked.manifest.id,'local.harbour-plaza');
  const s=status(c.folder);
  assert.deepEqual([s.pending.total,s.lastVersion,s.suggestedVersion,s.remote,s.identity],[0,null,'0.1.0',null,ME]);
- assert.deepEqual(listProjects(dir).map(p=>p.projectId),['local.harbour-plaza','local.harbour-plaza-2']);
+ assert.deepEqual(listProjects(dir).map(p=>p.projectId),['harbour-plaza','harbour-plaza-2']);
  assert.equal(projectFolder('local.harbour-plaza',dir),c.folder);
  assert.equal(projectFolder('harbour-plaza',dir),c.folder);
  assert.throws(()=>projectFolder('local.nowhere',dir),code('project.unknown'));
@@ -211,7 +212,7 @@ test('CLI: JSON lines for the Director',async t=>{
  assert.equal(created.at(-1).result.status.identity.name,'Ada');
  assert.deepEqual(lines(cli('save','local.market-square')).at(-1),{event:'error',error:{message:'Nothing to save: there are no changes since the last save',code:'save.nothing'}});
  const list=lines(cli('list')).at(-1).result.projects;
- assert.deepEqual(list.map(p=>[p.projectId,p.name,p.version]),[['local.market-square','Market Square','0.1.0']]);
+ assert.deepEqual(list.map(p=>[p.projectId,p.worldId,p.name,p.version]),[['market-square','local.market-square','Market Square','0.1.0']]);
  const rel=lines(cli('release','market-square','--notes','hello'));
  assert.deepEqual(rel.map(l=>l.event),['stage','done']);
  assert.equal(rel.at(-1).result.status.lastVersion.tag,'v0.1.0');
