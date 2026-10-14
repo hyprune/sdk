@@ -80,7 +80,7 @@ test('object rejects reserved traits and over-limit directories',async t=>{
  await edit(join(dir,'object.json'),m=>{delete m.traits.mount;m.traits.mover={speed:2};});await assert.rejects(validateObject(dir),/traits\.mover: needs object format 0\.10/);
  await edit(join(dir,'object.json'),m=>delete m.traits.mover);
  for(let i=0;i<objectLimits.files;i++) await writeFile(join(dir,`extra-${i}.txt`),'x');
- await assert.rejects(validateObject(dir),/Object directory exceeds 64 files/);
+ await assert.rejects(validateObject(dir),/directory: \d+ files, more than 64/); // the format's own limit (read up to the 0.11 hard cap)
 });
 
 async function library(t) {return writeLibrary(await temp(t));}

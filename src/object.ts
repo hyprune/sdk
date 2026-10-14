@@ -3,7 +3,7 @@
 import {existsSync,readdirSync,lstatSync} from 'node:fs';
 import {resolve,join,basename} from 'node:path';
 import {parseJson} from './codec.js';
-import {validateManifest,objectLimits} from './validation.js';
+import {validateManifest,objectLimits,objectHardCaps} from './validation.js';
 import {inventory,packagePath,readAsset,gltfDocument,gltfResources,gltfResourcePath,ktx2Noise,packageDigest} from './world.js';
 import type {Object09_Document,Object10_Document,Library09_Document,Library10_Document} from './generated.js';
 
@@ -62,10 +62,16 @@ export function imageHeader(bytes:Buffer):{format:'png'|'jpeg'|'ktx2';width:numb
  */
 export async function validateObject(directory:string,options:{measured?:ObjectMeasured;directoryName?:boolean}={}):Promise<ObjectCheck> {
  const root=resolve(directory),label='Object';
- const files=inventory(root,{files:objectLimits.files,single:objectLimits.fileBytes,total:objectLimits.directoryBytes,label});
- const manifest=readManifest(root,'object.json',objectLimits.fileBytes);
+ // Read up to the object format 0.11 hard caps; the validator applies the manifest's own format's limits.
+ const files=inventory(root,{files:objectHardCaps.files,single:objectHardCaps.fileBytes,total:objectHardCaps.directoryBytes,label});
+ const manifest=readManifest(root,'object.json',objectHardCaps.fileBytes);
  const errors:string[]=[],warnings:string[]=[];
- const read=(path:string)=>readAsset(root,path,objectLimits.fileBytes);
+ const read=(path:string)=>readAsset(root,path,objectHardCaps.fileBytes);
+ // import.json (RFC-0014): checked with the object when present.
+ let importRecord:unknown;
+ if(files.some(f=>f.path==='import.json')) {
+  try {importRecord=readManifest(root,'import.json',objectHardCaps.fileBytes);} catch(e:any) {errors.push('import.json: '+e.message);}
+ }
  // Scene: the glTF (or GLB JSON chunk), its resources and the Khronos validator.
  let gltf:any,bin:Buffer|undefined;
  if(safeFile(root,manifest?.scene,files)) {
@@ -112,7 +118,8 @@ export async function validateObject(directory:string,options:{measured?:ObjectM
   else thumbnail={width:header.width,height:header.height,bytes:bytes.length};
  }
  const measured={maxTextureSize,gpuBytes,...options.measured};
- const result=validateManifest('object',manifest,undefined,undefined,{gltf,...(options.directoryName===false?{}:{directory:basename(root)}),files,thumbnail,measured}) as Result;
+ const result=validateManifest('object',manifest,undefined,undefined,{gltf,...(options.directoryName===false?{}:{directory:basename(root)}),files,thumbnail,measured,
+  ...(importRecord!==undefined?{importRecord}:{})}) as Result;
  errors.unshift(...result.errors);warnings.unshift(...(result.warnings || []));
  if(errors.length) throw new Error(errors.join('\n'));
  return {manifest:manifest as ObjectManifest,files,digest:packageDigest(root,files,objectLimits.fileBytes),warnings,

@@ -16747,6 +16747,36 @@
               "$ref": "#/$defs/catalogScreen"
             }
           ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "maxItems": 8,
+          "description": "Validation warnings: measures over their recommendation (object format 0.11) and other notes."
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/catalogProvenance"
+            }
+          ]
+        },
+        "imported": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/catalogImported"
+            }
+          ]
         }
       },
       "required": [
@@ -16776,7 +16806,10 @@
         "errors",
         "machine",
         "companion",
-        "screen"
+        "screen",
+        "warnings",
+        "provenance",
+        "imported"
       ],
       "additionalProperties": false
     },
@@ -20379,6 +20412,58 @@
       ],
       "additionalProperties": false,
       "description": "A placed workspace screen: the workspace it shows (null: none) and, while it is a home, the area id of that home in mounts.areas and mounts.bindings; size is the anchor's size at the instance's scale."
+    },
+    "catalogProvenance": {
+      "type": "object",
+      "properties": {
+        "license": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        }
+      },
+      "required": [
+        "license",
+        "author",
+        "source"
+      ],
+      "additionalProperties": false,
+      "description": "The object's recorded licence, author and source (\"unknown\" where unrecorded)."
+    },
+    "catalogImported": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "sourceName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        }
+      },
+      "required": [
+        "at",
+        "sourceName"
+      ],
+      "additionalProperties": false,
+      "description": "From import.json: when and from which file it was imported."
     }
   },
   "anyOf": [

@@ -4,7 +4,7 @@ import parseSpdx from 'spdx-expression-parse';
 
 const names = ['common', 'world', 'extension', 'screen-type', 'ipc'];
 // Object, library and library release record schemas (RFC-0011) live in v0.N directories only.
-const manifestKinds = ['object', 'library', 'library-releases'];
+const manifestKinds = ['object', 'library', 'library-releases', 'import'];
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 const base = 'https://hyprune.com/schema/v0/';
 for (const name of names) {
@@ -133,6 +133,24 @@ export const objectLimits = Object.freeze({
   collisionTriangles: 2000, thumbnailSize: 256, thumbnailBytes: 262144,
   libraryFiles: 4000, libraryBytes: 512 * 1048576, boundsTolerance: 0.01, characterOriginTolerance: 0.05, slotMargin: 0.5,
 });
+// Object format 0.11 (RFC-0014 sizes): for ordinary objects (not characters or items) the
+// RFC-0011 budgets become recommendations (a warning above) and only these hard caps refuse
+// an object: a runaway or hostile file, not a size judgement.
+export const objectHardCaps = Object.freeze({
+  triangles: 2000000, textureSize: 8192, gpuBytes: 1024 * 1048576, collisionTriangles: 100000,
+  files: 256, directoryBytes: 512 * 1048576, fileBytes: 64 * 1048576,
+});
+const recommendedOnly = version => atLeast(version, '0.11');
+// One budget check: over the hard cap (0.11) or the budget (older formats, characters, items)
+// fails; over the recommendation (0.11) warns.
+function budgetCheck(version, special, fail, warn) {
+  return (key, value, message, limit = objectLimits[key]) => {
+    if (!(value > limit)) return;
+    if (special || !recommendedOnly(version)) return fail(message(limit));
+    if (value > objectHardCaps[key]) return fail(message(objectHardCaps[key]) + ' (the hard cap)');
+    warn(message(limit) + ' (recommended; it still loads)');
+  };
+}
 // Which traits may share an asset (RFC-0011 "Allowed combinations"; machine per RFC-0013).
 const traitPairs = {
   decorative: ['collidable', 'movable', 'seat', 'mover', 'machine', 'mount'], collidable: ['decorative', 'movable', 'seat', 'machine', 'mount'],
@@ -306,12 +324,13 @@ function validateObjectGltf(value, version, gltf, options, fail, warn) {
   let triangles = 0;
   for (const [i] of drawn) for (const p of gltf.meshes?.[nodes[i].mesh]?.primitives || []) triangles += primitiveTriangles(gltf, p);
   const item = traits.mover?.item === true;
+  const over = budgetCheck(version, !!traits.character || item, fail, warn);
   const cap = traits.character ? objectLimits.characterTriangles : item ? objectLimits.itemTriangles : objectLimits.triangles;
-  if (triangles > cap) fail(`triangles: ${triangles} exceeds ${cap}`);
+  over('triangles', triangles, limit => `triangles: ${triangles} exceeds ${limit}`, cap);
   const proxy = traits.collidable && (byName.get(traits.collidable.node) || [])[0];
   if (proxy !== undefined) {
     const n = (gltf.meshes?.[nodes[proxy].mesh]?.primitives || []).reduce((s, p) => s + primitiveTriangles(gltf, p), 0);
-    if (n > objectLimits.collisionTriangles) fail(`traits.collidable: proxy has ${n} triangles, more than ${objectLimits.collisionTriangles}`);
+    over('collisionTriangles', n, limit => `traits.collidable: proxy has ${n} triangles, more than ${limit}`);
   }
   if (!options.measured?.bounds) {
     const b = accessorBounds(gltf, drawn), t = objectLimits.boundsTolerance;
@@ -535,14 +554,16 @@ function validateObjectManifest(value, version, options, fail, warn) {
     }
   }
   if (traits.machine) validateMachine(value, fail);
+  // import.json (RFC-0014): the record of how the object was imported, when the directory has one.
+  if (options.importRecord !== undefined) for (const e of validate('import', options.importRecord).errors) fail(`import.json: ${e}`);
   // Directory contents, thumbnail and measured values.
-  const files = options.files;
+  const files = options.files, over = budgetCheck(version, !!traits.character || traits.mover?.item === true, fail, warn);
   if (files) {
     const total = files.reduce((n, f) => n + f.size, 0), paths = new Set(files.map(f => f.path));
-    if (files.length > objectLimits.files) fail(`directory: ${files.length} files, more than ${objectLimits.files}`);
-    if (total > objectLimits.directoryBytes) fail(`directory: ${total} bytes, more than ${objectLimits.directoryBytes}`);
+    over('files', files.length, limit => `directory: ${files.length} files, more than ${limit}`);
+    over('directoryBytes', total, limit => `directory: ${total} bytes, more than ${limit}`);
     for (const f of files) {
-      if (f.size > objectLimits.fileBytes) fail(`directory: ${f.path} exceeds ${objectLimits.fileBytes} bytes`);
+      over('fileBytes', f.size, limit => `directory: ${f.path} exceeds ${limit} bytes`);
       if (!value.attribution.some(a => a.path === '.' || a.path === f.path || f.path.startsWith(a.path + '/'))) fail(`attribution: ${f.path} is not covered`);
     }
     for (const [field, path] of [['scene', value.scene], ['thumbnail', value.thumbnail]]) if (path !== undefined && !paths.has(path)) fail(`${field}: ${path} not found in the directory`);
@@ -556,9 +577,9 @@ function validateObjectManifest(value, version, options, fail, warn) {
   if (measured.bounds) for (const end of ['min', 'max']) for (let j = 0; j < 3; j++)
     if (Math.abs(b[end][j] - measured.bounds[end][j]) > t) fail(`bounds: ${end} ${'xyz'[j]} ${b[end][j]} is more than 1 cm from the scene's ${+measured.bounds[end][j].toFixed(4)}`);
   const texture = traits.character ? objectLimits.characterTextureSize : objectLimits.textureSize;
-  if (measured.maxTextureSize > texture) fail(`textures: ${measured.maxTextureSize} px exceeds ${texture} px`);
+  over('textureSize', measured.maxTextureSize, limit => `textures: ${measured.maxTextureSize} px exceeds ${limit} px`, texture);
   const gpu = traits.mover?.item ? objectLimits.itemGpuBytes : objectLimits.gpuBytes;
-  if (measured.gpuBytes > gpu) fail(`gpu: ${measured.gpuBytes} bytes exceeds ${gpu}`);
+  over('gpuBytes', measured.gpuBytes, limit => `gpu: ${measured.gpuBytes} bytes exceeds ${limit}`, gpu);
   if (options.gltf) return validateObjectGltf(value, version, options.gltf, options, fail, warn);
   return {};
 }
@@ -598,8 +619,10 @@ function validateLibraryReleases(value, fail) {
 // record to the newest directory that defines it. Results add `warnings`.
 function validateManifestKind(kind, value, method, version, options) {
   if (method) throw new Error('Method context is only valid for IPC');
-  const formats = kind === 'library-releases' ? versions.filter(v => has(v, kind)) : objectFormats;
-  version ??= kind === 'library-releases' ? formats.at(-1) : formats.includes(value?.formatVersion) ? value.formatVersion : formats.at(-1);
+  // import.json (RFC-0014) has its own importVersion; its schema lives in the newest object format directory with one.
+  const own = kind === 'library-releases' || kind === 'import';
+  const formats = own ? versions.filter(v => has(v, kind)) : objectFormats;
+  version ??= own ? formats.at(-1) : formats.includes(value?.formatVersion) ? value.formatVersion : formats.at(-1);
   if (!formats.includes(version)) throw new Error(`Unknown ${kind} format: ${version}`);
   const key = `${version}:${kind}:`;
   if (!validators.has(key)) validators.set(key, ajv.getSchema(`https://hyprune.com/schema/v${version}/${kind}.schema.json`));
@@ -609,7 +632,7 @@ function validateManifestKind(kind, value, method, version, options) {
   const reserved = kind === 'object' && value?.traits && typeof value.traits === 'object'
     ? Object.entries(reservedTraits(version)).filter(([name]) => Object.hasOwn(value.traits, name)) : [];
   for (const [name, why] of reserved) fail(`traits.${name}: ${why}; rejected in object format ${version}`);
-  if (kind !== 'library-releases' && value?.formatVersion !== version)
+  if (!own && value?.formatVersion !== version)
     fail(`formatVersion: ${JSON.stringify(value?.formatVersion)} is not ${formats.includes(value?.formatVersion) ? `the requested ${version}` : `an object format (${formats.join(', ')})`}`);
   if (!check(value)) {
     const said = new Set(reserved.map(([name]) => `/traits/${name}`));
@@ -618,6 +641,10 @@ function validateManifestKind(kind, value, method, version, options) {
   }
   if (errors.length) return { valid: false, errors, warnings };
   const spdx = (text, label) => { try { parseSpdx(text); } catch { fail(`${label}: invalid SPDX expression`); } };
+  if (kind === 'import') {
+    spdx(value.license.spdx, 'license.spdx');
+    return { valid: errors.length === 0, errors, warnings };
+  }
   if (kind !== 'library-releases') {
     const prerelease = value.version.split('+')[0].split('-').slice(1).join('-');
     if (prerelease.split('.').some(p => /^0\d+$/.test(p))) fail('version: numeric prerelease identifiers cannot have leading zeros');

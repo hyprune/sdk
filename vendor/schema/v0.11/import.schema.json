@@ -1,0 +1,332 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hyprune.com/schema/v0.11/import.schema.json",
+  "title": "Hyprune import record (import.json beside object.json, RFC-0014), importVersion 0.1, published with object format 0.11 (DRAFT)",
+  "type": "object",
+  "properties": {
+    "importVersion": {
+      "const": "0.1"
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "format": {
+          "enum": [
+            "gltf",
+            "glb",
+            "obj",
+            "fbx",
+            "dae",
+            "3ds",
+            "ply",
+            "stl"
+          ]
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "name",
+        "format",
+        "bytes",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "converter": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "backend": {
+          "enum": [
+            "gltf",
+            "assimp"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "backend"
+      ],
+      "additionalProperties": false
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "units": {
+          "enum": [
+            "m",
+            "cm",
+            "mm",
+            "in",
+            "ft",
+            "custom"
+          ]
+        },
+        "scale": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000
+        },
+        "up": {
+          "enum": [
+            "y",
+            "z"
+          ]
+        },
+        "yaw": {
+          "enum": [
+            0,
+            90,
+            180,
+            270
+          ]
+        },
+        "surface": {
+          "enum": [
+            "floor",
+            "wall",
+            "ceiling",
+            "any"
+          ]
+        },
+        "maxTriangles": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 2000000
+        },
+        "maxTexture": {
+          "enum": [
+            256,
+            512,
+            1024,
+            2048,
+            4096,
+            8192
+          ]
+        },
+        "collision": {
+          "enum": [
+            "convex",
+            "box",
+            "none"
+          ]
+        },
+        "ktx2": {
+          "enum": [
+            "auto",
+            "all",
+            "off"
+          ]
+        },
+        "lighting": {
+          "enum": [
+            "lit",
+            "unlit"
+          ]
+        }
+      },
+      "required": [
+        "units",
+        "scale",
+        "up",
+        "yaw",
+        "surface",
+        "maxTriangles",
+        "maxTexture",
+        "collision",
+        "ktx2",
+        "lighting"
+      ],
+      "additionalProperties": false
+    },
+    "measured": {
+      "type": "object",
+      "properties": {
+        "before": {
+          "type": "object",
+          "properties": {
+            "triangles": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "maxTexture": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "gpuBytes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "collisionTriangles": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              ]
+            },
+            "extent": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          },
+          "required": [
+            "triangles",
+            "maxTexture",
+            "gpuBytes",
+            "collisionTriangles",
+            "extent"
+          ],
+          "additionalProperties": false
+        },
+        "after": {
+          "type": "object",
+          "properties": {
+            "triangles": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "maxTexture": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "gpuBytes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "collisionTriangles": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              ]
+            },
+            "extent": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          },
+          "required": [
+            "triangles",
+            "maxTexture",
+            "gpuBytes",
+            "collisionTriangles",
+            "extent"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "before",
+        "after"
+      ],
+      "additionalProperties": false
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+      },
+      "maxItems": 32
+    },
+    "license": {
+      "type": "object",
+      "properties": {
+        "spdx": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        }
+      },
+      "required": [
+        "spdx",
+        "author",
+        "source"
+      ],
+      "additionalProperties": false,
+      "description": "What the user recorded; \"LicenseRef-unknown\" and \"unknown\" when they left a field empty."
+    },
+    "importedAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+    }
+  },
+  "required": [
+    "importVersion",
+    "source",
+    "converter",
+    "options",
+    "measured",
+    "steps",
+    "license",
+    "importedAt"
+  ],
+  "additionalProperties": false
+}

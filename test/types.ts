@@ -430,3 +430,7 @@ debugClient.on('state', s=>{
  // @ts-expect-error 0.26 instances have no screen
  void s.state.objects.instances[0].screen;
 });
+screensClient.call('objects.catalog', {}).then(r=>{
+ const e=r.entries[0];const w:string[]|undefined=e?.warnings;const lic:string|undefined=e?.provenance?.license;const from:string|undefined=e?.imported?.sourceName;
+ void w;void lic;void from;
+});
