@@ -69,11 +69,18 @@ export function projectFolder(target: string, root = projectsDir()): string {
  return folder;
 }
 const readJson = (path: string) => JSON.parse(readFileSync(path, 'utf8'));
+/** Keys sorted at every level: how core writes builder/project.json, so the two writers don't reorder it. */
+function sorted(value: unknown): unknown {
+ if (Array.isArray(value)) return value.map(sorted);
+ if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(k => [k, sorted((value as any)[k])]));
+ return value;
+}
+const same = (a: unknown, b: unknown) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 /** Atomic JSON write (a temporary file in the same directory, then a rename). */
-function writeJson(path: string, value: unknown): void {
+function writeJson(path: string, value: unknown, canonical = path.endsWith(PROJECT)): void {
  mkdirSync(dirname(path), {recursive: true});
  const temp = `${path}.${process.pid}.tmp`;
- writeFileSync(temp, JSON.stringify(value, null, 2) + '\n');
+ writeFileSync(temp, JSON.stringify(canonical ? sorted(value) : value, null, 2) + '\n');
  renameSync(temp, path);
 }
 export function readProject(folder: string): Project {
@@ -416,14 +423,14 @@ export function changeSummary(before: Project | null, after: Project): string {
  const was = new Map((before?.placements ?? []).map(p => [p.id, p])), parts: string[] = [];
  const added = after.placements.filter(p => !was.has(p.id)).length;
  const removed = [...was.keys()].filter(id => !after.placements.some(p => p.id === id)).length;
- const moved = after.placements.filter(p => was.has(p.id) && JSON.stringify([p.pose, p.scale]) !== JSON.stringify([was.get(p.id)!.pose, was.get(p.id)!.scale])).length;
+ const moved = after.placements.filter(p => was.has(p.id) && !same([p.pose, p.scale], [was.get(p.id)!.pose, was.get(p.id)!.scale])).length;
  const rebound = after.placements.filter(p => was.has(p.id) && p.workspace !== was.get(p.id)!.workspace).length;
  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
  if (added) parts.push(`placed ${n(added, 'object', 'objects')}`);
  if (moved) parts.push(`moved ${moved}`);
  if (removed) parts.push(`removed ${removed}`);
  if (rebound) parts.push(`changed ${n(rebound, 'workspace', 'workspaces')}`);
- if (before && JSON.stringify(before.sky) !== JSON.stringify(after.sky)) parts.push('changed the sky');
+ if (before && !same(before.sky, after.sky)) parts.push('changed the sky');
  if (before && before.name !== after.name) parts.push('renamed the world');
  return parts.join(', ');
 }

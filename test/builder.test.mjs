@@ -45,6 +45,10 @@ test('slugs, remotes, published ids and versions',()=>{
  assert.equal(publishedId('ada/Harbour_Plaza'),'io.github.ada.harbour-plaza');
  assert.ok(compareVersions('0.2.0','0.1.9')>0 && compareVersions('1.0.0-rc.1','1.0.0')<0 && compareVersions('1.0.0-rc.2','1.0.0-rc.10')<0);
  assert.equal(changeSummary(null,{placements:[{id:'u-000001'}],sky:{}}),'placed 1 object');
+ // Core rewrites the project file with sorted keys and float formatting: not a change.
+ const pose={position:[1,0,2],rotation:[0,0,0,1]};
+ assert.equal(changeSummary({name:'a',placements:[{id:'u-000001',pose,scale:1}],sky:{image:'s',license:'CC0-1.0',author:'a',source:'b'}},
+  {name:'a',placements:[{id:'u-000001',pose:{rotation:[0,0,0,1],position:[1,0,2]},scale:1.0}],sky:{author:'a',image:'s',license:'CC0-1.0',source:'b'}}),'');
 });
 
 test('create: a git repository with the Flat land starter, made and saved once',async t=>{
