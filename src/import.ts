@@ -7,9 +7,12 @@
 // quantised) and writes object.json and import.json. Sizes over the recommendations are
 // warnings, never refusals (object format 0.11). The heavy dependencies load only here.
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import {lstatSync,readFileSync,readdirSync,statSync} from 'node:fs';
 import {basename,dirname,extname,join,relative} from 'node:path';
+import {register} from 'node:module';
 import type {Document,Node as GltfNode,Primitive,Texture} from '@gltf-transform/core';
+import {decodeImage,encodePng,fitInside} from './pixels.js';
 
 export const IMPORT_FORMATS = {gltf: 'gltf', glb: 'glb', obj: 'obj', fbx: 'fbx', dae: 'dae', '3ds': '3ds', ply: 'ply', stl: 'stl'} as const;
 export type ImportFormat = keyof typeof IMPORT_FORMATS;
@@ -37,6 +40,8 @@ export interface Inspection {
  textures: Array<{name: string; width: number; height: number; mimeType: string}>; maxTexture: number; gpuBytes: number;
  extent: [number, number, number]; unitsGuess: Units; scaleGuess: number; extentMetres: [number, number, number]; up: 'y' | 'z';
  animations: number; skins: number; warnings: string[];
+ /** A suggestion for the author field: the user's git user.name, else empty (never the project's name). */
+ author: string;
  recommendations: {maxTriangles: number; maxTexture: number; overTriangles: boolean; overTexture: boolean};
 }
 export interface ImportBuild {
@@ -49,7 +54,11 @@ const errorWith = (message: string, rule: string) => Object.assign(new Error(mes
 const round4 = (v: number) => Math.round(v * 1e4) / 1e4 + 0;
 
 // ---- loading ----
+let hooked = false;
 async function libs() {
+ // glTF-Transform's functions import ndarray-pixels, whose Node build loads sharp (native):
+ // resolve it to the pure-JavaScript replacement first (pixels-hooks.ts).
+ if (!hooked) {register(new URL('./pixels-hooks.js', import.meta.url)); hooked = true;}
  const core = await import('@gltf-transform/core');
  const ext = await import('@gltf-transform/extensions');
  const fn = await import('@gltf-transform/functions');
@@ -187,6 +196,13 @@ export function guessUnits(extent: number[]): Units {
  return e > 5000 ? 'mm' : e > 50 ? 'cm' : 'm';
 }
 
+/** The user's own name for the author suggestion: git config user.name, else ''. */
+export function userName(): string {
+ try {
+  return execFileSync('git', ['config', '--get', 'user.name'], {encoding: 'utf8', timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'],
+   cwd: process.env.HOME || '/'}).trim().slice(0, 256);
+ } catch {return '';}
+}
 export async function inspectImport(file: string): Promise<Inspection> {
  const L = await libs(), {doc, format, backend, bytes, sha256} = await load(L, file);
  const textures = await textureSizes(L, doc), warnings: string[] = [];
@@ -201,7 +217,7 @@ export async function inspectImport(file: string): Promise<Inspection> {
   nodes: root.listNodes().length, meshes: root.listMeshes().length, materials: root.listMaterials().length, textures, maxTexture,
   gpuBytes: gpuEstimate(doc, textures), extent: extent.map(round4) as [number, number, number], unitsGuess, scaleGuess: UNITS[unitsGuess],
   extentMetres: extent.map(v => round4(v * UNITS[unitsGuess])) as [number, number, number], up: 'y', animations: root.listAnimations().length,
-  skins: root.listSkins().length, warnings,
+  skins: root.listSkins().length, warnings, author: userName(),
   recommendations: {maxTriangles: IMPORT_DEFAULTS.maxTriangles, maxTexture: IMPORT_DEFAULTS.maxTexture,
    overTriangles: tris > IMPORT_DEFAULTS.maxTriangles, overTexture: maxTexture > IMPORT_DEFAULTS.maxTexture}};
 }
@@ -333,7 +349,6 @@ const linearToSrgb = (c: number) => {c = Math.min(1, Math.max(0, c)); return c <
 export interface ThumbTexture {width: number; height: number; rgb: Float32Array}
 export async function renderThumbnail(tris: number[][][], colors: V3[], emissive: V3[], size = 256, ss = 3,
  uvs: Array<number[][] | null> = [], textures: Array<ThumbTexture | null> = []): Promise<Buffer> {
- const sharp = (await import('sharp')).default;
  const n = size * ss, rgb = new Float32Array(n * n * 3), alpha = new Float32Array(n * n), depth = new Float32Array(n * n).fill(-Infinity);
  if (tris.length) {
   const pts = tris.flat();
@@ -392,7 +407,7 @@ export async function renderThumbnail(tris: number[][][], colors: V3[], emissive
   out[o] = a ? Math.round(r / a * 255) : 0; out[o + 1] = a ? Math.round(g / a * 255) : 0; out[o + 2] = a ? Math.round(b / a * 255) : 0;
   out[o + 3] = Math.round(a / (ss * ss) * 255);
  }
- return sharp(out, {raw: {width: size, height: size, channels: 4}}).png({compressionLevel: 9}).toBuffer();
+ return Buffer.from(encodePng({width: size, height: size, data: new Uint8Array(out)}));
 }
 
 // ---- the import ----
@@ -465,7 +480,6 @@ export async function buildImport(file: string, options: ImportOptions = {}, ver
 
  // Textures: shrink to the target side; KTX2 (Basis) for colour textures over 1024 px (auto) or all.
  say('textures');
- const sharp = (await import('sharp')).default;
  const maxSide = options.maxTexture ?? IMPORT_DEFAULTS.maxTexture;
  let resized = 0;
  for (const t of root.listTextures()) {
@@ -473,11 +487,9 @@ export async function buildImport(file: string, options: ImportOptions = {}, ver
   if (!image || mime === 'image/ktx2') continue;
   const size = L.core.ImageUtils.getSize(image, mime);
   if (!size || Math.max(...size) <= maxSide) continue;
-  const png = mime !== 'image/jpeg';
-  const out = await sharp(Buffer.from(image)).resize({width: maxSide, height: maxSide, fit: 'inside'})[png ? 'png' : 'jpeg'](png ? {compressionLevel: 9} : {quality: 90}).toBuffer();
-  t.setImage(new Uint8Array(out)).setMimeType(png ? 'image/png' : 'image/jpeg');
-  if (t.getURI()) t.setURI(t.getURI().replace(/\.[a-z0-9]+$/i, png ? '.png' : '.jpg'));
-  resized++;
+  // glTF-Transform's texture resize (Lanczos 3) through the pure-JavaScript pixels.
+  try {await fn.compressTexture(t, {resize: [maxSide, maxSide], resizeFilter: fn.TextureResizeFilter.LANCZOS3}); resized++;}
+  catch (e: any) {warnings.push(`kept ${t.getName() || t.getURI() || 'a texture'} at ${Math.max(...size)} px (${String(e.message).split('\n')[0]})`);}
  }
  if (resized) steps.push(`shrank ${resized} texture(s) to ${maxSide} px`);
  if (options.lighting === 'unlit') {
@@ -500,11 +512,9 @@ export async function buildImport(file: string, options: ImportOptions = {}, ver
   const tex = m.getBaseColorTexture();
   if (tex?.getImage() && tex.getMimeType() !== 'image/ktx2') {
    try {
-    const {data, info} = await sharp(Buffer.from(tex.getImage()!)).resize({width: 512, height: 512, fit: 'inside', withoutEnlargement: true})
-     .removeAlpha().raw().toBuffer({resolveWithObject: true});
-    const lin = new Float32Array(info.width * info.height * 3);
-    for (let i = 0; i < lin.length; i++) lin[i] = srgbToLinear(data[i] / 255);
-    texture = {width: info.width, height: info.height, rgb: lin};
+    const small = fitInside(decodeImage(tex.getImage()!, tex.getMimeType()), 512), lin = new Float32Array(small.width * small.height * 3);
+    for (let i = 0, j = 0; i < lin.length; i += 3, j += 4) for (let c = 0; c < 3; c++) lin[i + c] = srgbToLinear(small.data[j + c] / 255);
+    texture = {width: small.width, height: small.height, rgb: lin};
    } catch {/* the factor alone */}
   }
   textures.push(texture); colour.push([f[0], f[1], f[2]]); glow.push([e[0], e[1], e[2]]);
@@ -516,10 +526,7 @@ export async function buildImport(file: string, options: ImportOptions = {}, ver
  if (ktx2Mode !== 'off') {
   say('ktx2');
   const {encodeToKTX2} = await import('ktx2-encoder');
-  const imageDecoder = async (buffer: Uint8Array) => {
-   const {data, info} = await sharp(Buffer.from(buffer)).ensureAlpha().raw().toBuffer({resolveWithObject: true});
-   return {data: new Uint8Array(data), width: info.width, height: info.height};
-  };
+  const imageDecoder = async (buffer: Uint8Array) => decodeImage(buffer);
   const started = Date.now();
   let encoded = 0, skipped = 0;
   for (const t of root.listTextures()) {

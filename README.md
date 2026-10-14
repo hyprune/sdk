@@ -159,6 +159,16 @@ read, clean, fit, simplify, textures, collision, thumbnail, ktx2, compress and c
 `import.unsupported`, `import.remote`, `import.draco`, `import.invalid`, `import.empty`,
 `import.limit`, `import.failed`). The import's dependencies load only for this command.
 
+No native code runs: images are decoded, resized (glTF-Transform's Lanczos resize) and
+encoded in JavaScript (pngjs, jpeg-js), KTX2 and Assimp are WebAssembly. glTF-Transform's
+functions depend on `ndarray-pixels`, whose Node build imports `sharp` (native libvips); the
+import resolves `ndarray-pixels` to `src/ndarray-pixels.ts` with a module hook, so `sharp` is
+never loaded. It is still installed as that transitive dependency, but its native binaries are
+`sharp`'s optional dependencies: `npm ci --omit=optional` leaves them out. (npm can't replace
+a transitive dependency with a local stand-in reliably: `file:` overrides resolve relative to
+the dependent package.) `--inspect` suggests the user's `git config user.name` as the author;
+nothing defaults to the project's name. PNG and JPEG textures only (WebP is kept as it is).
+
 `library install` is an alias of `library add` (below) and keeps these forms without a
 confirmation step: a local archive is hashed, checked by the safe extractor and validated,
 then handed to core as `libraries.install {archive, sha256}` when a session grants

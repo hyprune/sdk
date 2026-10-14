@@ -7,7 +7,8 @@ import {mkdirSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {Document,NodeIO} from '@gltf-transform/core';
-import sharp from 'sharp';
+import {createRequire} from 'node:module';
+const {PNG}=createRequire(import.meta.url)('pngjs');
 
 const here=dirname(fileURLToPath(import.meta.url));
 const SEG=128,RINGS=48,HEIGHT=120,RADIUS=35,BULGE=6;
@@ -29,14 +30,14 @@ for(const [z,nz] of [[0,-1],[HEIGHT,1]]){
  for(let s=0;s<SEG;s++)nz>0?idx.push(centre,first+s,first+s+1):idx.push(centre,first+s+1,first+s);
 }
 // Staves: 24 planks with dark seams and three iron hoops, 2048 x 1024.
-const W=2048,H=1024,px=Buffer.alloc(W*H*3);
+const W=2048,H=1024,px=Buffer.alloc(W*H*4,255);
 for(let y=0;y<H;y++)for(let x=0;x<W;x++){
  const stave=Math.floor(x/(W/24)),seam=(x%(W/24))<3,hoop=[.12,.5,.88].some(h=>Math.abs(y/H-h)<.025);
  const grain=.05*Math.sin(stave*7.3)+.03*Math.sin(y*.01+stave);
  const base=hoop?[.18,.18,.2]:seam?[.22,.13,.07]:[.62+grain+.03*(stave%3),.42+grain,.24+grain/2];
- const i=(y*W+x)*3;for(let k=0;k<3;k++)px[i+k]=Math.round(Math.max(0,Math.min(1,base[k]))*255);
+ const i=(y*W+x)*4;for(let k=0;k<3;k++)px[i+k]=Math.round(Math.max(0,Math.min(1,base[k]))*255);
 }
-const png=await sharp(px,{raw:{width:W,height:H,channels:3}}).png({compressionLevel:9}).toBuffer();
+const png=PNG.sync.write({width:W,height:H,data:px},{deflateLevel:9,colorType:2});
 const doc=new Document(),buffer=doc.createBuffer();
 const acc=(type,arr,T)=>doc.createAccessor().setType(type).setArray(new T(arr)).setBuffer(buffer);
 const texture=doc.createTexture('staves').setImage(png).setMimeType('image/png').setURI('staves.png');

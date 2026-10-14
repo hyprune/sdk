@@ -38,6 +38,7 @@ test('inspect: measures without writing; centimetres guessed from the size',asyn
  assert.equal(r.format,'gltf');assert.equal(r.backend,'gltf');assert.equal(r.triangles,12544);assert.equal(r.maxTexture,2048);
  assert.deepEqual(r.extent,[82,82,120]);assert.equal(r.unitsGuess,'cm');assert.deepEqual(r.extentMetres,[0.82,0.82,1.2]);
  assert.equal(r.name,'Barrel');assert.equal(r.id,'barrel');assert.match(r.sha256,/^[0-9a-f]{64}$/);
+ assert.equal(typeof r.author,'string');assert.notEqual(r.author,'Hyprune contributors','the suggestion is the user\'s git name or empty');
 });
 
 test('import a centimetre, Z-up glTF: upright, metres, decimated, KTX2, convex proxy, import.json',async t=>{
@@ -111,4 +112,20 @@ test('CLI --json: JSON lines with stages and a done result, or an error line',as
  assert.equal(doc.event,'done');assert.equal(doc.result.unitsGuess,'cm');
  const bad=run([join(fixtures,'PROVENANCE.md')]),err=JSON.parse(bad.stdout.trim().split('\n').at(-1));
  assert.equal(bad.status,1);assert.deepEqual(Object.keys(err),['event','error']);assert.equal(err.error.rule,'import.unsupported');
+});
+
+test('no native image code: the import never loads sharp (textures resize, KTX2 and thumbnails in JavaScript)',async t=>{
+ const root=temp(t);
+ // A child process where resolving sharp fails: the import must still resize, encode and render.
+ const hook='data:text/javascript,'+encodeURIComponent("export async function resolve(s,c,n){if(s==='sharp'||s.startsWith('@img/'))throw new Error('sharp loaded');return n(s,c);}");
+ const script=`import {register} from 'node:module';register(${JSON.stringify(hook)});
+  const {importObject}=await import(${JSON.stringify(new URL('../dist/src/object-cli.js',import.meta.url).href)});
+  const r=await importObject(${JSON.stringify(BARREL)},{root:${JSON.stringify(root)},up:'z',maxTexture:512,ktx2:'all'});
+  console.log(JSON.stringify({maxTexture:r.after.maxTexture,warnings:r.warnings,steps:r.steps}));`;
+ const run=spawnSync('node',['--input-type=module','-e',script],{encoding:'utf8'});
+ assert.equal(run.status,0,run.stderr);
+ const r=JSON.parse(run.stdout.trim().split('\n').at(-1));
+ assert.equal(r.maxTexture,512);assert.deepEqual(r.warnings,[]);
+ assert.ok(r.steps.some(s=>s.startsWith('KTX2')),JSON.stringify(r.steps));
+ assert.ok(readFileSync(join(root,'barrel/thumbnail.png')).length>1000);
 });
