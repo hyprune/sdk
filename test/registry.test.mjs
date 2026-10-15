@@ -217,3 +217,34 @@ test('archive URL sources: the tag comes from a release asset URL, else v<versio
  fake.indexes.set('x',archive);
  assert.equal((await registry.archiveEntry(`${fake.base}/index/x.json`,sha(archive),ctx)).versions[0].tag,'v1.0.0');
 });
+
+test('content sources: their own file, migrated out of the data-source helper\'s sources.json',async t=>{
+ const {loadConfig,saveConfig,migrateLegacySources}=registry;
+ const root=await tempDir(t),env=isolatedEnv(root),dir=join(root,'config','hyprune');
+ await mkdir(dir,{recursive:true});
+ const legacy=join(dir,'sources.json'),file=join(dir,'content-sources.json');
+ // The helper's file alone (a machine's data source): left untouched, content sources default.
+ const helper={client:{id:'com.hyprune.sources'},sources:[{id:'x.1',argv:['/bin/echo','1'],intervalS:5}]};
+ await writeFile(legacy,JSON.stringify(helper));
+ assert.equal(loadConfig({env}).custom.length,0);
+ assert.deepEqual(JSON.parse(await readFile(legacy,'utf8')),helper);
+ assert.equal(existsSync(file),false);
+ // Saving content sources writes content-sources.json and keeps the helper's file as it was.
+ const config=loadConfig({env});config.builtin.community.enabled=false;saveConfig(config,{env});
+ assert.equal(JSON.parse(await readFile(file,'utf8')).builtin.community.enabled,false);
+ assert.deepEqual(JSON.parse(await readFile(legacy,'utf8')),helper);
+ // A file both programs wrote: the content keys move, the helper keeps its own.
+ const root2=await tempDir(t),env2=isolatedEnv(root2),dir2=join(root2,'config','hyprune');
+ await mkdir(dir2,{recursive:true});
+ const custom=[{id:'franks-stuff',label:'Frank\'s stuff',kind:'index',url:'https://example.org/hyprune/v0.1/index.json',enabled:true,added:'2026-11-01'}];
+ await writeFile(join(dir2,'sources.json'),JSON.stringify({version:1,builtin:{official:{enabled:true},community:{enabled:true}},custom,...helper}));
+ assert.equal(loadConfig({env:env2}).custom[0].id,'franks-stuff');
+ assert.deepEqual(JSON.parse(await readFile(join(dir2,'sources.json'),'utf8')),helper);
+ assert.equal(migrateLegacySources({env:env2}),false,'migrates once');
+ // A file with content sources only: moved, and the old file removed.
+ const root3=await tempDir(t),env3=isolatedEnv(root3),dir3=join(root3,'config','hyprune');
+ await mkdir(dir3,{recursive:true});
+ await writeFile(join(dir3,'sources.json'),JSON.stringify({version:1,builtin:{official:{enabled:true},community:{enabled:false}},custom:[]}));
+ assert.equal(loadConfig({env:env3}).builtin.community.enabled,false);
+ assert.equal(existsSync(join(dir3,'sources.json')),false);
+});

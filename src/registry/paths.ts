@@ -16,8 +16,10 @@ export interface ContentRoots {
  systemLibraries:string[];
  /** $XDG_STATE_HOME/hyprune: content.json and content.lock. */
  state:string;
- /** $XDG_CONFIG_HOME/hyprune/sources.json. */
+ /** $XDG_CONFIG_HOME/hyprune/content-sources.json (sources.json belongs to the RFC-0013 data-source helper). */
  sourcesFile:string;
+ /** $XDG_CONFIG_HOME/hyprune/sources.json: where content sources lived before; migrated once. */
+ legacySourcesFile:string;
  /** $HYPRUNE_SOURCES_FILES entries (absolute, read-only). */
  systemSourcesFiles:string[];
  /** $XDG_CACHE_HOME/hyprune: sources/, downloads/, thumbnails/. */
@@ -28,5 +30,5 @@ export function contentRoots(env:Env=process.env):ContentRoots {
  const data=dataHome(env),libraries=join(data,'hyprune','libraries');
  return {worlds:env.HYPRUNE_WORLD_DIR?resolve(env.HYPRUNE_WORLD_DIR):join(data,'hyprune','worlds'),libraries,
   systemLibraries:list(env.HYPRUNE_LIBRARY_DIR).filter(p=>resolve(p)!==libraries),state:join(stateHome(env),'hyprune'),
-  sourcesFile:join(configHome(env),'hyprune','sources.json'),systemSourcesFiles:list(env.HYPRUNE_SOURCES_FILES),cache:join(cacheHome(env),'hyprune')};
+  sourcesFile:join(configHome(env),'hyprune','content-sources.json'),legacySourcesFile:join(configHome(env),'hyprune','sources.json'),systemSourcesFiles:list(env.HYPRUNE_SOURCES_FILES),cache:join(cacheHome(env),'hyprune')};
 }

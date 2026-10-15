@@ -13,7 +13,7 @@ anything here except the fetch helper.
 | User libraries | `$XDG_DATA_HOME/hyprune/libraries/<id>@<version>/` |
 | System libraries | each directory of `$HYPRUNE_LIBRARY_DIR` (read-only, `managed: "system"`) |
 | Install records | `$XDG_STATE_HOME/hyprune/content.json` (`version: 1`), lock `content.lock` |
-| Sources | `$XDG_CONFIG_HOME/hyprune/sources.json`; read-only files in `$HYPRUNE_SOURCES_FILES` |
+| Sources | `$XDG_CONFIG_HOME/hyprune/content-sources.json` (moved out of `sources.json`, the RFC-0013 data-source helper's file, on first use); read-only files in `$HYPRUNE_SOURCES_FILES` |
 | Index cache | `$XDG_CACHE_HOME/hyprune/sources/<id>/{index.json,meta.json}` |
 | Downloads | `$XDG_CACHE_HOME/hyprune/downloads/<sha256>.tar.zst` (`.part` while downloading; pruned after commit, leftovers after 7 days) |
 | Thumbnails | `$XDG_CACHE_HOME/hyprune/thumbnails/<sha256>.png|.jpg` (verified) |

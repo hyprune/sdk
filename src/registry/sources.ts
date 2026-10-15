@@ -1,8 +1,8 @@
 // Sources (RFC-0015 "Sources", "Custom sources", "Labels"): the built-in official and
 // community registry indexes (can be disabled, never removed or relabelled) and up to 32
 // custom sources (index URL, github: repository, package URL), each with a user label that
-// always displays behind its kind. sources.json is replaced atomically with mode 0600.
-import {existsSync,mkdirSync,readFileSync,readdirSync,renameSync,rmSync,writeFileSync,mkdtempSync} from 'node:fs';
+// always displays behind its kind. content-sources.json is replaced atomically with mode 0600.
+import {existsSync,mkdirSync,readFileSync,readdirSync,renameSync,rmSync,writeFileSync,mkdtempSync,unlinkSync} from 'node:fs';
 import {join,dirname} from 'node:path';
 import {fail,RegistryError} from './errors.js';
 import {fetchBytes,fetchJson,download,allowedUrl,sha256,FETCH_LIMITS,type FetchContext} from './fetch.js';
@@ -70,12 +70,37 @@ export function writeJsonAtomic(path:string,value:unknown):void {
  writeFileSync(temp,JSON.stringify(value,null,2)+'\n',{mode:0o600});
  renameSync(temp,path);
 }
+const CONTENT_KEYS=['version','builtin','custom'] as const;
+/** Content sources used to live in sources.json, the RFC-0013 data-source helper's file (an
+ * object with a `sources` list, written whenever a machine gets a source): either program then
+ * found the other's keys and refused the file. The first read moves `version`, `builtin` and
+ * `custom` into content-sources.json and leaves the helper's keys in sources.json (removing
+ * the file when nothing else is left). */
+export function migrateLegacySources(ctx:Context={}):boolean {
+ const roots=rootsOf(ctx);
+ if(existsSync(roots.sourcesFile) || !existsSync(roots.legacySourcesFile)) return false;
+ let doc:any;
+ try {doc=parseJson(readFileSync(roots.legacySourcesFile,'utf8'));} catch {return false;}
+ if(!doc || typeof doc!=='object' || Array.isArray(doc) || !('builtin' in doc || 'custom' in doc)) return false;
+ const content:any={version:doc.version ?? 1};
+ if('builtin' in doc) content.builtin=doc.builtin;
+ if('custom' in doc) content.custom=doc.custom;
+ const r=validateRegistry('sources',forSchema(content,envOf(ctx)));
+ if(!r.valid) return false;
+ writeJsonAtomic(roots.sourcesFile,content);
+ const rest=Object.fromEntries(Object.entries(doc).filter(([k])=>!(CONTENT_KEYS as readonly string[]).includes(k)));
+ if(Object.keys(rest).length) writeJsonAtomic(roots.legacySourcesFile,rest);
+ else unlinkSync(roots.legacySourcesFile);
+ return true;
+}
 export function loadConfig(ctx:Context={}):SourcesConfig {
- return readConfig(rootsOf(ctx).sourcesFile,'sources.json',envOf(ctx)) ?? {version:1,builtin:{official:{enabled:true},community:{enabled:true}},custom:[]};
+ migrateLegacySources(ctx);
+ return readConfig(rootsOf(ctx).sourcesFile,'content-sources.json',envOf(ctx)) ?? {version:1,builtin:{official:{enabled:true},community:{enabled:true}},custom:[]};
 }
 export function saveConfig(config:SourcesConfig,ctx:Context={}):void {
  const r=validateRegistry('sources',forSchema(config,envOf(ctx)));
- if(!r.valid) fail('source.invalid',`sources.json: ${r.errors[0]}`);
+ if(!r.valid) fail('source.invalid',`content-sources.json: ${r.errors[0]}`);
+ migrateLegacySources(ctx);
  writeJsonAtomic(rootsOf(ctx).sourcesFile,config);
 }
 /** Every source in resolution order: official, community registry, user custom sources, then system ones. */
