@@ -16630,6 +16630,21 @@
             }
           ],
           "description": "A user placement's key, else null."
+        },
+        "behaviours": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/behaviourState"
+              },
+              "maxItems": 8
+            }
+          ],
+          "description": "A user placement's behaviours now: the value read, its condition and t (0..1, before smoothing); null without any."
         }
       },
       "required": [
@@ -16651,7 +16666,8 @@
         "accent",
         "screen",
         "style",
-        "key"
+        "key",
+        "behaviours"
       ],
       "additionalProperties": false
     },
@@ -17940,6 +17956,14 @@
                 }
               ],
               "description": "Name or rename the placement (null removes the key)."
+            },
+            "behaviours": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/behaviour"
+              },
+              "maxItems": 8,
+              "description": "The placement's behaviours, the whole list ([] removes them); user placements only."
             }
           },
           "minProperties": 1,
@@ -21849,6 +21873,626 @@
         "shape",
         "size",
         "material"
+      ],
+      "additionalProperties": false
+    },
+    "behaviour": {
+      "description": "A data-driven display behaviour (RFC-0014 amendment): one published value drives one property between A (from) and B (to). Display only.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,47}$"
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "maxLength": 128,
+                  "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$",
+                  "description": "Default com.hyprune.sources.<placement id> (as a gauge)."
+                },
+                "key": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,63}$",
+                  "description": "Default value."
+                },
+                "min": {
+                  "type": "number",
+                  "minimum": -1000000000.0,
+                  "maximum": 1000000000.0
+                },
+                "max": {
+                  "type": "number",
+                  "minimum": -1000000000.0,
+                  "maximum": 1000000000.0
+                }
+              },
+              "additionalProperties": false,
+              "description": "The value read: min..max (default 0..100) maps to A..B."
+            },
+            "easing": {
+              "enum": [
+                "linear",
+                "ease-in",
+                "ease-out",
+                "ease-in-out",
+                "step"
+              ]
+            },
+            "smoothing": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 10,
+              "description": "Seconds to follow a change (default 0.3)."
+            },
+            "property": {
+              "const": "scale"
+            },
+            "anchor": {
+              "enum": [
+                "bottom",
+                "top",
+                "left",
+                "right",
+                "front",
+                "back",
+                "centre"
+              ]
+            },
+            "from": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 100
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "to": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 100
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          },
+          "required": [
+            "key",
+            "property",
+            "from",
+            "to"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,47}$"
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "maxLength": 128,
+                  "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$",
+                  "description": "Default com.hyprune.sources.<placement id> (as a gauge)."
+                },
+                "key": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,63}$",
+                  "description": "Default value."
+                },
+                "min": {
+                  "type": "number",
+                  "minimum": -1000000000.0,
+                  "maximum": 1000000000.0
+                },
+                "max": {
+                  "type": "number",
+                  "minimum": -1000000000.0,
+                  "maximum": 1000000000.0
+                }
+              },
+              "additionalProperties": false,
+              "description": "The value read: min..max (default 0..100) maps to A..B."
+            },
+            "easing": {
+              "enum": [
+                "linear",
+                "ease-in",
+                "ease-out",
+                "ease-in-out",
+                "step"
+              ]
+            },
+            "smoothing": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 10,
+              "description": "Seconds to follow a change (default 0.3)."
+            },
+            "property": {
+              "const": "move"
+            },
+            "from": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": -100,
+                "maximum": 100
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "to": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": -100,
+                "maximum": 100
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          },
+          "required": [
+            "key",
+            "property",
+            "from",
+            "to"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,47}$"
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "maxLength": 128,
+                  "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$",
+                  "description": "Default com.hyprune.sources.<placement id> (as a gauge)."
+                },
+                "key": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,63}$",
+                  "description": "Default value."
+                },
+                "min": {
+                  "type": "number",
+                  "minimum": -1000000000.0,
+                  "maximum": 1000000000.0
+                },
+                "max": {
+                  "type": "number",
+                  "minimum": -1000000000.0,
+                  "maximum": 1000000000.0
+                }
+              },
+              "additionalProperties": false,
+              "description": "The value read: min..max (default 0..100) maps to A..B."
+            },
+            "easing": {
+              "enum": [
+                "linear",
+                "ease-in",
+                "ease-out",
+                "ease-in-out",
+                "step"
+              ]
+            },
+            "smoothing": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 10,
+              "description": "Seconds to follow a change (default 0.3)."
+            },
+            "property": {
+              "const": "rotate"
+            },
+            "anchor": {
+              "enum": [
+                "bottom",
+                "top",
+                "left",
+                "right",
+                "front",
+                "back",
+                "centre"
+              ]
+            },
+            "from": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": -3600,
+                "maximum": 3600
+              },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "to": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": -3600,
+                "maximum": 3600
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          },
+          "required": [
+            "key",
+            "property",
+            "from",
+            "to"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,47}$"
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "maxLength": 128,
+                  "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$",
+                  "description": "Default com.hyprune.sources.<placement id> (as a gauge)."
+                },
+                "key": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,63}$",
+                  "description": "Default value."
+                },
+                "min": {
+                  "type": "number",
+                  "minimum": -1000000000.0,
+                  "maximum": 1000000000.0
+                },
+                "max": {
+                  "type": "number",
+                  "minimum": -1000000000.0,
+                  "maximum": 1000000000.0
+                }
+              },
+              "additionalProperties": false,
+              "description": "The value read: min..max (default 0..100) maps to A..B."
+            },
+            "easing": {
+              "enum": [
+                "linear",
+                "ease-in",
+                "ease-out",
+                "ease-in-out",
+                "step"
+              ]
+            },
+            "smoothing": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 10,
+              "description": "Seconds to follow a change (default 0.3)."
+            },
+            "property": {
+              "const": "colour"
+            },
+            "from": {
+              "type": "string",
+              "pattern": "^#[0-9a-f]{6}$"
+            },
+            "to": {
+              "type": "string",
+              "pattern": "^#[0-9a-f]{6}$"
+            }
+          },
+          "required": [
+            "key",
+            "property",
+            "from",
+            "to"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,47}$"
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "maxLength": 128,
+                  "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$",
+                  "description": "Default com.hyprune.sources.<placement id> (as a gauge)."
+                },
+                "key": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,63}$",
+                  "description": "Default value."
+                },
+                "min": {
+                  "type": "number",
+                  "minimum": -1000000000.0,
+                  "maximum": 1000000000.0
+                },
+                "max": {
+                  "type": "number",
+                  "minimum": -1000000000.0,
+                  "maximum": 1000000000.0
+                }
+              },
+              "additionalProperties": false,
+              "description": "The value read: min..max (default 0..100) maps to A..B."
+            },
+            "easing": {
+              "enum": [
+                "linear",
+                "ease-in",
+                "ease-out",
+                "ease-in-out",
+                "step"
+              ]
+            },
+            "smoothing": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 10,
+              "description": "Seconds to follow a change (default 0.3)."
+            },
+            "property": {
+              "const": "glow"
+            },
+            "from": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 16
+            },
+            "to": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 16
+            },
+            "colour": {
+              "type": "string",
+              "pattern": "^#[0-9a-f]{6}$"
+            }
+          },
+          "required": [
+            "key",
+            "property",
+            "from",
+            "to"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,47}$"
+            },
+            "property": {
+              "const": "visible"
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "maxLength": 128,
+                  "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$",
+                  "description": "Default com.hyprune.sources.<placement id> (as a gauge)."
+                },
+                "key": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,63}$",
+                  "description": "Default value."
+                },
+                "min": {
+                  "type": "number",
+                  "minimum": -1000000000.0,
+                  "maximum": 1000000000.0
+                },
+                "max": {
+                  "type": "number",
+                  "minimum": -1000000000.0,
+                  "maximum": 1000000000.0
+                }
+              },
+              "additionalProperties": false,
+              "description": "The value read: min..max (default 0..100) maps to A..B."
+            },
+            "above": {
+              "type": "number",
+              "minimum": -1000000000.0,
+              "maximum": 1000000000.0
+            },
+            "below": {
+              "type": "number",
+              "minimum": -1000000000.0,
+              "maximum": 1000000000.0
+            }
+          },
+          "required": [
+            "key",
+            "property"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,47}$"
+            },
+            "input": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "maxLength": 128,
+                  "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)+$",
+                  "description": "Default com.hyprune.sources.<placement id> (as a gauge)."
+                },
+                "key": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.-]{0,63}$",
+                  "description": "Default value."
+                },
+                "min": {
+                  "type": "number",
+                  "minimum": -1000000000.0,
+                  "maximum": 1000000000.0
+                },
+                "max": {
+                  "type": "number",
+                  "minimum": -1000000000.0,
+                  "maximum": 1000000000.0
+                }
+              },
+              "additionalProperties": false,
+              "description": "The value read: min..max (default 0..100) maps to A..B."
+            },
+            "easing": {
+              "enum": [
+                "linear",
+                "ease-in",
+                "ease-out",
+                "ease-in-out",
+                "step"
+              ]
+            },
+            "smoothing": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 10,
+              "description": "Seconds to follow a change (default 0.3)."
+            },
+            "property": {
+              "const": "texture"
+            },
+            "mode": {
+              "enum": [
+                "offset",
+                "scroll"
+              ]
+            },
+            "from": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": -1000,
+                "maximum": 1000
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "to": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": -1000,
+                "maximum": 1000
+              },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "required": [
+            "key",
+            "property",
+            "from",
+            "to"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "behaviourState": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,47}$"
+        },
+        "property": {
+          "enum": [
+            "scale",
+            "move",
+            "rotate",
+            "colour",
+            "glow",
+            "visible",
+            "texture"
+          ]
+        },
+        "condition": {
+          "enum": [
+            "fresh",
+            "stale",
+            "missing",
+            "error"
+          ]
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string",
+              "maxLength": 64
+            }
+          ]
+        },
+        "t": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "key",
+        "property",
+        "condition",
+        "value",
+        "t"
       ],
       "additionalProperties": false
     }

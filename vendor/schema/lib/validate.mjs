@@ -615,6 +615,17 @@ function validateLibraryReleases(value, fail) {
   }
 }
 
+// Data-driven behaviours (RFC-0014 amendment): keys unique, min and max differ, visible has a threshold.
+function behaviourRules(list, fail) {
+  if (!Array.isArray(list)) return;
+  const keys = new Set();
+  for (const b of list) {
+    if (keys.has(b.key)) fail(`behaviour key ${b.key} is used twice`); keys.add(b.key);
+    if (b.input && b.input.min !== undefined && b.input.max !== undefined && b.input.min === b.input.max) fail(`behaviour ${b.key}: input.min and input.max differ`);
+    if (b.property === 'visible' && b.above === undefined && b.below === undefined) fail(`behaviour ${b.key}: visible needs above, below or both`);
+  }
+}
+export { behaviourRules };
 // Object and library manifests default to their own formatVersion; the release
 // record to the newest directory that defines it. Results add `warnings`.
 function validateManifestKind(kind, value, method, version, options) {
@@ -664,6 +675,7 @@ function validateManifestKind(kind, value, method, version, options) {
     for (const p of value.placements) {
       if (ids.has(p.id)) fail(`placements: duplicate id ${p.id}`); ids.add(p.id);
       if (p.key !== undefined) { if (keys.has(p.key)) fail(`placements ${p.id}: key ${p.key} names another placement`); keys.add(p.key); }
+      behaviourRules(p.behaviours, m => fail(`placements ${p.id}: ${m}`));
       if (Math.abs(Math.hypot(...p.pose.rotation) - 1) > 0.002) fail(`placements ${p.id}: quaternion must be normalized`);
       if (p.workspace !== undefined) { if (workspaces.has(p.workspace)) fail(`placements ${p.id}: workspace ${p.workspace} is shown by another screen`); workspaces.add(p.workspace); }
     }
