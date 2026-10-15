@@ -379,7 +379,8 @@ export async function buildPrimitive(spec: PrimitiveSpec, material: Material, ve
  const colour: V3 = thumbTex ? [1, 1, 1] : lin, glow: V3 = mr.emissive ? linear(mr.emissive.colour).map(v => v * Math.min(1, mr.emissive!.strength) * 0.8) as V3 : [0, 0, 0];
  const thumbnail = await renderThumbnail(tris, tris.map(() => colour), tris.map(() => glow), 256, 3, uvs.map(t => t.map(p => [p[0] / tile, p[1] / tile])), tris.map(() => thumbTex));
  const textured = !!mr.texture, license = textured ? mr.license : 'CC0-1.0', author = textured ? mr.author : 'Hyprune contributors';
- const dims = s.shape === 'cube' ? `${fmt(s.size[0])} m` : `${s.size.map(fmt).join(' × ')} m`;
+ // Plain "x" between sizes: names are drawn in the world, whose label font is ASCII.
+ const dims = s.shape === 'cube' ? `${fmt(s.size[0])} m` : `${s.size.map(fmt).join(' x ')} m`;
  const name = `${SHAPE_NAMES[s.shape]} ${dims}${mr.key !== INLINE ? ` (${mr.name})` : ''}`.slice(0, 64);
  const manifest: Record<string, unknown> = {
   formatVersion: '0.11', id, version: '1.0.0', name, description: `A generated ${s.shape}${s.steps ? ` with ${s.steps} steps` : ''}, ${dims}, in ${mr.name}.`.slice(0, 512),
