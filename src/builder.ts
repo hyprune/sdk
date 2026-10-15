@@ -47,7 +47,7 @@ export interface Project {
 export type SkyChoice = {preset: string} | ({image: string} & Provenance);
 /** A floor: a built-in preset, or the user's tileable PNG or JPEG repeated every `tile` metres; `tile` alone re-tiles. */
 export type FloorChoice = {preset: string; tile?: number} | ({image: string; tile?: number} & Provenance) | {tile: number};
-/** A spawn: a position on the plain and a yaw in degrees (counter-clockwise about +Y; 0 faces -Z), or a facing relative to the sun. */
+/** A spawn: a position on the plain and a yaw in degrees (a heading, as core's camera: 0 faces -Z, 90 faces +X), or a facing relative to the sun. */
 export interface SpawnChoice {position?: number[]; yaw?: number; facing?: 'sun' | 'away' | 'left' | 'right'}
 export interface Pending {added: number; modified: number; deleted: number; total: number}
 export interface Status {
@@ -411,13 +411,14 @@ function spawnPose(choice: SpawnChoice, sun: V3): {position: number[]; rotation:
   const l = Math.hypot(sun[0], sun[2]) || 1, sx = sun[0] / l, sz = sun[2] / l;
   // The ground direction to face: towards the sun, away from it, or with the sun on the left or right.
   const f = {sun: [sx, sz], away: [-sx, -sz], left: [-sz, sx], right: [sz, -sx]}[facing]!;
-  yaw = Math.atan2(-f[0], -f[1]) * 180 / Math.PI;
+  yaw = Math.atan2(f[0], -f[1]) * 180 / Math.PI;
  }
  yaw = Math.round((((yaw % 360) + 540) % 360 - 180) * 100) / 100 + 0;
- const half = yaw * Math.PI / 360;
+ // Headings turn right; the quaternion turns about world +Y, so by -yaw.
+ const half = -yaw * Math.PI / 360;
  return {position: position.map(v => Math.round(v * 1e4) / 1e4 + 0), rotation: [0, Math.round(Math.sin(half) * 1e6) / 1e6 + 0, 0, Math.round(Math.cos(half) * 1e6) / 1e6 + 0], yaw};
 }
-const yawOf = (q: number[]) => Math.round(2 * Math.atan2(q[1], q[3]) * 180 / Math.PI * 100) / 100 + 0;
+const yawOf = (q: number[]) => Math.round(-2 * Math.atan2(q[1], q[3]) * 180 / Math.PI * 100) / 100 + 0;
 /** A 0.1 project becomes 0.2 the first time it gets a preset or a floor (its starter stays Flat land). */
 const upgraded = (p: Project): Project => p.projectVersion === '0.2' ? p : {...p, projectVersion: '0.2'};
 const sunOf = (base: any): V3 => base?.atmosphere?.sky?.sun?.direction ?? SKY_PRESETS[0].sun.direction;

@@ -244,8 +244,8 @@ test('wizard: presets, a spawn facing the sun, dry run, if-exists and clear erro
  const sunset=SKY_PRESETS.find(p=>p.id==='sunset');
  assert.deepEqual(base.atmosphere.sky.horizon,sunset.horizon);assert.equal(base.atmosphere.exposure,sunset.exposure);
  assert.equal(glbImageMime(c.folder),'image/jpeg');
- // Facing the sun: the view direction (-Z turned by yaw about +Y) points at the sun across the ground.
- const s=status(c.folder),yaw=s.spawn.yaw*Math.PI/180,view=[-Math.sin(yaw),-Math.cos(yaw)],sun=sunset.sun.direction,l=Math.hypot(sun[0],sun[2]);
+ // Facing the sun: the heading (0 faces -Z, +yaw turns right, as core's camera) points at the sun across the ground.
+ const s=status(c.folder),yaw=s.spawn.yaw*Math.PI/180,view=[Math.sin(yaw),-Math.cos(yaw)],sun=sunset.sun.direction,l=Math.hypot(sun[0],sun[2]);
  assert.ok(Math.abs(view[0]-sun[0]/l)<1e-3 && Math.abs(view[1]-sun[2]/l)<1e-3,JSON.stringify([view,sun]));
  assert.deepEqual(s.spawn.position,[2,0,-3]);assert.equal(s.starter,'open-plain@0.2');assert.equal(s.floor.preset,'grass');
  const world=JSON.parse(readFileSync(join(c.folder,'world.json'),'utf8'));

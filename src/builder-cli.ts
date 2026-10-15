@@ -9,7 +9,7 @@ export const builderHelp=`hyprune builder create NAME [--starter open-plain] [SK
     [--git-name N --git-email E] [--json]
       SKY:   --sky PRESET | --sky-image FILE --sky-license SPDX --sky-author A --sky-source S
       FLOOR: --floor PRESET | --floor-image FILE --floor-license SPDX --floor-author A --floor-source S; --tile METRES
-      SPAWN: --spawn X,Y,Z; --yaw DEGREES | --facing sun|away|left|right
+      SPAWN: --spawn X,Y,Z; --yaw DEGREES (a heading: 0 faces -Z, 90 faces +X) | --facing sun|away|left|right
 hyprune builder starters|skies|floors [--thumbnails DIR] [--json]
 hyprune builder list [--json]
 hyprune builder status PROJECT [--json]
