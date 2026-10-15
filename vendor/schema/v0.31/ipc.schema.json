@@ -22485,6 +22485,9 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1
+        },
+        "behaviour": {
+          "$ref": "#/$defs/behaviour"
         }
       },
       "required": [
@@ -22492,7 +22495,8 @@
         "property",
         "condition",
         "value",
-        "t"
+        "t",
+        "behaviour"
       ],
       "additionalProperties": false
     }
