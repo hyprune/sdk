@@ -39,7 +39,7 @@ export async function main(argv=process.argv.slice(2)):Promise<void> {
   console.log(JSON.stringify(await validateObject(arg,{measured}),null,2));return;
  }
  if(group==='library' && verb==='check' && arg) {console.log(JSON.stringify(await validateLibrary(arg),null,2));return;}
- // The shared clip library (draft): a motion pack directory (motion.json and its rigs).
+ // The shared clip library: a motion pack directory (motion.json and its rigs).
  if(group==='motion' && verb==='check' && arg) {const {manifest,...rest}=await validateMotionPack(arg);console.log(JSON.stringify({id:manifest.id,skeleton:manifest.skeleton.id,...rest},null,2));return;}
  if(group==='ext' && verb==='new' && arg) {console.log(scaffold(arg as ExtensionType,extra || arg,v.id));return;}
  if(group==='ipc' && ['call','subscribe'].includes(verb)) {

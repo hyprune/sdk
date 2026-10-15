@@ -260,7 +260,7 @@ Starting state, targets, transactions, commands and timing are checked before li
 
 Programmatic harnesses can use `commit`, `runAction`, `objects` (the 0.22 engine), `npcs` (the 0.23 engine), `project(snapshot, protocol)` (0.24: `liveView`, 0.25: `companionView`, 0.26: `debugToolView`, 0.27: `screensView`), `companion` (the 0.25 engine), `hold`, `escape`, `use`, `drawPoint`, `setPowerProfile`, `disconnectClients`, `revokeClients`, `stop`. Restart creates a new session. Scenarios use real timers, not deterministic physics replay. No scenario action installs an extension, loads arbitrary code or injects input into the owner's compositor.
 
-## Character styles and dances (IPC 0.28, draft)
+## Character styles and dances (IPC 0.28)
 
 `--protocol 0.28` negotiates 0.28 next to every older version. Catalog entries carry `motion`:
 null for objects that are no character, else the same fixed motion for every character, as if

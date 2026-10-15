@@ -14,7 +14,7 @@ export interface CompanionWorld {id:string|null;position:number[];orientation:nu
 export const COMPANION_ID='companion';
 export const COMPANION_REQUIREMENTS={'companion.set':'objects.control','companion.clear':'objects.control','companion.mode':'objects.control'} as const;
 /**
- * IPC 0.28 (draft, the shared clip library): the motion the mock lists for every character, as if
+ * IPC 0.28 (the shared clip library): the motion the mock lists for every character, as if
  * the starter and companion motion packs were installed (core binds them per character).
  */
 export const MOCK_MOTION={skeleton:'mixamo-v1',styles:{walk:['confident','stroll','groovy'],run:['fast','loose'],idle:['calm','preen']},

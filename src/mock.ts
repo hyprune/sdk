@@ -36,7 +36,7 @@ export const COMPANION_PROTOCOL='0.25' satisfies Protocol;
 export const DEBUG_TOOL_PROTOCOL='0.26' satisfies Protocol;
 /** Workspace screens (object format 0.11): catalog and instance screen fields, objects.place/configure workspace. */
 export const SCREENS_PROTOCOL='0.27' satisfies Protocol;
-/** The shared clip library (draft): character styles, catalog motion, companion dances. */
+/** The shared clip library: character styles, catalog motion, companion dances. */
 export const MOTION_PROTOCOL='0.28' satisfies Protocol;
 /**
  * The projections the mock serves: 0.1, 0.2 and the feature versions it models. A listener

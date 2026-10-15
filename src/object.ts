@@ -149,7 +149,7 @@ export async function validateLibrary(directory:string):Promise<LibraryCheck> {
    warnings.push(...o.warnings.map(w=>`objects/${name}: ${w}`));
   } catch(e:any) {errors.push(...e.message.split('\n').map((m:string)=>`objects/${name}: ${m}`));}
  }
- // Motion packs a library ships (the shared clip library, draft): motion/<id>/.
+ // Motion packs a library ships (the shared clip library): motion/<id>/.
  const motionDir=join(root,'motion');
  for(const name of existsSync(motionDir) && lstatSync(motionDir).isDirectory()?readdirSync(motionDir).sort():[]) {
   try {const m=await validateMotionPack(join(motionDir,name));if(m.manifest.id!==name) errors.push(`motion/${name}: motion.json has id ${m.manifest.id}`);}
@@ -208,7 +208,7 @@ const MIXAMO_V1=['hips','spine','head','leftarm','rightarm','leftupleg','leftleg
 /** A bone's canonical key (as core matches bones): the name after the last ':', lower case. */
 export function canonicalBone(name:string):string {return name.slice(name.lastIndexOf(':')+1).toLowerCase();}
 /**
- * A motion pack directory (the shared clip library, draft): motion.json (motion format 0.1) and
+ * A motion pack directory (the shared clip library): motion.json (motion format 0.1) and
  * its clips-only rigs, nothing else. Each rig is a glTF with a skin (and no mesh: clips only)
  * whose joints have the skeleton's bones (mixamo-v1: the humanoid set) and the animations the
  * clips name. Throws with every problem.

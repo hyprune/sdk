@@ -5,7 +5,7 @@ import {validateMotion,motionVersions,motionClipName} from '../vendor/schema/lib
 export {upstream as validateManifest,objectFormats,objectLimits,objectHardCaps,worldFormats};
 // RFC-0015 registry documents (index, entry, release record, sources.json) and SemVer helpers.
 export {validateRegistry,registryVersions,registryLimits,parseSemver,compareSemver,tagVersion};
-// Motion packs (the shared clip library, draft): motion.json 0.1.
+// Motion packs (the shared clip library): motion.json 0.1.
 export {validateMotion,motionVersions,motionClipName};
 /** The shared contract-version comparison (numeric, never a hand-kept list). */
 export {atLeast};
