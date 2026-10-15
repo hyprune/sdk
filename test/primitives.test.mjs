@@ -98,9 +98,11 @@ test('object directories: valid, idempotent, rebuilt and swapped after a materia
  const rec=JSON.parse(readFileSync(join(a.path,'primitive.json'),'utf8'));
  assert.deepEqual(validateManifest('primitive',rec).errors,[]);
  assert.deepEqual([rec.shape,rec.size,rec.material.key,rec.material.textured],['box',[2,1,0.3],'brick',true]);
+ const glowing=await writePrimitive(objects,'world',{shape:'box',size:[0.5,2,0.5]},plainMaterial({colour:'#202020',emissive:{colour:'#30e0ff',strength:4}}));
+ assert.deepEqual(JSON.parse(readFileSync(join(glowing.path,'primitive.json'),'utf8')).material.emissive,{colour:'#30e0ff',strength:4});
  assert.equal((await writePrimitive(objects,'world',{shape:'box',size:[2,1,0.3]},brick)).created,false,'same request, same directory');
  assert.equal((await writePrimitive(objects,'world',{shape:'box',size:[2,1,0.4]},brick,{dryRun:true})).dryRun,true);
- assert.equal(readdirSync(objects).length,1,'a dry run writes nothing');
+ assert.equal(readdirSync(objects).length,2,'a dry run writes nothing');
  await setMaterial(mats,'brick',{colour:'#a04030'});
  brick=readMaterial(mats,'brick');
  const stale=stalePrimitives(objects,'brick',brick);

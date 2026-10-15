@@ -390,7 +390,7 @@ export async function buildPrimitive(spec: PrimitiveSpec, material: Material, ve
   traits: {collidable: {node: 'proxy'}, movable: {surfaces: ['floor', 'any'], upright: false, scale: [0.25, 4]}},
  };
  const record = {primitiveVersion: '0.1', shape: s.shape, size: s.size, ...(s.steps !== undefined ? {steps: s.steps} : {}),
-  material: {key: mr.key === INLINE ? null : mr.key, name: mr.name, colour: mr.colour, textured, digest: material.digest},
+  material: {key: mr.key === INLINE ? null : mr.key, name: mr.name, colour: mr.colour, textured, emissive: mr.emissive, digest: material.digest},
   generator: {name: GENERATOR, version}};
  const check = validateManifest('primitive', record);
  if (!check.valid) fail('primitive.invalid', check.errors.join('; '));
