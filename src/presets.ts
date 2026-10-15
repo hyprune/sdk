@@ -56,11 +56,11 @@ export const SKY_PRESETS: readonly SkyPreset[] = Object.freeze([
   clouds: {cover: 0.8, color: [0.93, 0.94, 0.96], shade: [0.7, 0.74, 0.8], scale: 1.6},
   exposure: 1, fog: {color: [0.72, 0.8, 0.86], density: 0.0012}},
  {id: 'sunset', name: 'Sunset', description: 'A low golden sun, a warm horizon and pink clouds.',
-  zenith: [0.09, 0.13, 0.32], horizon: [0.95, 0.5, 0.26], ground: [0.16, 0.12, 0.11],
+  zenith: [0.05, 0.08, 0.24], horizon: [0.9, 0.38, 0.14], ground: [0.12, 0.09, 0.08],
   sun: {direction: direction(250, 5), color: [1, 0.62, 0.34], intensity: 2.4, disc: 9, glow: 0.9, halo: 18},
   horizonGlow: {color: [1, 0.42, 0.16], strength: 0.9},
-  clouds: {cover: 0.55, color: [1, 0.6, 0.36], shade: [0.3, 0.2, 0.3], scale: 1.2, base: 0.1},
-  exposure: 1.1, fog: {color: [0.78, 0.5, 0.36], density: 0.0016}},
+  clouds: {cover: 0.55, color: [0.95, 0.48, 0.24], shade: [0.22, 0.13, 0.22], scale: 1.2, base: 0.1},
+  exposure: 1, fog: {color: [0.7, 0.4, 0.26], density: 0.0016}},
  {id: 'overcast', name: 'Overcast', description: 'A calm grey sky with soft light and no shadows to speak of.',
   zenith: [0.5, 0.53, 0.58], horizon: [0.7, 0.72, 0.74], ground: [0.3, 0.31, 0.3],
   sun: {direction: direction(140, 48), color: [0.92, 0.94, 1], intensity: 0.9, disc: 0, glow: 0.05, halo: 6},
@@ -135,11 +135,13 @@ function paint(size: number, f: (u: number, v: number) => number[]): Rgba {
  return {width: size, height: size, data};
 }
 function grass(size: number): Rgba {
+ // Only detail finer than a quarter of the tile: tile-sized light and dark areas would show the
+ // repeat as stripes across the plain.
  return paint(size, (u, v) => {
-  const broad = fbm(u * 3, v * 3, 4, 3, 11), patch = smooth(0.42, 0.75, fbm(u * 4, v * 4, 4, 4, 12));
+  const clumps = fbm(u * 8, v * 8, 3, 8, 11), dry = smooth(0.6, 0.8, fbm(u * 6, v * 6, 3, 6, 12));
   const blades = fbm(u * 160, v * 160, 2, 160, 13), fine = noise(u * 384, v * 384, 384, 14);
-  let c = mix([0.03, 0.08, 0.018], [0.08, 0.16, 0.035], broad);
-  c = mix(c, [0.13, 0.15, 0.05], patch * 0.3);
+  let c = mix([0.048, 0.115, 0.025], [0.066, 0.14, 0.03], clumps);
+  c = mix(c, [0.1, 0.12, 0.04], dry * 0.15);
   return c.map(x => x * (0.68 + 0.5 * blades + 0.16 * fine));
  });
 }
@@ -147,7 +149,7 @@ function sand(size: number): Rgba {
  return paint(size, (u, v) => {
   const warp = fbm(u * 3, v * 3, 3, 3, 21), ripple = 0.5 + 0.5 * Math.sin((v * 14 + warp * 2.2) * 2 * Math.PI);
   const grain = noise(u * 384, v * 384, 384, 22), tone = fbm(u * 2, v * 2, 3, 2, 23);
-  const c = mix([0.5, 0.38, 0.22], [0.66, 0.53, 0.33], tone);
+  const c = mix([0.55, 0.43, 0.26], [0.62, 0.49, 0.3], tone);
   return c.map(x => x * (0.86 + 0.12 * ripple + 0.12 * grain));
  });
 }
@@ -170,7 +172,7 @@ function concrete(size: number): Rgba {
  return paint(size, (u, v) => {
   const fu = (u * 4) % 1, fv = (v * 4) % 1, joint = 1 - smooth(0.003, 0.008, Math.min(fu, 1 - fu, fv, 1 - fv));
   const mottle = fbm(u * 6, v * 6, 5, 6, 41), speck = noise(u * 512, v * 512, 512, 42);
-  const c = mix([0.3, 0.3, 0.29], [0.44, 0.44, 0.42], mottle).map(x => x * (0.94 + 0.1 * speck));
+  const c = mix([0.33, 0.33, 0.32], [0.41, 0.41, 0.39], mottle).map(x => x * (0.94 + 0.1 * speck));
   return mix(c, [0.16, 0.16, 0.155], joint * 0.8);
  });
 }
