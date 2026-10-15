@@ -520,3 +520,14 @@ mountType}`) and object instances `screen` (null or `{workspace, home, aspect, s
 method, grant or event. `hyprune-mock --protocol 0.27` simulates it (see
 [mock](docs/mock.md)). Peers below 0.27 keep their exact shapes. `hyprune object check`
 validates object format 0.11.
+
+IPC **0.28** (`HypruneClient<'0.28'>`, draft) adds the shared clip library: catalog entries
+carry `motion` (null for non-characters, else the skeleton, the walk/run/idle `styles` and
+`dances` a character can play and the motion `packs` they come from); object instances carry
+`style`; `npcs.spawn`, `npcs.bind` and `companion.mode` take a `style` (`{walk?, run?, idle?}`,
+null for plain); the companion state gains `style`, `dance` and activity `dancing`; aimed
+interactions carry `options` (a `dance` interaction's dances) and `interaction.choose` takes
+an `option`. No new method, grant or event. `hyprune-mock --protocol 0.28` simulates it,
+listing a fixed motion for every character. `hyprune motion check <dir>` validates a motion
+pack (`motion.json` 0.1 and its clips-only rigs); `hyprune library check` also checks a
+library's `motion/<id>/` packs.

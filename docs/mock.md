@@ -1,6 +1,6 @@
 # Mock daemon and shell development
 
-Build with `npm ci`, then `npm run mock`. The default is real IPC **0.2**, with all 26 methods filtered by grants, seven-key snapshots/deltas and subscribed-reader UI/data/location hints. The same listener accepts 0.1 with frozen method discovery and five-key projections; `--protocol 0.1` makes it legacy-only; `--protocol 0.21`, `0.22`, `0.23`, `0.24`, `0.25`, `0.26` and `0.27` add the quest, object, character, live, companion, debug-tool and workspace-screen projections below. `0.1-mock.1` and `--experimental` have been retired.
+Build with `npm ci`, then `npm run mock`. The default is real IPC **0.2**, with all 26 methods filtered by grants, seven-key snapshots/deltas and subscribed-reader UI/data/location hints. The same listener accepts 0.1 with frozen method discovery and five-key projections; `--protocol 0.1` makes it legacy-only; `--protocol 0.21`, `0.22`, `0.23`, `0.24`, `0.25`, `0.26`, `0.27` and `0.28` add the quest, object, character, live, companion, debug-tool, workspace-screen and motion projections below. `0.1-mock.1` and `--experimental` have been retired.
 
 Use a private development socket:
 
@@ -259,3 +259,18 @@ Notices `screen.bound` and `screen.unbound` reach 0.27 peers. No new grant:
 Starting state, targets, transactions, commands and timing are checked before listening. Deltas coalesce to at most 30 Hz, retain each peer's baseline and replace complete keys. Snapshot/subscribe responses precede later deltas. Oversized resource creation rejects before commit.
 
 Programmatic harnesses can use `commit`, `runAction`, `objects` (the 0.22 engine), `npcs` (the 0.23 engine), `project(snapshot, protocol)` (0.24: `liveView`, 0.25: `companionView`, 0.26: `debugToolView`, 0.27: `screensView`), `companion` (the 0.25 engine), `hold`, `escape`, `use`, `drawPoint`, `setPowerProfile`, `disconnectClients`, `revokeClients`, `stop`. Restart creates a new session. Scenarios use real timers, not deterministic physics replay. No scenario action installs an extension, loads arbitrary code or injects input into the owner's compositor.
+
+## Character styles and dances (IPC 0.28, draft)
+
+`--protocol 0.28` negotiates 0.28 next to every older version. Catalog entries carry `motion`:
+null for objects that are no character, else the same fixed motion for every character, as if
+the starter and companion motion packs were installed (`MOCK_MOTION`: walk, run and idle
+styles, three dances, the packs `starter-motion` and `companion-moves`); core binds packs per
+character from its skeleton. `npcs.spawn` and `npcs.bind` keep a user character's `style`
+(null clears it), shown on its instance; other instances have `style: null`. `companion.mode`
+(and `npcs.bind` for `companion`) keeps the companion's style across modes and companions.
+`interaction.choose {objectId: "companion", interactionId: "dance", option?}` starts a dance
+(the named one, else one at random): the companion state shows `dance` and activity
+`dancing` for 8 s (`MOCK_DANCE_MS`), or until a mode change. An `option` on any other
+interaction is refused (-32602). Aimed interactions carry `options: null` (the mock's world
+characters have no dance). No new grant, method or event.

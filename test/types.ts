@@ -434,3 +434,25 @@ screensClient.call('objects.catalog', {}).then(r=>{
  const e=r.entries[0];const w:string[]|undefined=e?.warnings;const lic:string|undefined=e?.provenance?.license;const from:string|undefined=e?.imported?.sourceName;
  void w;void lic;void from;
 });
+
+// IPC 0.28 (draft): character styles, catalog motion, companion dances and the choose option.
+declare const motionClient: import('../src/client.js').HypruneClient<'0.28'>;
+new HypruneClient({protocol:'0.28',capabilities:['state.read','objects.control','world.control']});
+motionClient.call('npcs.spawn', {ref:'library/com.hyprune.starter@0.3.0/resident-blue',style:{walk:'confident',idle:'calm'}});
+motionClient.call('npcs.bind', {id:'u-7c2e91',style:null});
+motionClient.call('companion.mode', {mode:'follow',style:{run:'fast'}});
+motionClient.call('interaction.choose', {objectId:'companion',interactionId:'dance',option:'shimmy'});
+// @ts-expect-error styles are walk, run and idle
+motionClient.call('npcs.bind', {id:'u-7c2e91',style:{sit:'calm'}});
+// @ts-expect-error 0.27 interaction.choose has no option
+screensClient.call('interaction.choose', {objectId:'companion',interactionId:'dance',option:'shimmy'});
+motionClient.on('state', s=>{
+ const dance:string|null=s.state.companion.dance;const walk:string|undefined=s.state.companion.style?.walk;
+ const style=s.state.objects.instances[0]?.style;
+ void dance;void walk;void style;
+});
+motionClient.call('objects.catalog', {}).then(r=>{const m=r.entries[0]?.motion;const dances:string[]|undefined=m?.dances;void dances;});
+screensClient.on('state', s=>{
+ // @ts-expect-error 0.27 companion has no dance
+ void s.state.companion.dance;
+});
