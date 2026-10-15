@@ -992,6 +992,41 @@ export const registryVersions = existsSync(registryRoot)
 const registrySchemas = { 'registry-index': 'index', 'registry-entry': 'index', 'release-record': 'release-record', sources: 'sources' };
 for (const v of registryVersions) for (const name of new Set(Object.values(registrySchemas)))
   if (existsSync(new URL(`v${v}/${name}.schema.json`, registryRoot))) ajv.addSchema(JSON.parse(readFileSync(new URL(`v${v}/${name}.schema.json`, registryRoot))));
+// Motion packs (RFC-0010 amendment "Shared clip library"), motion.json, versioned on their own
+// under motion/v0.N/ like the registry documents.
+const motionRoot = new URL('../motion/', import.meta.url);
+export const motionVersions = existsSync(motionRoot)
+  ? readdirSync(motionRoot).filter(d => /^v0\.\d+$/.test(d)).map(d => d.slice(1)).sort(byVersion) : [];
+for (const v of motionVersions) ajv.addSchema(JSON.parse(readFileSync(new URL(`v${v}/motion.schema.json`, motionRoot))));
+/** The clip name a character plays for a motion clip's role and style (core's motionClipName). */
+export function motionClipName(role, style) {
+  const base = { 'sit-down': 'sit', 'stand-up': 'stand', 'seated-idle': 'sit_idle' }[role] ?? role;
+  return style ? `${base}_${style.replaceAll('-', '_')}` : base;
+}
+/** motion.json: the schema, then unique rig ids and clip names, known rigs, a style on every
+ * dance, one clip per role and style, SPDX licences. */
+export function validateMotion(value, version = motionVersions.at(-1)) {
+  if (!motionVersions.includes(version)) throw new Error(`Unknown motion version: ${version}`);
+  const key = `motion:${version}`;
+  if (!validators.has(key)) validators.set(key, ajv.getSchema(`https://hyprune.com/schema/motion/v${version}/motion.schema.json`));
+  const check = validators.get(key);
+  if (!check(value)) return { valid: false, errors: check.errors.map(e => `${e.instancePath || '/'} ${e.message}`) };
+  const errors = [], fail = m => errors.push(m);
+  const spdx = (text, label) => { try { parseSpdx(text); } catch { fail(`${label}: invalid SPDX expression`); } };
+  spdx(value.license, 'license');
+  value.attribution.forEach((a, i) => spdx(a.license, `attribution/${i}/license`));
+  const rigs = new Set();
+  value.rigs.forEach((r, i) => { if (rigs.has(r.id)) fail(`rigs/${i}: duplicate rig ${r.id}`); rigs.add(r.id); });
+  const names = new Set(), played = new Set();
+  value.clips.forEach((c, i) => {
+    if (names.has(c.name)) fail(`clips/${i}: duplicate clip ${c.name}`); names.add(c.name);
+    if (!rigs.has(c.rig)) fail(`clips/${i} ${c.name}: unknown rig ${c.rig}`);
+    if (c.role === 'dance' && !c.style) fail(`clips/${i} ${c.name}: a dance needs a style`);
+    const played_as = motionClipName(c.role, c.style);
+    if (played.has(played_as)) fail(`clips/${i} ${c.name}: another clip already plays as ${played_as}`); played.add(played_as);
+  });
+  return { valid: errors.length === 0, errors };
+}
 /** RFC-0015 archive limits per package type (compressed bytes, expanded bytes, files, single file). */
 export const registryLimits = Object.freeze({
   world: Object.freeze({ bytes: 512 * 1048576, expandedBytes: 1024 * 1048576, files: 10000, fileBytes: 128 * 1048576 }),

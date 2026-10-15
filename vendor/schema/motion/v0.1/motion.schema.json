@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hyprune.com/schema/motion/v0.1/motion.schema.json",
+  "title": "Hyprune motion pack (motion.json, RFC-0010 shared clip library), motionVersion 0.1 (DRAFT)",
+  "description": "A motion pack: clips on a named skeleton, tagged by role and style, that every character with that skeleton can play. A directory motion/<id>/ in a world package, an installed library or the user folder holds motion.json and its rigs: clips-only glTF binaries (a skin and its animations, no mesh).",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "maxLength": 256
+    },
+    "motionVersion": {
+      "const": "0.1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 280
+    },
+    "skeleton": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "minLength": 1,
+          "maxLength": 32
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "description": "The skeleton the clips are on: mixamo-v1 is the Mixamo humanoid (core matches bones by name after the last ':')."
+    },
+    "license": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "attribution": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "author": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "license": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "path",
+          "author",
+          "license"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "rigs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "scene": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]+\\.glb$",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "id",
+          "scene"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "clips": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "role": {
+            "enum": [
+              "idle",
+              "walk",
+              "run",
+              "sit-down",
+              "stand-up",
+              "seated-idle",
+              "wave",
+              "talk",
+              "guide",
+              "dance"
+            ]
+          },
+          "style": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "rig": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "clip": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "The animation's name in the rig (default: name)."
+          },
+          "loop": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "role",
+          "rig"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "motionVersion",
+    "id",
+    "name",
+    "skeleton",
+    "license",
+    "attribution",
+    "rigs",
+    "clips"
+  ],
+  "additionalProperties": false
+}
