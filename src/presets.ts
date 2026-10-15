@@ -68,9 +68,9 @@ export const SKY_PRESETS: readonly SkyPreset[] = Object.freeze([
   exposure: 1.15, fog: {color: [0.66, 0.68, 0.7], density: 0.0024}},
  {id: 'night', name: 'Starry night', description: 'A clear night with stars and a bright moon.',
   zenith: [0.004, 0.007, 0.022], horizon: [0.03, 0.045, 0.08], ground: [0.012, 0.014, 0.018],
-  sun: {direction: direction(35, 38), color: [0.62, 0.72, 1], intensity: 0.45, disc: 3, glow: 0.04, halo: 40},
+  sun: {direction: direction(35, 38), color: [0.62, 0.72, 1], intensity: 0.3, disc: 3, glow: 0.04, halo: 40},
   clouds: {cover: 0.25, color: [0.05, 0.06, 0.09], shade: [0.02, 0.025, 0.04], scale: 1.4},
-  stars: 1, exposure: 1.6, fog: {color: [0.03, 0.045, 0.08], density: 0.001}},
+  stars: 1, exposure: 1.05, fog: {color: [0.03, 0.045, 0.08], density: 0.001}},
 ] as SkyPreset[]);
 export const skyPreset = (id: string) => SKY_PRESETS.find(p => p.id === id);
 
