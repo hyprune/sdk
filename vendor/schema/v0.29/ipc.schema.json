@@ -11700,6 +11700,36 @@
           "type": "number",
           "minimum": 1,
           "maximum": 100
+        },
+        "look_inertia": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.1,
+          "description": "Mouse look smoothing time constant (s); 0 = raw."
+        },
+        "move_inertia": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.3,
+          "description": "Movement acceleration/deceleration time constant (s); 0 = instant."
+        },
+        "view_bob_roll": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Head tilt of the walking bob at a full stride (degrees), one left-right cycle per stride; 0 = none."
+        },
+        "carry_turn": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.4,
+          "description": "Time (s) a carried window takes to turn toward facing you (critically damped); 0 = rigid."
+        },
+        "carry_follow": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.3,
+          "description": "Time (s) a carried window's grab point takes to follow the centre ray (critically damped); 0 = rigid."
         }
       },
       "required": [
@@ -11716,7 +11746,12 @@
         "reticle_dynamic",
         "reach_grab",
         "reach_mount",
-        "reach_placement"
+        "reach_placement",
+        "look_inertia",
+        "move_inertia",
+        "view_bob_roll",
+        "carry_turn",
+        "carry_follow"
       ],
       "additionalProperties": false
     },
@@ -11905,6 +11940,66 @@
               "maximum": 100
             }
           ]
+        },
+        "look_inertia": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.1
+            }
+          ]
+        },
+        "move_inertia": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.3
+            }
+          ]
+        },
+        "view_bob_roll": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 2
+            }
+          ]
+        },
+        "carry_turn": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.4
+            }
+          ]
+        },
+        "carry_follow": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.3
+            }
+          ]
         }
       },
       "required": [],
@@ -11999,6 +12094,31 @@
           "type": "number",
           "minimum": 1,
           "maximum": 100
+        },
+        "look_inertia": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.1
+        },
+        "move_inertia": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.3
+        },
+        "view_bob_roll": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "carry_turn": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.4
+        },
+        "carry_follow": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.3
         }
       },
       "required": [],
@@ -12128,6 +12248,46 @@
               },
               "minItems": 2,
               "maxItems": 2
+            },
+            "look_inertia": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "move_inertia": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "view_bob_roll": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "carry_turn": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "carry_follow": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
             }
           },
           "required": [
@@ -12139,7 +12299,12 @@
             "reticle_opacity",
             "reach_grab",
             "reach_mount",
-            "reach_placement"
+            "reach_placement",
+            "look_inertia",
+            "move_inertia",
+            "view_bob_roll",
+            "carry_turn",
+            "carry_follow"
           ],
           "additionalProperties": false
         },
