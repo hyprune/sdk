@@ -29,7 +29,7 @@ const rule=async(promise,code,name)=>{await assert.rejects(promise,e=>e.code===c
 
 test('0.27 constants: protocol list, no new grant',()=>{
  assert.ok(PROTOCOLS.includes('0.27'));
- assert.equal(SCREENS_PROTOCOL,'0.27');assert.equal(MOCK_PROTOCOLS.at(-1),'0.27');
+ assert.equal(SCREENS_PROTOCOL,'0.27');assert.ok(MOCK_PROTOCOLS.includes('0.27'));
  assert.deepEqual(SCREENS_GRANTS,DEBUG_TOOL_GRANTS);
 });
 

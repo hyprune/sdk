@@ -12,12 +12,12 @@ import {QuestEngine,QUEST_REQUIREMENTS,QUEST_EVENTS,BASELINE_021} from './mock-q
 import {ObjectEngine,OBJECT_REQUIREMENTS,catalogEntry22,catalogEntry24,catalogScreen27,catalogImport27,type Notice} from './mock-objects.js';
 import {liveState} from './mock-live.js';
 import {NpcEngine,NPC_REQUIREMENTS,type NpcCall,type PowerProfile} from './mock-npcs.js';
-import {CompanionEngine,COMPANION_ID,COMPANION_REQUIREMENTS,companionOf} from './mock-companion.js';
+import {CompanionEngine,COMPANION_ID,COMPANION_REQUIREMENTS,companionOf,companion28,MOCK_MOTION,MOCK_DANCE_MS} from './mock-companion.js';
 export {QuestEngine,QUEST_REQUIREMENTS,QUEST_EVENTS,BASELINE_021,GUIDANCE_DEFAULTS,slugify} from './mock-quests.js';
 export {ObjectEngine,OBJECT_REQUIREMENTS,OBJECT_LIMITS,PLACEABLE_TRAITS,REASONS,PROTECTED,FIXTURE_CHARACTERS,placeability,manifestEntry,compareVersions,listArchive} from './mock-objects.js';
 export {NpcEngine,NPC_REQUIREMENTS,NPC_LIMITS,GRAPHICS_DEFAULTS,WALK_SPEED,USE_DISTANCE,samplePath,type PowerProfile} from './mock-npcs.js';
 export {LIVE_LIMIT,defaultSource,machineOf,liveState} from './mock-live.js';
-export {CompanionEngine,COMPANION_ID,COMPANION_REQUIREMENTS,COMPANION_LIMITS,companionOf} from './mock-companion.js';
+export {CompanionEngine,COMPANION_ID,COMPANION_REQUIREMENTS,COMPANION_LIMITS,companionOf,MOCK_MOTION,MOCK_DANCE_MS} from './mock-companion.js';
 export type Capability=Common02_Capability|'quest.control'|'objects.control';
 export const GRANTS:Capability[]=['state.read','world.control','surface.control','movement.control','shell.control','runtime.control','data.publish'];
 /** IPC 0.21 adds quest.control (quest and focus mutations, guidance.set). */
@@ -36,11 +36,13 @@ export const COMPANION_PROTOCOL='0.25' satisfies Protocol;
 export const DEBUG_TOOL_PROTOCOL='0.26' satisfies Protocol;
 /** Workspace screens (object format 0.11): catalog and instance screen fields, objects.place/configure workspace. */
 export const SCREENS_PROTOCOL='0.27' satisfies Protocol;
+/** The shared clip library (draft): character styles, catalog motion, companion dances. */
+export const MOTION_PROTOCOL='0.28' satisfies Protocol;
 /**
  * The projections the mock serves: 0.1, 0.2 and the feature versions it models. A listener
  * started at version V negotiates every one of these up to V (compared with atLeast).
  */
-export const MOCK_PROTOCOLS=['0.1','0.2',QUEST_PROTOCOL,OBJECTS_PROTOCOL,NPCS_PROTOCOL,LIVE_PROTOCOL,COMPANION_PROTOCOL,DEBUG_TOOL_PROTOCOL,SCREENS_PROTOCOL] as const;
+export const MOCK_PROTOCOLS=['0.1','0.2',QUEST_PROTOCOL,OBJECTS_PROTOCOL,NPCS_PROTOCOL,LIVE_PROTOCOL,COMPANION_PROTOCOL,DEBUG_TOOL_PROTOCOL,SCREENS_PROTOCOL,MOTION_PROTOCOL] as const;
 export type MockProtocol=typeof MOCK_PROTOCOLS[number];
 /** Developer grants a listener at `protocol` can hand out. */
 export function grantsFor(protocol:Protocol):Capability[] {
@@ -58,6 +60,8 @@ export const COMPANION_GRANTS:Capability[]=grantsFor(COMPANION_PROTOCOL);
 export const DEBUG_TOOL_GRANTS:Capability[]=grantsFor(DEBUG_TOOL_PROTOCOL);
 /** IPC 0.27 adds no grant. */
 export const SCREENS_GRANTS:Capability[]=grantsFor(SCREENS_PROTOCOL);
+/** IPC 0.28 adds no grant. */
+export const MOTION_GRANTS:Capability[]=grantsFor(MOTION_PROTOCOL);
 export const REQUIREMENTS:Record<string,Capability|undefined>={
  'session.hello':undefined,'session.ping':undefined,'state.subscribe':'state.read','state.snapshot':'state.read','state.unsubscribe':'state.read',
  'world.load':'world.control','surface.focus':'surface.control','movement.set':'movement.control','shell.claim':'shell.control','shell.release':'shell.control','shell.overlay':'shell.control','runtime.exit':'runtime.control',
@@ -112,6 +116,7 @@ export class MockDaemon {
  private server?:Server;private peers=new Set<Peer>();private tokens:Grant[]=[];
  private tick?:NodeJS.Timeout;private flush?:NodeJS.Timeout;private scripted:NodeJS.Timeout[]=[];private timers=new Map<NodeJS.Timeout,()=>void>();private stopped=false;
  private started=0;private lastTick=0;private lastPose=0;private motion?:{from:Vec3;to:Vec3;start:number;duration:number};private driveIndex=0;private speed=3.5;
+ private styles=new Map<string,object>();
  private objectTick?:Promise<void>;private load?:{peer:Peer;cancel:()=>void};private publications=new Map<string,{owner:Peer;time:number}>();private holding=false;private heldSince=0;private opened=false;
  private supervisor:Peer={decoder:new FrameDecoder(),hello:true,protocol:'0.2',clientId:'com.hyprune.mock',grants:GRANTS,methods:Object.keys(REQUIREMENTS),ids:new Set(),baseline:0,leases:new Set(),closing:false,outstanding:0};
  /** objectDir: list this user object folder in the 0.22 catalog instead of the fixture user objects. */
@@ -145,12 +150,24 @@ export class MockDaemon {
  /** The snapshot as a peer at `protocol` (0.2 or newer) sees it: no key of a newer version ever reaches an older peer. */
  project(snapshot:Snapshot,protocol:Protocol):Snapshot<Protocol> {
   if(!atLeast(protocol,QUEST_PROTOCOL))return snapshot;
+  if(atLeast(protocol,MOTION_PROTOCOL))return this.motionView(snapshot);
   if(atLeast(protocol,SCREENS_PROTOCOL))return this.screensView(snapshot);
   if(atLeast(protocol,DEBUG_TOOL_PROTOCOL))return this.debugToolView(snapshot);
   if(atLeast(protocol,COMPANION_PROTOCOL))return this.companionView(snapshot);
   if(atLeast(protocol,LIVE_PROTOCOL))return this.liveView(snapshot);
   if(atLeast(protocol,NPCS_PROTOCOL))return this.npcsView(snapshot);
   return atLeast(protocol,OBJECTS_PROTOCOL)?this.objectsView(snapshot):this.questView(snapshot);
+ }
+ /**
+  * The 0.28 projection: the 0.27 one plus each instance's style (a user character's, else null), the
+  * companion's style and dance (activity dancing while it lasts) and the aimed interactions' options
+  * (null: the mock's world characters have no dance).
+  */
+ motionView(snapshot:Snapshot):Snapshot<typeof MOTION_PROTOCOL> {
+  const base=this.screensView(snapshot),s=base.state as any;
+  const instances=s.objects.instances.map((i:any)=>({...i,style:i.character && i.source==='user'?this.styles.get(i.id) ?? null:null}));
+  const aimed=s.npcs.aimed?{...s.npcs.aimed,interactions:s.npcs.aimed.interactions.map((i:any)=>({...i,options:null}))}:null;
+  return {...base,state:{...s,objects:{...s.objects,instances},companion:companion28(s.companion,this.companion!),npcs:{...s.npcs,aimed}}} as Snapshot<typeof MOTION_PROTOCOL>;
  }
  /**
   * The 0.27 projection: the 0.26 one plus each instance's screen and, for every bound screen of the
@@ -372,7 +389,9 @@ export class MockDaemon {
    // Catalog entries carry companion from 0.25 on (null for non-characters).
    call.result={...call.result,entries:atLeast(protocol,COMPANION_PROTOCOL)?entries.map(e=>({...catalogEntry24(e),companion:companionOf(e),
     // Catalog entries carry screen from 0.27 on (null for objects that are no workspace screen).
-    ...(atLeast(protocol,SCREENS_PROTOCOL)?{screen:catalogScreen27(e),...catalogImport27(e)}:{})})):entries.map(atLeast(protocol,LIVE_PROTOCOL)?catalogEntry24:catalogEntry22)};
+    ...(atLeast(protocol,SCREENS_PROTOCOL)?{screen:catalogScreen27(e),...catalogImport27(e)}:{}),
+    // Catalog entries carry motion from 0.28 on (null for objects that are no character).
+    ...(atLeast(protocol,MOTION_PROTOCOL)?{motion:(e as {traits:string[]}).traits.includes('character')?structuredClone(MOCK_MOTION):null}:{})})):entries.map(atLeast(protocol,LIVE_PROTOCOL)?catalogEntry24:catalogEntry22)};
   }
   if(call.changed)this.extendedCommit([]);
   this.notify(call.notices);
@@ -387,14 +406,21 @@ export class MockDaemon {
   // 0.25: the reserved id companion in npcs.bind, paths.draw {bind}, paths.finish and interaction.choose.
   const companion=this.companion && atLeast(protocol,COMPANION_PROTOCOL)?this.companion:undefined;
   if(companion && (method==='npcs.bind' && params?.id===COMPANION_ID || method==='interaction.choose' && params?.objectId===COMPANION_ID)){
-   const call=method==='npcs.bind'?companion.bind(params):companion.choose(params.interactionId);
+   const call=method==='npcs.bind'?companion.bind(params):companion.choose(params.interactionId,params.option);
+   // 0.28: the state shows the dance until it ends.
+   if(method==='interaction.choose' && params.interactionId==='dance'){const timer=setTimeout(()=>{this.timers.delete(timer);this.extendedCommit([]);},MOCK_DANCE_MS+20);this.timers.set(timer,()=>{});}
    if(call.changed)this.extendedCommit([]);this.notify(call.notices);return {revision:this.revision};
   }
   if(companion && method==='paths.draw' && params?.bind===COMPANION_ID){companion.draw();const {bind,...rest}=params;params=rest;}
+  // 0.28: a user character's style (the mock keeps it beside the placement; null clears it).
+  const style=(method==='npcs.spawn' || method==='npcs.bind') && params?.style!==undefined?params.style:undefined;
+  if(style!==undefined){const {style:_,...rest}=params;params=rest;}
+  if(method==='interaction.choose' && params?.option!==undefined) throw new RpcError(-32602,'only a dance takes an option');
   let call:NpcCall;
   try{call=this.npcs!.execute(method,params);}finally{this.notify(this.npcs!.outbox.splice(0));}
   if(companion && method==='paths.finish'){const done=companion.finished((call.result as {id?:string|null})?.id ?? null);if(done.bound)call.result={...call.result,bound:done.bound};call.notices.push(...done.notices);call.changed=true;}
   if(companion && method==='paths.list' && call.result)call.result={...call.result,paths:(call.result.paths as Array<{ref:string;bound:string[]}>).map(p=>companion.boundTo(p.ref) && p.bound.length<8?{...p,bound:[...p.bound,COMPANION_ID]}:p)};
+  if(style!==undefined){const id=method==='npcs.spawn'?(call.result as {id?:string})?.id:params.id;if(id){if(style)this.styles.set(id,style);else this.styles.delete(id);call.changed=true;}}
   this.applyNpc(call);
   return {...(call.revision==='none'?{}:{revision:this.revision}),...call.result};
  }

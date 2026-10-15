@@ -33,7 +33,7 @@ const instance=(client,id)=>client.snapshot.state.objects.instances.find(i=>i.id
 const still=client=>client.call('graphics.set',{patch:{npc_motion:'still'}});
 
 test('0.23 mock constants: protocol list, no new grant, method grants',()=>{
- assert.equal(NPCS_PROTOCOL,'0.23');assert.deepEqual([...MOCK_PROTOCOLS],['0.1','0.2','0.21','0.22','0.23','0.24','0.25','0.26','0.27']);
+ assert.equal(NPCS_PROTOCOL,'0.23');assert.deepEqual([...MOCK_PROTOCOLS],['0.1','0.2','0.21','0.22','0.23','0.24','0.25','0.26','0.27','0.28']);
  assert.deepEqual(NPC_GRANTS,OBJECT_GRANTS);
  assert.equal(NPC_REQUIREMENTS['paths.list'],'state.read');assert.equal(NPC_REQUIREMENTS['interaction.choose'],'world.control');
  for(const m of ['npcs.spawn','npcs.bind','npcs.disable','npcs.remove','paths.set','paths.remove','paths.draw','paths.finish'])assert.equal(NPC_REQUIREMENTS[m],'objects.control',m);

@@ -3,7 +3,7 @@ import {parseArgs} from 'node:util';
 import {execFileSync} from 'node:child_process';
 import {lstatSync,readFileSync} from 'node:fs';
 import {validateWorld,packWorld} from './world.js';
-import {validateObject,validateLibrary,type ObjectMeasured} from './object.js';
+import {validateObject,validateLibrary,validateMotionPack,type ObjectMeasured} from './object.js';
 import {scaffold,type ExtensionType} from './scaffold.js';
 import {clientFromEnvironment} from './launch.js';
 import {socketPath} from './paths.js';
@@ -14,7 +14,7 @@ import {objectMain,objectHelp} from './object-cli.js';
 import {npcMain,npcHelp} from './npc-cli.js';
 import {registryMain,registryHelp,isRegistryCommand} from './registry-cli.js';
 import {builderMain,builderHelp} from './builder-cli.js';
-const help=`hyprune world validate <dir>\nhyprune world pack <dir> [--output file.tar.zst]\n${registryHelp}\nhyprune object check <dir> [--measured measured.json]\nhyprune library check <dir>\n${objectHelp}\n${builderHelp}\n${npcHelp}\nhyprune ext new <screen-type|widget|movement-mode|integration> [dir] [--id org.example.id]\nhyprune ipc call <method> [JSON params] [--socket path] [--protocol 0.3|0.2|0.1]\nhyprune ipc subscribe [--socket path] [--count N]\nhyprune doctor [--socket path]\n${questHelp}\n\nAuthentication: supervisor supplies HYPRUNE_TOKEN_FD (>=3), HYPRUNE_CLIENT_ID, HYPRUNE_SOCKET.\nNo tokens on the command line. Use hyprune-mock --launch for developer grants.`;
+const help=`hyprune world validate <dir>\nhyprune world pack <dir> [--output file.tar.zst]\n${registryHelp}\nhyprune object check <dir> [--measured measured.json]\nhyprune library check <dir>\nhyprune motion check <dir>\n${objectHelp}\n${builderHelp}\n${npcHelp}\nhyprune ext new <screen-type|widget|movement-mode|integration> [dir] [--id org.example.id]\nhyprune ipc call <method> [JSON params] [--socket path] [--protocol 0.3|0.2|0.1]\nhyprune ipc subscribe [--socket path] [--count N]\nhyprune doctor [--socket path]\n${questHelp}\n\nAuthentication: supervisor supplies HYPRUNE_TOKEN_FD (>=3), HYPRUNE_CLIENT_ID, HYPRUNE_SOCKET.\nNo tokens on the command line. Use hyprune-mock --launch for developer grants.`;
 export async function main(argv=process.argv.slice(2)):Promise<void> {
  if(argv[0]==='quest' || argv[0]==='focus') return questMain(argv);
  if(isRegistryCommand(argv)) return registryMain(argv);
@@ -39,6 +39,8 @@ export async function main(argv=process.argv.slice(2)):Promise<void> {
   console.log(JSON.stringify(await validateObject(arg,{measured}),null,2));return;
  }
  if(group==='library' && verb==='check' && arg) {console.log(JSON.stringify(await validateLibrary(arg),null,2));return;}
+ // The shared clip library (draft): a motion pack directory (motion.json and its rigs).
+ if(group==='motion' && verb==='check' && arg) {const {manifest,...rest}=await validateMotionPack(arg);console.log(JSON.stringify({id:manifest.id,skeleton:manifest.skeleton.id,...rest},null,2));return;}
  if(group==='ext' && verb==='new' && arg) {console.log(scaffold(arg as ExtensionType,extra || arg,v.id));return;}
  if(group==='ipc' && ['call','subscribe'].includes(verb)) {
   if(v.socket) process.env.HYPRUNE_SOCKET=v.socket;if(v.protocol) process.env.HYPRUNE_PROTOCOL=v.protocol;

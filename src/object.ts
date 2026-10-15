@@ -3,7 +3,7 @@
 import {existsSync,readdirSync,lstatSync} from 'node:fs';
 import {resolve,join,basename} from 'node:path';
 import {parseJson} from './codec.js';
-import {validateManifest,objectLimits,objectHardCaps} from './validation.js';
+import {validateManifest,validateMotion,objectLimits,objectHardCaps} from './validation.js';
 import {inventory,packagePath,readAsset,gltfDocument,gltfResources,gltfResourcePath,ktx2Noise,packageDigest} from './world.js';
 import type {Object09_Document,Object10_Document,Library09_Document,Library10_Document} from './generated.js';
 
@@ -12,6 +12,7 @@ export type LibraryManifest=Library09_Document|Library10_Document;
 /** Values only a geometry or image decoder knows; they override the SDK's own measurements. */
 export interface ObjectMeasured {bounds?:{min:number[];max:number[]};maxTextureSize?:number;gpuBytes?:number}
 export interface ObjectCheck {manifest:ObjectManifest;files:Array<{path:string;size:number}>;digest:string;warnings:string[];triangles?:number;measured:{maxTextureSize:number;gpuBytes:number}}
+export interface MotionCheck {manifest:any;files:Array<{path:string;size:number}>;digest:string;clips:number;rigs:number}
 export interface LibraryCheck {manifest:LibraryManifest;files:Array<{path:string;size:number}>;digest:string;warnings:string[];objects:Array<{id:string;version:string;formatVersion:string;digest:string;triangles?:number}>}
 type Result={valid:boolean;errors:string[];warnings?:string[];triangles?:number};
 const MANIFEST_BYTES=1_048_576;
@@ -148,6 +149,12 @@ export async function validateLibrary(directory:string):Promise<LibraryCheck> {
    warnings.push(...o.warnings.map(w=>`objects/${name}: ${w}`));
   } catch(e:any) {errors.push(...e.message.split('\n').map((m:string)=>`objects/${name}: ${m}`));}
  }
+ // Motion packs a library ships (the shared clip library, draft): motion/<id>/.
+ const motionDir=join(root,'motion');
+ for(const name of existsSync(motionDir) && lstatSync(motionDir).isDirectory()?readdirSync(motionDir).sort():[]) {
+  try {const m=await validateMotionPack(join(motionDir,name));if(m.manifest.id!==name) errors.push(`motion/${name}: motion.json has id ${m.manifest.id}`);}
+  catch(e:any) {errors.push(...e.message.split('\n').map((m:string)=>`motion/${name}: ${m}`));}
+ }
  const result=validateManifest('library',manifest,undefined,undefined,{objects,files}) as Result;
  errors.unshift(...result.errors);warnings.unshift(...(result.warnings || []));
  if(errors.length) throw new Error(errors.join('\n'));
@@ -194,4 +201,43 @@ export function gltfBounds(gltf:any):{min:[number,number,number];max:[number,num
   }
  }
  return unknown || lo[0]===Infinity?undefined:{min:lo as [number,number,number],max:hi as [number,number,number],exact};
+}
+
+/** The humanoid bones (canonical keys) a mixamo-v1 rig must have. */
+const MIXAMO_V1=['hips','spine','head','leftarm','rightarm','leftupleg','leftleg','leftfoot','rightupleg','rightleg','rightfoot'];
+/** A bone's canonical key (as core matches bones): the name after the last ':', lower case. */
+export function canonicalBone(name:string):string {return name.slice(name.lastIndexOf(':')+1).toLowerCase();}
+/**
+ * A motion pack directory (the shared clip library, draft): motion.json (motion format 0.1) and
+ * its clips-only rigs, nothing else. Each rig is a glTF with a skin (and no mesh: clips only)
+ * whose joints have the skeleton's bones (mixamo-v1: the humanoid set) and the animations the
+ * clips name. Throws with every problem.
+ */
+export async function validateMotionPack(directory:string):Promise<MotionCheck> {
+ const root=resolve(directory);
+ const files=inventory(root,{files:16,single:objectLimits.fileBytes,total:objectLimits.libraryBytes,label:'Motion pack'});
+ const manifest=readManifest(root,'motion.json',256*1024);
+ const errors:string[]=[];
+ const result=validateMotion(manifest) as Result;
+ if(!result.valid) throw new Error(result.errors.join('\n'));
+ const scenes=new Set<string>(manifest.rigs.map((r:{scene:string})=>r.scene));
+ for(const f of files) if(f.path!=='motion.json' && !scenes.has(f.path)) errors.push(`${f.path} is not part of the pack`);
+ const animations=new Map<string,Set<string>>();
+ for(const rig of manifest.rigs as Array<{id:string;scene:string}>) {
+  if(!safeFile(root,rig.scene,files)) {errors.push(`rig ${rig.id}: missing ${rig.scene}`);continue;}
+  let doc:any;
+  try {doc=gltfDocument(readAsset(root,rig.scene,objectLimits.fileBytes),rig.scene);} catch(e:any) {errors.push(`rig ${rig.id}: ${e.message}`);continue;}
+  if(!doc.skins?.length) {errors.push(`rig ${rig.id}: no skin`);continue;}
+  if(doc.meshes?.length) errors.push(`rig ${rig.id}: has meshes (a rig is clips only)`);
+  const bones=new Set<string>((doc.skins[0].joints || []).map((j:number)=>canonicalBone(String(doc.nodes?.[j]?.name ?? ''))));
+  const missing=manifest.skeleton.id==='mixamo-v1'?MIXAMO_V1.filter(b=>!bones.has(b)):bones.has('hips')?[]:['hips'];
+  if(missing.length) errors.push(`rig ${rig.id}: no ${missing.join(', ')} bone (skeleton ${manifest.skeleton.id})`);
+  animations.set(rig.id,new Set((doc.animations || []).map((a:{name?:string})=>a.name ?? '')));
+ }
+ for(const clip of manifest.clips as Array<{name:string;rig:string;clip?:string}>) {
+  const have=animations.get(clip.rig),source=clip.clip ?? clip.name;
+  if(have && !have.has(source)) errors.push(`clip ${clip.name}: rig ${clip.rig} has no animation ${source}`);
+ }
+ if(errors.length) throw new Error(errors.join('\n'));
+ return {manifest,files,digest:packageDigest(root,files,objectLimits.fileBytes),clips:manifest.clips.length,rigs:manifest.rigs.length};
 }

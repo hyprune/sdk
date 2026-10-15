@@ -13,6 +13,15 @@ export interface CompanionWorld {id:string|null;position:number[];orientation:nu
 /** The reserved object id of the companion in npcs.bind, paths.draw {bind} and interaction.choose. */
 export const COMPANION_ID='companion';
 export const COMPANION_REQUIREMENTS={'companion.set':'objects.control','companion.clear':'objects.control','companion.mode':'objects.control'} as const;
+/**
+ * IPC 0.28 (draft, the shared clip library): the motion the mock lists for every character, as if
+ * the starter and companion motion packs were installed (core binds them per character).
+ */
+export const MOCK_MOTION={skeleton:'mixamo-v1',styles:{walk:['confident','stroll','groovy'],run:['fast','loose'],idle:['calm','preen']},
+ dances:['shimmy','step','hip-hop'],packs:['starter-motion','companion-moves']};
+/** How long a mock dance lasts (core: 8-20 s, the clip's length rounded). */
+export const MOCK_DANCE_MS=8000;
+type Style={walk?:string;run?:string;idle?:string};
 /** Mock capability limits (core checks the rig and clips too). */
 export const COMPANION_LIMITS={height:2,triangles:16_000,follow:2};
 const notice=(code:string,message:string):Notice=>({level:'info',code,message,since:'0.25'});
@@ -33,6 +42,10 @@ export class CompanionEngine {
  ref:string|null=null;
  /** The pace it keeps while following (IPC 0.26 companionState.pace); kept across companions. */
  pace:'walk'|'run'='walk';
+ /** Its walk, run and idle styles (IPC 0.28 companionState.style); kept across modes and companions. */
+ style:Style|null=null;
+ /** The dance it is dancing (IPC 0.28), until a time (Date.now ms). */
+ dance:{id:string;until:number}|null=null;
  private name:string|null=null;
  private bindings=new Map<string,Binding>();
  private pendingDraw=false;
@@ -85,6 +98,9 @@ export class CompanionEngine {
    }
    case 'companion.mode':{
     this.requireChosen();const id=this.requireWorld();
+    // 0.28: an optional style (null: plain), kept across modes; a mode change ends a dance.
+    if(params.style!==undefined)this.style=params.style;
+    this.dance=null;
     // 0.26: an optional pace, set before the mode.
     const paced=params.pace!==undefined && params.pace!==this.pace;
     if(params.pace!==undefined)this.pace=params.pace;
@@ -101,6 +117,7 @@ export class CompanionEngine {
  bind(params:any):{changed:boolean;notices:Notice[]} {
   this.requireChosen();const id=this.requireWorld();
   if(params.accent!==undefined) throw new RpcError(-32602,'accent is not for the companion');
+  if(params.style!==undefined && (params.path!==undefined || params.pose))this.style=params.style;
   if(params.path!==undefined && params.path!==null){
    const ref=String(params.path).includes('/')?String(params.path):`user/${params.path}`;
    const p=this.paths().find(x=>x.ref===ref);
@@ -110,6 +127,7 @@ export class CompanionEngine {
    return {changed:true,notices:[notice('companion.bound',`${this.name} walks this route`)]};
   }
   if(params.pose){this.bindings.set(id,{pose:[...params.pose.position] as Vec3});return {changed:true,notices:[notice('companion.staying',`${this.name} stays here`)]};}
+  if(params.style!==undefined){this.style=params.style;return {changed:true,notices:[]};}
   throw new RpcError(-32602,'name at least one setting');
  }
  /** paths.draw {bind: "companion"}: the draw runs unbound and paths.finish binds the companion. */
@@ -123,9 +141,16 @@ export class CompanionEngine {
  }
  /** The bound paths' extra entry for paths.list `bound`. */
  boundTo(ref:string):boolean {const id=this.world().id,b=id?this.bindings.get(id):undefined;return !!this.ref && !!b && 'path' in b && b.path===ref;}
- /** interaction.choose {objectId: "companion"}: stay or follow, walk or run (talk shows nothing in the mock). */
- choose(interactionId:string|null):{changed:boolean;notices:Notice[]} {
+ /** interaction.choose {objectId: "companion"}: stay or follow, walk or run, (0.28) a dance (talk shows nothing in the mock). */
+ choose(interactionId:string|null,option?:string):{changed:boolean;notices:Notice[]} {
   this.requireChosen();
+  if(interactionId==='dance'){
+   if(option!==undefined && !MOCK_MOTION.dances.includes(option)) throw new RpcError(-32602,`unknown dance ${option}`);
+   const id=option ?? MOCK_MOTION.dances[Math.floor(Math.random()*MOCK_MOTION.dances.length)];
+   this.dance={id,until:Date.now()+MOCK_DANCE_MS};
+   return {changed:true,notices:[notice('companion.dance',`${this.name} dances`)]};
+  }
+  if(option!==undefined) throw new RpcError(-32602,'only a dance takes an option');
   if(interactionId==='stay' || interactionId==='follow') return this.execute('companion.mode',{mode:interactionId});
   if(interactionId==='walk' || interactionId==='run'){
    const changed=this.pace!==interactionId;this.pace=interactionId;
@@ -134,4 +159,10 @@ export class CompanionEngine {
   if(interactionId==='talk' || interactionId===null) return {changed:false,notices:[]};
   throw new RpcError(-32004,`unknown interaction ${interactionId} on companion`);
  }
+}
+
+/** The 0.28 companion fields: style, the dance (while it lasts) and activity dancing. */
+export function companion28<T extends {state:string;activity:string|null}>(c:T,engine:CompanionEngine):Omit<T,'activity'> & {activity:string|null;style:Style|null;dance:string|null} {
+ const dancing=c.state==='active' && !!engine.dance && engine.dance.until>Date.now();
+ return {...c,style:engine.style,dance:dancing?engine.dance!.id:null,activity:dancing?'dancing':c.activity};
 }
