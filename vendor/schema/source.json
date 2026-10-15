@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/hyprune/schema",
-  "commit": "590a10e4fd9be8998b1b8c634aea8bef029ba0ea",
+  "commit": "26244df89590c7bf3855b5cbb4fb57c03a0d9f33",
   "version": "0.14.0",
   "protocols": [
     "0.1",
@@ -39,7 +39,7 @@
   "sha256": {
     "LICENSE": "fbca288262847f32b11b67d0a0b9cbed0b777c08e2dcfe752e920724542fb102",
     "examples/placement-input.json": "5c57e0521fe4e4f8b913012f2a8c858d8d967f1844b6db8bce9c7a72107aa571",
-    "lib/validate.mjs": "44ecedd37ce18fb554fcb09db7598d37ce54012f8035723c1e0857a360c59586",
+    "lib/validate.mjs": "bde626e889a7e5435865ce2ce5c20887ee8d3dc10e8de1bdc8ca4fb0dd069711",
     "v0.10/ipc.schema.json": "ecdd7cb31c08fc6f5ebfa9c828741ab8ffb9a61a52b56275aa59f698ab3bc649",
     "v0.11/ipc.schema.json": "de2ee467a5389704d8cda65a6cde56e6da8be83decf3a09559fdcdbd152af82d",
     "v0.12/ipc.schema.json": "4e927ea77cf8a390220b25e67a26148ba57ced725ff5bc164521a01e8cf910ac",
@@ -102,16 +102,16 @@
     "v0.11/import.schema.json": "660599989c48182cd22d1c4c6ddbb57c860ceb0e0f3d01a4ce495e90903a8152",
     "v0.11/world.schema.json": "40c6203b1baa203b43d84292b80e7d02b6f52377303f9d326d859a1cf5979497",
     "v0.11/common.schema.json": "07c528e1970923afe59ac176b379300ded249ca296a1149a4674e5342a9043c1",
-    "v0.11/project.schema.json": "0a4794edb65d4bfdae62812f4da6a3178de173392f2f061cb19f6f4237b7179a",
+    "v0.11/project.schema.json": "a95b580ab15fcea7c51a1155677e48d70c601c2c47bbe76cee687587e14658eb",
     "motion/v0.1/motion.schema.json": "f56bc4ad7605f05ac971d597fb1c0599d5fdd92602bc6bbd58bf8e55ad255724",
     "v0.28/ipc.schema.json": "cf240e4de27ecffdc2782357ce21a423e3bfa6a329c33fd0f7821407ffcfc308",
     "v0.29/ipc.schema.json": "95ccfe29474dbd7105ff53f33a80d5b785ff71412810732e0a6d300ce33d674a",
     "v0.30/ipc.schema.json": "d1e9e67422f6258d3b39a0e28d59eb32e294282613561c22dfc0a1008009e44b",
     "examples/input-v3.json": "f206faba5d542cc2d6fb5b5c74f89e44fc9cd5c012c846557e8ec2996d93a3c3",
-    "v0.31/ipc.schema.json": "b28f6dfae91d21a544bbfe38e56c69e53dcfc938d7e4456b61b37a111dfc176e",
+    "v0.31/ipc.schema.json": "4ff42e57af1ccc098e1649ebac7eecab0ed1204f359740b823ffcbfed9df03ec",
     "v0.11/material.schema.json": "123f057a80edfe4aa3ee2550e09a09137c333c664661dafb190d11ba21b049a4",
     "v0.11/primitive.schema.json": "db59026b857c86de7a4bbc47a6e0f99a83f7b9589d223492557e743f793c40d0",
-    "v0.32/ipc.schema.json": "6902be9c48dd009948b70ef479ad3b7faf542ecf9a6a119546b792986cac06c5",
+    "v0.32/ipc.schema.json": "6d230f136cf04c98f94fdb201df74b3252bc1b0ad8687888f0dbda6a46dac1bd",
     "registry/v0.1/content-lock.schema.json": "71bfb29850b2b9b9d11e02f9f40ed8deb82d2b667980048a3413023dbb5d63b6"
   }
 }
