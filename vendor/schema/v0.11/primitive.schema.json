@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hyprune.com/schema/v0.11/primitive.schema.json",
+  "title": "Hyprune generated primitive (primitive.json beside object.json, RFC-0014 amendment: primitives and materials), primitiveVersion 0.1, published with object format 0.11",
+  "description": "How an object directory was generated: its shape, size in metres and the material it was made with. The object itself (object.json, object.glb) is an ordinary object format 0.11 directory.",
+  "type": "object",
+  "properties": {
+    "primitiveVersion": {
+      "const": "0.1"
+    },
+    "shape": {
+      "enum": [
+        "cube",
+        "box",
+        "cylinder",
+        "sphere",
+        "plane",
+        "ramp",
+        "stairs"
+      ]
+    },
+    "size": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": 0.01,
+        "maximum": 100
+      },
+      "minItems": 3,
+      "maxItems": 3,
+      "description": "Width (x), height (y) and depth (z) in metres; the object stands on y = 0, centred on x and z."
+    },
+    "steps": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 64,
+      "description": "Stairs: the number of steps (they rise towards -z)."
+    },
+    "material": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 48,
+              "pattern": "^[a-z][a-z0-9-]{0,47}$"
+            }
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "colour": {
+          "type": "string",
+          "pattern": "^#[0-9a-f]{6}$"
+        },
+        "textured": {
+          "type": "boolean"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "key",
+        "name",
+        "colour",
+        "textured",
+        "digest"
+      ],
+      "additionalProperties": false
+    },
+    "generator": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "primitiveVersion",
+    "shape",
+    "size",
+    "material",
+    "generator"
+  ],
+  "additionalProperties": false
+}

@@ -4,7 +4,7 @@ import parseSpdx from 'spdx-expression-parse';
 
 const names = ['common', 'world', 'extension', 'screen-type', 'ipc'];
 // Object, library and library release record schemas (RFC-0011) live in v0.N directories only.
-const manifestKinds = ['object', 'library', 'library-releases', 'import', 'project'];
+const manifestKinds = ['object', 'library', 'library-releases', 'import', 'project', 'material', 'primitive'];
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 const base = 'https://hyprune.com/schema/v0/';
 for (const name of names) {
@@ -620,7 +620,7 @@ function validateLibraryReleases(value, fail) {
 function validateManifestKind(kind, value, method, version, options) {
   if (method) throw new Error('Method context is only valid for IPC');
   // import.json (RFC-0014) has its own importVersion; its schema lives in the newest object format directory with one.
-  const own = kind === 'library-releases' || kind === 'import' || kind === 'project';
+  const own = kind === 'library-releases' || kind === 'import' || kind === 'project' || kind === 'material' || kind === 'primitive';
   const formats = own ? versions.filter(v => has(v, kind)) : objectFormats;
   version ??= own ? formats.at(-1) : formats.includes(value?.formatVersion) ? value.formatVersion : formats.at(-1);
   if (!formats.includes(version)) throw new Error(`Unknown ${kind} format: ${version}`);
@@ -645,11 +645,25 @@ function validateManifestKind(kind, value, method, version, options) {
     spdx(value.license.spdx, 'license.spdx');
     return { valid: errors.length === 0, errors, warnings };
   }
+  if (kind === 'material') {
+    spdx(value.license, 'license');
+    if (value.texture && value.texture.image === 'texture.ktx2' && (value.texture.width & (value.texture.width - 1) || value.texture.height & (value.texture.height - 1)))
+      warn('texture: KTX2 textures are best a power of two on each side');
+    return { valid: errors.length === 0, errors, warnings };
+  }
+  if (kind === 'primitive') {
+    const [x, y, z] = value.size;
+    if (value.shape === 'cube' && (Math.abs(x - y) > 1e-6 || Math.abs(y - z) > 1e-6)) fail('size: a cube has three equal sides');
+    if (value.shape === 'stairs' && value.steps === undefined) fail('steps: stairs say how many steps they have');
+    if (value.shape !== 'stairs' && value.steps !== undefined) fail('steps: only stairs have steps');
+    return { valid: errors.length === 0, errors, warnings };
+  }
   if (kind === 'project') {
     // builder/project.json (RFC-0014): unique placement ids, unit quaternions, one screen per workspace.
-    const ids = new Set(), workspaces = new Set();
+    const ids = new Set(), workspaces = new Set(), keys = new Set();
     for (const p of value.placements) {
       if (ids.has(p.id)) fail(`placements: duplicate id ${p.id}`); ids.add(p.id);
+      if (p.key !== undefined) { if (keys.has(p.key)) fail(`placements ${p.id}: key ${p.key} names another placement`); keys.add(p.key); }
       if (Math.abs(Math.hypot(...p.pose.rotation) - 1) > 0.002) fail(`placements ${p.id}: quaternion must be normalized`);
       if (p.workspace !== undefined) { if (workspaces.has(p.workspace)) fail(`placements ${p.id}: workspace ${p.workspace} is shown by another screen`); workspaces.add(p.workspace); }
     }

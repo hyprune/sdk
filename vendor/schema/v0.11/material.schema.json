@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hyprune.com/schema/v0.11/material.schema.json",
+  "title": "Hyprune builder material (materials/<key>/material.json, RFC-0014 amendment: primitives and materials), materialVersion 0.1, published with object format 0.11",
+  "description": "A material for generated primitives: a colour, optionally a texture image repeated every tile metres, emission, roughness and metalness, with the texture's provenance. It lives in a world folder's materials/<key>/ or the user's $XDG_DATA_HOME/hyprune/materials/<key>/, beside its texture file.",
+  "type": "object",
+  "properties": {
+    "materialVersion": {
+      "const": "0.1"
+    },
+    "key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48,
+      "pattern": "^[a-z][a-z0-9-]{0,47}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "colour": {
+      "type": "string",
+      "pattern": "^#[0-9a-f]{6}$",
+      "description": "sRGB base colour; multiplies the texture."
+    },
+    "texture": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "image": {
+              "enum": [
+                "texture.jpg",
+                "texture.png",
+                "texture.ktx2"
+              ]
+            },
+            "tile": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 100,
+              "description": "Metres one copy of the image covers on every face."
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2048
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2048
+            }
+          },
+          "required": [
+            "image",
+            "tile",
+            "width",
+            "height"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "emissive": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "colour": {
+              "type": "string",
+              "pattern": "^#[0-9a-f]{6}$"
+            },
+            "strength": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 16
+            }
+          },
+          "required": [
+            "colour",
+            "strength"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "roughness": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "metallic": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "license": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "author": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    }
+  },
+  "required": [
+    "materialVersion",
+    "key",
+    "name",
+    "colour",
+    "texture",
+    "emissive",
+    "roughness",
+    "metallic",
+    "license",
+    "author",
+    "source"
+  ],
+  "additionalProperties": false
+}
