@@ -2,6 +2,7 @@
 // ({event: stage|done|error}) for the Director's Builder page, like `object import --json`.
 import {parseArgs} from 'node:util';
 import {readFileSync} from 'node:fs';
+import {folderPlace,primitiveHelp,primitiveMain} from './primitive-cli.js';
 import {applyFloor,applySky,applySpawn,createProject,listFloors,listProjects,listSkies,listStarters,make,projectFolder,release,save,setRemote,status,thumbnailsDir,
  BuilderError,type FloorChoice,type SkyChoice,type SpawnChoice,type Status} from './builder.js';
 
@@ -21,6 +22,7 @@ hyprune builder sky PROJECT (IMAGE --license SPDX --author A --source S | --pres
 hyprune builder floor PROJECT (IMAGE --license SPDX --author A --source S | --preset ID | --tile METRES) [--tile METRES] [--dry-run] [--json]
 hyprune builder spawn PROJECT [--at X,Y,Z] [--yaw DEGREES | --facing sun|away|left|right] [--dry-run] [--json]
 hyprune builder remote PROJECT [URL | --clear] [--json]
+${primitiveHelp}
   PROJECT is a world folder, its slug or its local.<slug> id; folders live in
   $HYPRUNE_PROJECTS_DIR (default $XDG_DATA_HOME/hyprune/projects).`;
 
@@ -30,6 +32,16 @@ function statusText(s:Status):string {
 }
 
 export async function builderMain(argv:string[]):Promise<void> {
+ // Primitives and materials (their own options): PROJECT, then the verb's arguments.
+ if(['primitive','material','materials','rebuild'].includes(argv[1]) && !argv.includes('--help') && !argv.includes('-h')) {
+  let folder:string;
+  try {folder=projectFolder(argv[2] ?? '');}
+  catch(e:any) {
+   if(!argv.includes('--json')) throw e;
+   process.stdout.write(JSON.stringify({event:'error',error:{message:String(e.message),code:e.code || 'project.unknown'}})+'\n');process.exitCode=1;return;
+  }
+  return primitiveMain(folderPlace(folder),argv[1],argv.slice(3));
+ }
  const {values:v,positionals:p}=parseArgs({args:argv.slice(2),allowPositionals:true,options:{
   help:{type:'boolean',short:'h'},json:{type:'boolean'},message:{type:'string',short:'m'},notes:{type:'string'},'notes-file':{type:'string'},
   id:{type:'string'},license:{type:'string'},author:{type:'string'},source:{type:'string'},clear:{type:'boolean'},

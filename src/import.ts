@@ -131,7 +131,7 @@ function quiet(L: Libs, doc: Document): Document {
  return doc.setLogger({debug: () => {}, info: () => {}, warn: log, error: log} as any);
 }
 // The Basis encoder (WebAssembly) prints its progress with console.log: keep it off stdout.
-async function offStdout<T>(work: () => Promise<T>): Promise<T> {
+export async function offStdout<T>(work: () => Promise<T>): Promise<T> {
  const log = console.log;
  console.log = () => {};
  try {return await work();} finally {console.log = log;}

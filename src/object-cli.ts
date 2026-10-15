@@ -1,6 +1,7 @@
 // `hyprune object add|list` and `hyprune library install|list|remove` (RFC-0011 "Shell, SDK
 // and tooling"). Adding writes only to the user object folder; installing hands core a local
 // archive and its hash over IPC 0.22. Nothing here downloads anything.
+import {primitiveMain,userPlace} from './primitive-cli.js';
 import {parseArgs} from 'node:util';
 import {createReadStream,copyFileSync,chmodSync,existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,renameSync,rmSync,writeFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -17,7 +18,8 @@ import type {Ipc22_CatalogEntry,Ipc22_LibraryRecord,LibraryReleases09_Document} 
 
 /** The first IPC version with the object catalog and libraries; the CLI asks for it unless told otherwise. */
 export const OBJECTS_SINCE='0.22';
-export const objectHelp=`hyprune object add <dir | file.glb> [--name N --license SPDX --author A --surface floor|wall|ceiling|any] [--replace]
+export const objectHelp=`hyprune object primitive|material|materials …  (see hyprune builder --help: the same in your own folders)
+hyprune object add <dir | file.glb> [--name N --license SPDX --author A --surface floor|wall|ceiling|any] [--replace]
 hyprune object import <file> [--inspect] [--name N --id ID --category C --tags a,b --surface floor|wall|ceiling|any]
   [--units auto|m|cm|mm|in|ft | --scale X] [--up y|z] [--yaw 0|90|180|270] [--max-triangles N] [--max-texture PX]
   [--collision convex|box|none] [--ktx2 auto|all|off] [--lighting lit|unlit] [--license SPDX --author A --source S] [--replace] [--json]
@@ -234,6 +236,7 @@ export function libraryTable(libraries:Ipc22_LibraryRecord[]):string {
 
 export async function objectMain(argv:string[]):Promise<void> {
  const [group,verb]=argv;
+ if(group==='object' && ['primitive','material','materials'].includes(verb)) return primitiveMain(userPlace(),verb,argv.slice(2));
  const {values:v,positionals:p}=parseArgs({args:argv.slice(2),allowPositionals:true,options:{
   help:{type:'boolean',short:'h'},socket:{type:'string'},protocol:{type:'string'},json:{type:'boolean'},
   name:{type:'string'},license:{type:'string'},author:{type:'string'},surface:{type:'string'},replace:{type:'boolean'},

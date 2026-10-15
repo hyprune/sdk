@@ -18,7 +18,7 @@ const help=`hyprune world validate <dir>\nhyprune world pack <dir> [--output fil
 export async function main(argv=process.argv.slice(2)):Promise<void> {
  if(argv[0]==='quest' || argv[0]==='focus') return questMain(argv);
  if(isRegistryCommand(argv)) return registryMain(argv);
- if(argv[0]==='object' && ['add','list','import'].includes(argv[1])) return objectMain(argv);
+ if(argv[0]==='object' && ['add','list','import','primitive','material','materials'].includes(argv[1])) return objectMain(argv);
  if(argv[0]==='npc' || argv[0]==='path') return npcMain(argv);
  if(argv[0]==='builder') return builderMain(argv);
  const {values:v,positionals:p}=parseArgs({args:argv,allowPositionals:true,options:{help:{type:'boolean',short:'h'},socket:{type:'string'},protocol:{type:'string'},output:{type:'string'},measured:{type:'string'},id:{type:'string'},count:{type:'string'},capabilities:{type:'string'}}});

@@ -16,6 +16,7 @@ import {equirectDirection,landGlb} from './starter.js';
 import {FLOOR_PRESETS,SKY_PRESETS,encodeFloor,floorPreset,floorThumbnail,skyAtmosphere,skyPanorama,skyPreset,skyThumbnail,type SkyPreset} from './presets.js';
 import {decodeHdr,hdrKind,hdrSun,toneMap} from './hdr.js';
 import {packRelease} from './registry/pack.js';
+import {primitiveOf} from './primitives.js';
 import {userName} from './import.js';
 
 /** The starter new folders are made from (Open Plain); flat-land@0.1 folders keep loading. */
@@ -36,7 +37,7 @@ export class BuilderError extends Error {
 }
 const fail = (code: BuilderCode, message: string, hint?: string, data?: Record<string, unknown>): never => {throw new BuilderError(code, message, hint, data);};
 
-export interface Placement {id: string; ref: string; pose: {position: number[]; rotation: number[]}; scale: number; workspace?: number; locked?: boolean}
+export interface Placement {id: string; ref: string; pose: {position: number[]; rotation: number[]}; scale: number; workspace?: number; locked?: boolean; key?: string}
 export interface Provenance {license: string; author: string; source: string}
 export interface Floor extends Provenance {preset: string | null; image: string | null; tile: number}
 export interface Project {
@@ -496,6 +497,13 @@ export async function make(folder: string): Promise<Made> {
  if (ownFloor) attribution.push(credit(ownFloor.image!, ownFloor));
  const sky = project.sky;
  if (sky.image) attribution.push(credit(sky.image, sky));
+ // Materials (primitives and materials amendment): each texture credits its author and licence.
+ const mdir = join(folder, 'materials');
+ if (existsSync(mdir)) for (const key of readdirSync(mdir).sort()) {
+  const path = join(mdir, key, 'material.json');
+  if (!/^[a-z][a-z0-9-]{0,47}$/.test(key) || !existsSync(path)) continue;
+  try {const r = readJson(path); attribution.push(credit(`materials/${key}`, r));} catch {/* make fails on it below if it is invalid */}
+ }
  for (const [id, o] of objects) for (const a of (o.attribution ?? [{path: '.', author: 'unknown', license: o.license ?? 'LicenseRef-unknown'}]))
   attribution.push({...a, path: a.path === '.' ? `objects/${id}` : `objects/${id}/${a.path}`});
  // Core resolves each attribution path to a file: directories become one entry per file.
@@ -602,10 +610,21 @@ export function changeSummary(before: Project | null, after: Project): string {
  if (before && before.name !== after.name) parts.push('renamed the world');
  return parts.join(', ');
 }
+/** Generated primitives (objects/<id>/ with primitive.json) that no placement uses: removed before a save, since any request makes them again. */
+export function prunePrimitives(folder: string): string[] {
+ const root = join(folder, 'objects');
+ if (!existsSync(root)) return [];
+ const used = new Set(readProject(folder).placements.map(p => p.ref.slice('world/'.length))), removed: string[] = [];
+ for (const id of readdirSync(root).sort())
+  if (!used.has(id) && primitiveOf(join(root, id))) {rmSync(join(root, id), {recursive: true, force: true}); removed.push(id);}
+ return removed;
+}
 export interface Saved {commit: string; message: string; pending: Pending; homes: Made['homes']; warnings: string[]}
 export function save(folder: string, message = ''): Promise<Saved> {
  return locked(folder, async () => {
+  const pruned = prunePrimitives(folder);
   const made = await make(folder), warnings = [...made.warnings, ...await validateFolder(folder)];
+  if (pruned.length) warnings.push(`removed ${pruned.length} unplaced primitive${pruned.length === 1 ? '' : 's'} (generated; made again on request)`);
   const changes = pending(folder);
   if (!changes.total) fail('save.nothing', 'Nothing to save: there are no changes since the last save');
   git(folder, ['add', '-A']);
