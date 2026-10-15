@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.28/ipc.schema.json",
-  "title": "Hyprune IPC 0.28 (DRAFT): shared clip library (character styles, companion dances, catalog motion)",
+  "title": "Hyprune IPC 0.28: shared clip library (character styles, companion dances, catalog motion)",
   "$defs": {
     "state": {
       "type": "object",

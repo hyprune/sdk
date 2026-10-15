@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/motion/v0.1/motion.schema.json",
-  "title": "Hyprune motion pack (motion.json, RFC-0010 shared clip library), motionVersion 0.1 (DRAFT)",
+  "title": "Hyprune motion pack (motion.json, RFC-0010 shared clip library), motionVersion 0.1",
   "description": "A motion pack: clips on a named skeleton, tagged by role and style, that every character with that skeleton can play. A directory motion/<id>/ in a world package, an installed library or the user folder holds motion.json and its rigs: clips-only glTF binaries (a skin and its animations, no mesh).",
   "type": "object",
   "properties": {
