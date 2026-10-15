@@ -6555,7 +6555,7 @@
       "properties": {
         "version": {
           "const": 3,
-          "description": "Input version 3: Ctrl sprints, Shift goes down, Ctrl+R toggles a recording (world mode). Peers before 0.29 see version 2."
+          "description": "Input version 3: Ctrl+R toggles a recording (world mode); Shift sprints and Ctrl goes down, as in version 2 (IPC 0.29 first swapped the two; a keymap still at that swap is restored once). Peers before 0.29 see version 2."
         },
         "longHoldMs": {
           "type": "integer",

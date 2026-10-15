@@ -654,6 +654,12 @@ function validateManifestKind(kind, value, method, version, options) {
       if (p.workspace !== undefined) { if (workspaces.has(p.workspace)) fail(`placements ${p.id}: workspace ${p.workspace} is shown by another screen`); workspaces.add(p.workspace); }
     }
     spdx(value.sky.license, 'sky.license');
+    // projectVersion 0.2: a floor is a preset or the user's image, never both or neither.
+    if (value.floor) {
+      if ((value.floor.preset === null) === (value.floor.image === null)) fail('floor: give exactly one of preset and image');
+      spdx(value.floor.license, 'floor.license');
+    }
+    if (value.sky.preset && value.sky.image === null) fail('sky: a preset sky has its generated image');
     return { valid: errors.length === 0, errors, warnings };
   }
   if (kind !== 'library-releases') {
