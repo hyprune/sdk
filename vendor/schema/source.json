@@ -104,6 +104,7 @@
     "motion/v0.1/motion.schema.json": "f56bc4ad7605f05ac971d597fb1c0599d5fdd92602bc6bbd58bf8e55ad255724",
     "v0.28/ipc.schema.json": "cf240e4de27ecffdc2782357ce21a423e3bfa6a329c33fd0f7821407ffcfc308",
     "v0.29/ipc.schema.json": "c0bff19ba22eed0560b69b9e7d3ea0b1f2a2568221e7cb4bfa29174474cf7204",
-    "v0.30/ipc.schema.json": "ea568f23e8d1faa1624c20d50d88ccfdf588c8157c2689379ecbffce199c1b81"
+    "v0.30/ipc.schema.json": "ea568f23e8d1faa1624c20d50d88ccfdf588c8157c2689379ecbffce199c1b81",
+    "examples/input-v3.json": "9d5b95b2020b7cce40b9790e3c335955de445695354891f6c491f921afb7a371"
   }
 }

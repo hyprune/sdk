@@ -52,6 +52,8 @@ function type(s, file) {
       [...Object.keys(m.properties || {}),...(m.required || [])].some(k=>!declared.includes(k)))) throw new Error(`Unhandled not in ${file}: ${JSON.stringify(s)}`);
     const {not,...rest}=s; return type(rest,file);
   }
+  // `not: {type: null}` alone is any value but null (e.g. settings.set values).
+  if ('not' in s && JSON.stringify(s.not)==='{"type":"null"}' && Object.keys(s).every(k=>['not','description','title'].includes(k))) return 'NonNullable<unknown>';
   if ('not' in s) {
     if (Object.keys(s.not).length || Object.keys(s).some(k=>!['not','description','title'].includes(k))) throw new Error(`Unhandled not in ${file}: ${JSON.stringify(s)}`);
     return 'never';
