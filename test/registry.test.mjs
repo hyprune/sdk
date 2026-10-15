@@ -73,6 +73,9 @@ test('records: schema, tag naming the version',()=>{
  assert.equal(parseRecord(bytes(record)).id,'org.example.tiny');
  assert.throws(()=>parseRecord(bytes({...record,source:{...record.source,tag:'v1.0.1'}})),/must name version/);
  assert.throws(()=>parseRecord(Buffer.alloc(1048577,32)),/more than 1 MiB/);
+ // A meta pins map (libraries/releases.json shape) is named as such, with the archive to add instead.
+ const pinsMap={'com.hyprune.starter@0.3.0':{id:'com.hyprune.starter',version:'0.3.0',formatVersion:'0.11',url:'https://github.com/hyprune/worlds/releases/download/hyprune-starter-v0.3.0/com.hyprune.starter-0.3.0.tar.zst',sha256:'8'.repeat(64),nixHash:'sha256-x',published:true}};
+ assert.throws(()=>parseRecord(bytes(pinsMap)),/pins map.*not an RFC-0015 release record.*hyprune library add https:\/\/github\.com\/hyprune\/worlds\/releases\/download\/hyprune-starter-v0\.3\.0\/com\.hyprune\.starter-0\.3\.0\.tar\.zst --sha256 8{64}/);
 });
 
 test('fetch: HTTPS only, redirects only to allowed URLs, token only to the API host, byte caps',async t=>{

@@ -38,6 +38,16 @@ export function parseIndex(bytes:Buffer,{what='index',lastSerial,env=process.env
 export function parseRecord(bytes:Buffer,{what='release record',env=process.env}:{what?:string;env?:Env}={}):ReleaseRecord {
  if(bytes.length>FETCH_LIMITS.record) fail('source.invalid',`${what}: more than 1 MiB`);
  const value=decodeJson(bytes,what);
+ // A meta-repository pins map (libraries/releases.json shape: {"<id>@<version>": {id, version, url,
+ // sha256, ...}}) is not a release record: say so, and name the archive to add instead.
+ if(value && typeof value==='object' && !Array.isArray(value) && !('recordVersion' in value)) {
+  const pins=Object.entries(value as Record<string,any>).filter(([k,v])=>/@/.test(k) && v && typeof v==='object' && typeof v.url==='string' && typeof v.sha256==='string');
+  if(pins.length) {
+   const [,p]=pins[0];
+   fail('source.invalid',`${what}: this is a meta-repository pins map (libraries/releases.json shape, keyed by id@version), not an RFC-0015 release record (recordVersion 0.1). `+
+    `Add the release record (<id>-<version>.release.json) instead, or the archive itself: hyprune library add ${p.url} --sha256 ${p.sha256}`);
+  }
+ }
  const result=validateRegistry('release-record',forSchema(value,env));
  if(!result.valid) fail('source.invalid',`${what}: ${result.errors.slice(0,3).join('; ')}`);
  return value as ReleaseRecord;
