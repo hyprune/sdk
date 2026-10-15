@@ -1,4 +1,5 @@
-// The Flat land starter (RFC-0014 "Starters", flat-land@0.1), generated rather than shipped:
+// The land of the Open Plain starter (and of Flat land, flat-land@0.1, before it; RFC-0014
+// "Starters"), generated rather than shipped:
 // a 2,000 x 2,000 m plain at y = 0 with a soft grid texture (1 m minor, 10 m major lines) that is
 // also its collision, and a procedural equirectangular sky with its sun. Everything here is
 // original and CC0-1.0. Pure JavaScript: no Blender, no native image code.
@@ -87,23 +88,28 @@ export function starterAtmosphere(image = 'sky/panorama.jpg'): Record<string, un
  };
 }
 
-/** The land as a GLB: node 0 is two triangles with the grid texture, tiled every 10 m. */
-export async function landGlb(): Promise<Uint8Array> {
+/** A floor texture for the land: image bytes (PNG or JPEG), the metres one copy covers, its roughness. */
+export interface LandFloor {image: Uint8Array; mime: 'image/png' | 'image/jpeg'; tile: number; roughness?: number}
+/**
+ * The land as a GLB: node 0 is two triangles 2,000 m across, textured with the floor repeated
+ * every `tile` metres (default: the grid, every 10 m). It is also the starter's collision.
+ */
+export async function landGlb(floor?: LandFloor): Promise<Uint8Array> {
  const core = await import('@gltf-transform/core');
  const doc = new core.Document(), buffer = doc.createBuffer();
- const h = LAND_HALF, tile = 10;
+ const h = LAND_HALF, tile = floor?.tile ?? 10;
  const corners = [[-h, -h], [h, -h], [h, h], [-h, h]];
  const position = doc.createAccessor().setType('VEC3').setBuffer(buffer).setArray(new Float32Array(corners.flatMap(([x, z]) => [x, 0, z])));
  const normal = doc.createAccessor().setType('VEC3').setBuffer(buffer).setArray(new Float32Array(corners.flatMap(() => [0, 1, 0])));
  const uv = doc.createAccessor().setType('VEC2').setBuffer(buffer).setArray(new Float32Array(corners.flatMap(([x, z]) => [x / tile, z / tile])));
  const indices = doc.createAccessor().setType('SCALAR').setBuffer(buffer).setArray(new Uint16Array([0, 3, 2, 0, 2, 1]));
- const texture = doc.createTexture('land-grid').setMimeType('image/png').setImage(encodePng(gridTexture()));
- const material = doc.createMaterial('land').setBaseColorTexture(texture).setRoughnessFactor(0.95).setMetallicFactor(0);
+ const texture = doc.createTexture('land-floor').setMimeType(floor?.mime ?? 'image/png').setImage(floor?.image ?? encodePng(gridTexture()));
+ const material = doc.createMaterial('land').setBaseColorTexture(texture).setRoughnessFactor(floor?.roughness ?? 0.95).setMetallicFactor(0);
  material.getBaseColorTextureInfo()!.setMinFilter(9987).setMagFilter(9729).setWrapS(10497).setWrapT(10497);
  const prim = doc.createPrimitive().setAttribute('POSITION', position).setAttribute('NORMAL', normal).setAttribute('TEXCOORD_0', uv)
   .setIndices(indices).setMaterial(material);
  const node = doc.createNode('land').setMesh(doc.createMesh('land').addPrimitive(prim));
- doc.createScene('flat-land').addChild(node);
- doc.getRoot().getAsset().generator = 'hyprune builder (Flat land starter)';
+ doc.createScene('open-plain').addChild(node);
+ doc.getRoot().getAsset().generator = 'hyprune builder (Open Plain starter)';
  return new core.NodeIO().writeBinary(doc);
 }

@@ -2,15 +2,24 @@
 // ({event: stage|done|error}) for the Director's Builder page, like `object import --json`.
 import {parseArgs} from 'node:util';
 import {readFileSync} from 'node:fs';
-import {createProject,listProjects,make,projectFolder,release,save,setRemote,setSky,status,BuilderError,type Status} from './builder.js';
+import {applyFloor,applySky,applySpawn,createProject,listFloors,listProjects,listSkies,listStarters,make,projectFolder,release,save,setRemote,status,thumbnailsDir,
+ BuilderError,type FloorChoice,type SkyChoice,type SpawnChoice,type Status} from './builder.js';
 
-export const builderHelp=`hyprune builder create NAME [--git-name N --git-email E] [--json]
+export const builderHelp=`hyprune builder create NAME [--starter open-plain] [SKY] [FLOOR] [SPAWN] [--if-exists suffix|error] [--dry-run]
+    [--git-name N --git-email E] [--json]
+      SKY:   --sky PRESET | --sky-image FILE --sky-license SPDX --sky-author A --sky-source S
+      FLOOR: --floor PRESET | --floor-image FILE --floor-license SPDX --floor-author A --floor-source S; --tile METRES
+      SPAWN: --spawn X,Y,Z; --yaw DEGREES | --facing sun|away|left|right
+hyprune builder starters|skies|floors [--thumbnails DIR] [--json]
 hyprune builder list [--json]
 hyprune builder status PROJECT [--json]
 hyprune builder make PROJECT [--json]
 hyprune builder save PROJECT [-m MESSAGE] [--json]
 hyprune builder release PROJECT [VERSION] [--notes TEXT | --notes-file FILE] [--id ID] [--json]
-hyprune builder sky PROJECT IMAGE --license SPDX --author A --source S [--json]
+hyprune builder sky PROJECT (IMAGE --license SPDX --author A --source S | --preset ID) [--dry-run] [--json]
+    IMAGE: an equirectangular PNG, JPEG, OpenEXR or Radiance HDR (tone mapped)
+hyprune builder floor PROJECT (IMAGE --license SPDX --author A --source S | --preset ID | --tile METRES) [--tile METRES] [--dry-run] [--json]
+hyprune builder spawn PROJECT [--at X,Y,Z] [--yaw DEGREES | --facing sun|away|left|right] [--dry-run] [--json]
 hyprune builder remote PROJECT [URL | --clear] [--json]
   PROJECT is a world folder, its slug or its local.<slug> id; folders live in
   $HYPRUNE_PROJECTS_DIR (default $XDG_DATA_HOME/hyprune/projects).`;
@@ -24,18 +33,55 @@ export async function builderMain(argv:string[]):Promise<void> {
  const {values:v,positionals:p}=parseArgs({args:argv.slice(2),allowPositionals:true,options:{
   help:{type:'boolean',short:'h'},json:{type:'boolean'},message:{type:'string',short:'m'},notes:{type:'string'},'notes-file':{type:'string'},
   id:{type:'string'},license:{type:'string'},author:{type:'string'},source:{type:'string'},clear:{type:'boolean'},
-  'git-name':{type:'string'},'git-email':{type:'string'}}});
+  'git-name':{type:'string'},'git-email':{type:'string'},starter:{type:'string'},preset:{type:'string'},'dry-run':{type:'boolean'},
+  sky:{type:'string'},'sky-image':{type:'string'},'sky-license':{type:'string'},'sky-author':{type:'string'},'sky-source':{type:'string'},
+  floor:{type:'string'},'floor-image':{type:'string'},'floor-license':{type:'string'},'floor-author':{type:'string'},'floor-source':{type:'string'},
+  tile:{type:'string'},spawn:{type:'string'},at:{type:'string'},yaw:{type:'string'},facing:{type:'string'},'if-exists':{type:'string'},thumbnails:{type:'string'}}});
  const verb=argv[1];
  if(v.help || !verb){console.log(builderHelp);return;}
  const line=(value:unknown):void=>{process.stdout.write(JSON.stringify(value)+'\n');};
  const done=(result:unknown,text:string)=>v.json?line({event:'done',result}):console.log(text);
  const need=(i:number,what:string)=>{if(!p[i]) throw new BuilderError('project.unknown',`builder ${verb} needs ${what}`);return p[i];};
+ const num=(text:string|undefined,code:'floor.invalid'|'spawn.invalid',what:string)=>{
+  if(text===undefined) return undefined;const n=Number(text);if(text.trim()==='' || !Number.isFinite(n)) throw new BuilderError(code,`${what} must be a number (not ${text})`);return n;};
+ const vec=(text:string|undefined)=>{
+  if(text===undefined) return undefined;const v=text.split(',').map(Number);
+  if(v.length!==3 || v.some(x=>!Number.isFinite(x))) throw new BuilderError('spawn.invalid',`A position is X,Y,Z in metres (not ${text})`);return v;};
+ const prov=(prefix:string)=>({license:(v as any)[prefix+'license'] ?? '',author:(v as any)[prefix+'author'] ?? '',source:(v as any)[prefix+'source'] ?? ''});
+ const skyChoice=(image:string|undefined,preset:string|undefined,prefix:string):SkyChoice|undefined=>
+  preset!==undefined?{preset}:image!==undefined?{image,...prov(prefix)}:undefined;
+ const floorChoice=(image:string|undefined,preset:string|undefined,prefix:string):FloorChoice|undefined=>{
+  const tile=num(v.tile,'floor.invalid','The tile');
+  if(preset!==undefined) return {preset,...(tile!==undefined?{tile}:{})};
+  if(image!==undefined) return {image,...prov(prefix),...(tile!==undefined?{tile}:{})};
+  return tile!==undefined?{tile}:undefined;};
+ const spawnChoice=(at:string|undefined):SpawnChoice|undefined=>{
+  const position=vec(at),yaw=num(v.yaw,'spawn.invalid','The yaw'),facing=v.facing as SpawnChoice['facing'];
+  return position || yaw!==undefined || facing?{...(position?{position}:{}),...(yaw!==undefined?{yaw}:{}),...(facing?{facing}:{})}:undefined;};
+ const dryRun=!!v['dry-run'];
  try {
   switch(verb) {
    case 'create': {
     const identity=v['git-name'] || v['git-email']?{name:v['git-name'] ?? '',email:v['git-email'] ?? ''}:undefined;
-    const r=await createProject(need(0,'a name'),{identity});
+    const ifExists=v['if-exists'];
+    if(ifExists!==undefined && ifExists!=='suffix' && ifExists!=='error') throw new BuilderError('project.invalid','--if-exists is suffix or error');
+    const o={identity,starter:v.starter,sky:skyChoice(v['sky-image'],v.sky,'sky-'),floor:floorChoice(v['floor-image'],v.floor,'floor-'),spawn:spawnChoice(v.spawn),ifExists:ifExists as 'suffix'|'error'|undefined};
+    if(dryRun){const plan=await createProject(need(0,'a name'),{...o,dryRun:true});return done(plan,`would create ${plan.name} in ${plan.folder} (${plan.worldId})`);}
+    const r=await createProject(need(0,'a name'),o);
     return done({...r,status:status(r.folder)},`created ${r.name} in ${r.folder} (${r.worldId})`);
+   }
+   case 'starters': {const r=listStarters();return done({starters:r},r.map(x=>`${x.id}  ${x.name}: ${x.description}`).join('\n'));}
+   case 'skies': {const r=listSkies(v.thumbnails ?? thumbnailsDir());return done({skies:r},r.map(x=>`${x.id}  ${x.name}: ${x.description}`).join('\n'));}
+   case 'floors': {const r=listFloors(v.thumbnails ?? thumbnailsDir());return done({floors:r},r.map(x=>`${x.id}  ${x.name} (${x.tile} m): ${x.description}`).join('\n'));}
+   case 'floor': {
+    const folder=projectFolder(need(0,'a project')),choice=floorChoice(p[1],v.preset,'');
+    if(!choice) throw new BuilderError('floor.invalid','builder floor needs an image, --preset ID or --tile METRES');
+    const r=await applyFloor(folder,choice,{dryRun});
+    return done({...r,status:status(folder)},`${dryRun?'would set':'floor set:'} ${r.floor.preset ?? r.floor.image}, every ${r.floor.tile} m`);
+   }
+   case 'spawn': {
+    const folder=projectFolder(need(0,'a project')),r=await applySpawn(folder,spawnChoice(v.at) ?? {},{dryRun});
+    return done({...r,status:status(folder)},`${dryRun?'would put':'spawn at'} ${r.position.join(', ')} facing ${r.yaw}°`);
    }
    case 'list': {const r=listProjects();return done({projects:r},r.map(statusText).join('\n') || 'no world folders yet');}
    case 'status': {const r=status(projectFolder(need(0,'a project')));return done(r,statusText(r));}
@@ -54,8 +100,9 @@ export async function builderMain(argv:string[]):Promise<void> {
    }
    case 'sky': {
     const folder=projectFolder(need(0,'a project'));
-    const r=await setSky(folder,need(1,'an image'),{license:v.license ?? '',author:v.author ?? '',source:v.source ?? ''});
-    return done({...r,status:status(folder)},`sky set (${r.width} x ${r.height})${r.sun?', sun from the panorama':''}`);
+    const choice=v.preset!==undefined?{preset:v.preset}:{image:need(1,'an image or --preset ID'),...prov('')};
+    const r=await applySky(folder,choice,{dryRun});
+    return done({...r,status:status(folder)},`${dryRun?'would set the sky':'sky set'} (${r.preset ?? `${r.width} x ${r.height}`})`);
    }
    case 'remote': {
     const folder=projectFolder(need(0,'a project'));
@@ -65,8 +112,8 @@ export async function builderMain(argv:string[]):Promise<void> {
    default: throw new Error(`Unknown command: builder ${verb}\n${builderHelp}`);
   }
  } catch(e:any) {
-  if(!v.json) throw e;
-  line({event:'error',error:{message:String(e.message).split('\n')[0],code:e.code || 'builder.failed'}});
+  if(!v.json){if(e?.hint) e.message+=`\n  ${e.hint}`;throw e;}
+  line({event:'error',error:{message:String(e.message).split('\n')[0],code:e.code || 'builder.failed',...(e.hint?{hint:e.hint}:{}),...(e.data?{data:e.data}:{})}});
   process.exitCode=1;
  }
 }

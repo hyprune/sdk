@@ -1,5 +1,5 @@
 // `hyprune builder` (RFC-0014 phase 1 as amended): world folders as git repositories, the
-// Flat land starter, Make world on Save, Release as a tag (and push plus RFC-0015 assets with a
+// Open Plain starter (the world wizard: sky, floor, spawn), Make world on Save, Release as a tag (and push plus RFC-0015 assets with a
 // remote), the sky, and the CLI's JSON lines. Core's part (placements and copies) is simulated
 // by writing builder/project.json and objects/<id>/ the way editor mode does.
 import test from 'node:test';
@@ -8,8 +8,10 @@ import {cpSync,existsSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'n
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync,spawnSync} from 'node:child_process';
-import {BuilderError,changeSummary,compareVersions,createProject,listProjects,parseRemote,projectFolder,publishedId,readProject,release,save,setRemote,setSky,slugify,status}
- from '../dist/src/builder.js';
+import {BuilderError,applyFloor,applySky,applySpawn,changeSummary,compareVersions,createProject,listFloors,listProjects,listSkies,listStarters,parseRemote,projectFolder,publishedId,
+ readProject,release,save,setRemote,setSky,slugify,status} from '../dist/src/builder.js';
+import {decodeHdr,hdrSun,toneMap} from '../dist/src/hdr.js';
+import {SKY_PRESETS,FLOOR_PRESETS,skyPanorama} from '../dist/src/presets.js';
 import {validateWorld} from '../dist/src/world.js';
 import {encodePng} from '../dist/src/pixels.js';
 import {equirectDirection} from '../dist/src/starter.js';
@@ -51,7 +53,7 @@ test('slugs, remotes, published ids and versions',()=>{
   {name:'a',placements:[{id:'u-000001',pose:{rotation:[0,0,0,1],position:[1,0,2]},scale:1.0}],sky:{author:'a',image:'s',license:'CC0-1.0',source:'b'}}),'');
 });
 
-test('create: a git repository with the Flat land starter, made and saved once',async t=>{
+test('create: a git repository with the Open Plain starter, made and saved once',async t=>{
  const dir=root(t);
  await assert.rejects(createProject('No identity',{root:dir}),code('git.identity'));
  assert.ok(!existsSync(join(dir,'no-identity')),'a failed create leaves no folder');
@@ -59,7 +61,7 @@ test('create: a git repository with the Flat land starter, made and saved once',
  assert.deepEqual([c.projectId,c.worldId,c.folder],['harbour-plaza','local.harbour-plaza',join(dir,'harbour-plaza')]);
  assert.equal(readProject(c.folder).id,'local.harbour-plaza');
  assert.equal((await createProject('Harbour plaza',{root:dir,identity:ME})).projectId,'harbour-plaza-2');
- assert.equal(gitIn(c.folder,'log','--format=%s'),'Create Harbour Plaza from the Flat land starter');
+ assert.equal(gitIn(c.folder,'log','--format=%s'),'Create Harbour Plaza from the Open Plain starter');
  assert.equal(gitIn(c.folder,'status','--porcelain'),'');
  const files=gitIn(c.folder,'ls-files').split('\n').sort();
  assert.deepEqual(files,['.gitattributes','.gitignore','ATTRIBUTION.md','LICENSE','builder/base.json','builder/project.json','sky/panorama.jpg','starter/land.glb','world.json']);
@@ -116,7 +118,7 @@ test('save: Make world (objects, screens as homes, provenance) and one commit pe
  writeFileSync(join(folder,'builder/project.json'),JSON.stringify(project,null,2)+'\n');
  const second=await save(folder,'Move the barrel');
  assert.equal(second.message,'Move the barrel');
- assert.deepEqual(gitIn(folder,'log','--format=%s').split('\n'),['Move the barrel',first.message,'Create Quay from the Flat land starter']);
+ assert.deepEqual(gitIn(folder,'log','--format=%s').split('\n'),['Move the barrel',first.message,'Create Quay from the Open Plain starter']);
  assert.deepEqual(JSON.parse(readFileSync(join(folder,'world.json'),'utf8')).objects[0].pose.position,[3,0,-3]);
  // A screen on a workspace at or under the room's can't be a home: a prop, with a warning.
  const p2=readProject(folder);p2.placements[1].workspace=20;
@@ -200,7 +202,7 @@ test('sky: a 2:1 image becomes sky/panorama.jpg with its provenance and sun',asy
  const want=equirectDirection(768.5/w,(h/2-h/6+0.5)/h);
  assert.ok(r.sun.every((v,i)=>Math.abs(v-want[i])<0.03),JSON.stringify([r.sun,want]));
  assert.equal(readFileSync(join(folder,'sky/panorama.jpg'))[0],0xff,'normalised to JPEG');
- assert.deepEqual(readProject(folder).sky,{image:'sky/panorama.jpg',license:'CC-BY-4.0',author:'Me',source:'https://example.com/dusk'});
+ assert.deepEqual(readProject(folder).sky,{image:'sky/panorama.jpg',preset:null,license:'CC-BY-4.0',author:'Me',source:'https://example.com/dusk'});
  const saved=await save(folder);
  assert.match(saved.message,/changed the sky/);
  const world=JSON.parse(readFileSync(join(folder,'world.json'),'utf8'));
@@ -223,4 +225,162 @@ test('CLI: JSON lines for the Director',async t=>{
  assert.equal(rel.at(-1).result.status.lastVersion.tag,'v0.1.0');
  const bad=cli('status','local.nowhere');
  assert.equal(bad.status,1);assert.equal(lines(bad)[0].error.code,'project.unknown');
+});
+
+// ---- the world wizard (RFC-0014 amendment): Open Plain, preset skies and floors, spawn ----
+const glbImageMime=folder=>{
+ const b=readFileSync(join(folder,'starter/land.glb')),len=b.readUInt32LE(12),json=JSON.parse(b.subarray(20,20+len).toString());
+ return json.images[0].mimeType;
+};
+test('wizard: presets, a spawn facing the sun, dry run, if-exists and clear errors',async t=>{
+ const dir=root(t);
+ assert.deepEqual(listStarters().map(s=>s.id),['open-plain@0.2']);
+ const plan=await createProject('Rooftop',{root:dir,identity:ME,sky:{preset:'sunset'},floor:{preset:'grass'},spawn:{facing:'sun'},dryRun:true});
+ assert.equal(plan.dryRun,true);assert.equal(plan.projectId,'rooftop');assert.equal(plan.sky.preset,'sunset');assert.equal(plan.floor.tile,4);
+ assert.ok(!existsSync(join(dir,'rooftop')),'a dry run writes nothing');
+ const c=await createProject('Rooftop',{root:dir,identity:ME,sky:{preset:'sunset'},floor:{preset:'grass',tile:3},spawn:{position:[2,0,-3],facing:'sun'}});
+ const project=readProject(c.folder),base=JSON.parse(readFileSync(join(c.folder,'builder/base.json'),'utf8'));
+ assert.deepEqual([project.projectVersion,project.starter,project.sky.preset,project.floor.preset,project.floor.tile,project.floor.image],['0.2','open-plain@0.2','sunset','grass',3,null]);
+ const sunset=SKY_PRESETS.find(p=>p.id==='sunset');
+ assert.deepEqual(base.atmosphere.sky.horizon,sunset.horizon);assert.equal(base.atmosphere.exposure,sunset.exposure);
+ assert.equal(glbImageMime(c.folder),'image/jpeg');
+ // Facing the sun: the view direction (-Z turned by yaw about +Y) points at the sun across the ground.
+ const s=status(c.folder),yaw=s.spawn.yaw*Math.PI/180,view=[-Math.sin(yaw),-Math.cos(yaw)],sun=sunset.sun.direction,l=Math.hypot(sun[0],sun[2]);
+ assert.ok(Math.abs(view[0]-sun[0]/l)<1e-3 && Math.abs(view[1]-sun[2]/l)<1e-3,JSON.stringify([view,sun]));
+ assert.deepEqual(s.spawn.position,[2,0,-3]);assert.equal(s.starter,'open-plain@0.2');assert.equal(s.floor.preset,'grass');
+ const world=JSON.parse(readFileSync(join(c.folder,'world.json'),'utf8'));
+ assert.ok(world.attribution.some(a=>a.path==='starter/land.glb' && a.license==='CC0-1.0'));
+ await assert.rejects(createProject('Rooftop',{root:dir,identity:ME,ifExists:'error'}),e=>code('project.exists')(e) && e.data.projectId==='rooftop');
+ await assert.rejects(createProject('Nope',{root:dir,identity:ME,sky:{preset:'mars'}}),e=>code('sky.invalid')(e) && /clear-day/.test(e.hint));
+ await assert.rejects(createProject('Nope',{root:dir,identity:ME,floor:{preset:'lava'}}),e=>code('floor.invalid')(e) && /grass/.test(e.hint));
+ await assert.rejects(createProject('Nope',{root:dir,identity:ME,floor:{preset:'grass',tile:0.1}}),code('floor.invalid'));
+ await assert.rejects(createProject('Nope',{root:dir,identity:ME,spawn:{position:[5000,0,0]}}),code('spawn.invalid'));
+ await assert.rejects(createProject('Nope',{root:dir,identity:ME,starter:'desert'}),code('starter.unknown'));
+ assert.ok(!existsSync(join(dir,'nope')),'refused input leaves no folder');
+});
+
+test('floor: the user\'s texture with provenance, re-tiling, back to a preset',async t=>{
+ const dir=root(t),{folder}=await createProject('Yard',{root:dir,identity:ME});
+ const w=256,data=new Uint8Array(w*w*4);for(let i=0;i<w*w;i++){data[i*4]=(i*7)&255;data[i*4+1]=120;data[i*4+2]=60;data[i*4+3]=255;}
+ const image=join(dir,'tiles.png');writeFileSync(image,encodePng({width:w,height:w,data}));
+ await assert.rejects(applyFloor(folder,{image,license:'CC0-1.0',author:'',source:'mine'}),code('floor.invalid'));
+ const dry=await applyFloor(folder,{image,license:'CC-BY-4.0',author:'Ada',source:'https://example.com/tiles',tile:1.5},{dryRun:true});
+ assert.equal(dry.dryRun,true);assert.ok(!existsSync(join(folder,'floor')));
+ const r=await applyFloor(folder,{image,license:'CC-BY-4.0',author:'Ada',source:'https://example.com/tiles',tile:1.5});
+ assert.deepEqual(r.floor,{preset:null,image:'floor/texture.jpg',tile:1.5,license:'CC-BY-4.0',author:'Ada',source:'https://example.com/tiles'});
+ assert.equal(readFileSync(join(folder,'floor/texture.jpg'))[0],0xff);
+ assert.equal((await applyFloor(folder,{tile:3})).floor.tile,3);
+ assert.equal(readProject(folder).floor.image,'floor/texture.jpg','re-tiling keeps the image');
+ const saved=await save(folder);assert.match(saved.message,/changed the floor/);
+ const world=JSON.parse(readFileSync(join(folder,'world.json'),'utf8'));
+ for(const path of ['starter/land.glb','floor/texture.jpg'])
+  assert.deepEqual(world.attribution.find(a=>a.path===path),{path,author:'Ada',license:'CC-BY-4.0',source:'https://example.com/tiles'},path);
+ assert.match(world.license,/CC-BY-4.0/);
+ await applyFloor(folder,{preset:'paving'});
+ assert.ok(!existsSync(join(folder,'floor')),'a preset again removes the old image');
+ assert.equal(readProject(folder).floor.tile,4);
+});
+
+test('sky presets and spawn edits; a 0.1 folder upgrades to 0.2 when it needs to',async t=>{
+ const dir=root(t),{folder}=await createProject('Night',{root:dir,identity:ME});
+ // Write the folder back as projectVersion 0.1 (made before the wizard).
+ const old=readProject(folder);delete old.floor;delete old.sky.preset;
+ writeFileSync(join(folder,'builder/project.json'),JSON.stringify({...old,projectVersion:'0.1',starter:'flat-land@0.1'},null,2));
+ assert.equal(readProject(folder).projectVersion,'0.1');
+ const dry=await applySky(folder,{preset:'night'},{dryRun:true});
+ assert.equal(dry.dryRun,true);assert.equal(readProject(folder).projectVersion,'0.1');
+ await applySky(folder,{preset:'night'});
+ const p=readProject(folder);
+ assert.deepEqual([p.projectVersion,p.starter,p.sky.preset,p.sky.license],['0.2','flat-land@0.1','night','CC0-1.0']);
+ const r=await applySpawn(folder,{position:[10,0,10],yaw:90});
+ assert.deepEqual([r.position,r.yaw],[[10,0,10],90]);
+ assert.deepEqual(status(folder).spawn,{position:[10,0,10],yaw:90});
+ await assert.rejects(applySpawn(folder,{facing:'up'}),code('spawn.invalid'));
+ // Every preset sky makes a valid world.
+ for(const sky of SKY_PRESETS) {await applySky(folder,{preset:sky.id});await save(folder,'sky '+sky.id);}
+ assert.equal(gitIn(folder,'log','-1','--format=%s'),'sky night');
+});
+
+// A minimal uncompressed OpenEXR (FLOAT B, G, R) and an RLE Radiance HDR, written for the tests.
+function exrFile(w,h,pixel) {
+ const parts=[],str=s=>Buffer.from(s+'\0','latin1'),i32=v=>{const b=Buffer.alloc(4);b.writeInt32LE(v);return b;},f32=v=>{const b=Buffer.alloc(4);b.writeFloatLE(v);return b;};
+ const attr=(name,type,value)=>parts.push(str(name),str(type),i32(value.length),value);
+ const chan=n=>Buffer.concat([str(n),i32(2),Buffer.from([0,0,0,0]),i32(1),i32(1)]);
+ parts.push(Buffer.from([0x76,0x2f,0x31,0x01,2,0,0,0]));
+ attr('channels','chlist',Buffer.concat([chan('B'),chan('G'),chan('R'),Buffer.from([0])]));
+ attr('compression','compression',Buffer.from([0]));
+ const box=Buffer.concat([i32(0),i32(0),i32(w-1),i32(h-1)]);
+ attr('dataWindow','box2i',box);attr('displayWindow','box2i',box);attr('lineOrder','lineOrder',Buffer.from([0]));
+ attr('pixelAspectRatio','float',f32(1));attr('screenWindowCenter','v2f',Buffer.concat([f32(0),f32(0)]));attr('screenWindowWidth','float',f32(1));
+ parts.push(Buffer.from([0]));
+ const header=Buffer.concat(parts),lineBytes=8+w*3*4,table=Buffer.alloc(8*h);
+ for(let y=0;y<h;y++) table.writeBigUInt64LE(BigInt(header.length+8*h+y*lineBytes),y*8);
+ const lines=[];
+ for(let y=0;y<h;y++){const b=Buffer.alloc(lineBytes);b.writeInt32LE(y,0);b.writeInt32LE(w*12,4);
+  for(let x=0;x<w;x++){const [r,g,bl]=pixel(x,y);b.writeFloatLE(bl,8+x*4);b.writeFloatLE(g,8+(w+x)*4);b.writeFloatLE(r,8+(2*w+x)*4);}lines.push(b);}
+ return Buffer.concat([header,table,...lines]);
+}
+function hdrFile(w,h,pixel) {
+ const out=[Buffer.from(`#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y ${h} +X ${w}\n`,'latin1')];
+ const rgbe=([r,g,b])=>{const v=Math.max(r,g,b);if(v<1e-32)return [0,0,0,0];const e=Math.ceil(Math.log2(v))+(v===2**Math.ceil(Math.log2(v))?1:0),s=256/2**e;return [r*s,g*s,b*s,e+128].map(Math.floor);};
+ for(let y=0;y<h;y++){
+  const px=Array.from({length:w},(_,x)=>rgbe(pixel(x,y))),bytes=[2,2,w>>8,w&255];
+  for(let c=0;c<4;c++){
+   const ch=px.map(p=>p[c]);
+   for(let x=0;x<w;){let run=1;while(x+run<w && run<127 && ch[x+run]===ch[x])run++;
+    if(run>=4){bytes.push(128+run,ch[x]);x+=run;continue;}
+    const start=x;let n=0;while(x<w && n<128){let r2=1;while(x+r2<w && r2<4 && ch[x+r2]===ch[x])r2++;if(r2>=4)break;x++;n++;}
+    bytes.push(n,...ch.slice(start,start+n));}
+  }
+  out.push(Buffer.from(bytes));
+ }
+ return Buffer.concat(out);
+}
+test('HDR skies: OpenEXR and Radiance HDR decode top-down, the sun comes from linear data, tone mapped to sRGB',async t=>{
+ const w=1024,h=512,sunX=256,sunY=Math.round(h/2-h/6);
+ const pixel=(x,y)=>Math.hypot(x-sunX,y-sunY)<3?[2000,1900,1700]:y<h/2?[0.4,0.6,1.2]:[0.15,0.12,0.1];
+ const want=equirectDirection((sunX+0.5)/w,(sunY+0.5)/h);
+ for(const [kind,bytes] of [['exr',exrFile(w,h,pixel)],['hdr',hdrFile(w,h,pixel)]]) {
+  const img=decodeHdr(new Uint8Array(bytes));
+  assert.deepEqual([img.width,img.height],[w,h],kind);
+  assert.ok(Math.abs(img.data[0]-0.4)<0.02 && img.data[((h-1)*w)*3]<0.2,`${kind}: row 0 is the top (${img.data[0]}, ${img.data[((h-1)*w)*3]})`);
+  const sun=hdrSun(img);assert.ok(sun.every((v,i)=>Math.abs(v-want[i])<0.03),`${kind} ${JSON.stringify([sun,want])}`);
+  const ldr=toneMap(img);assert.ok(ldr.data[2]>ldr.data[((h-1)*w)*4+2],kind);
+ }
+ const dir=root(t),{folder}=await createProject('Studio',{root:dir,identity:ME});
+ const file=join(dir,'studio.exr');writeFileSync(file,exrFile(w,h,pixel));
+ const r=await applySky(folder,{image:file,license:'CC0-1.0',author:'Me',source:'my own photo'});
+ assert.ok(r.sun.every((v,i)=>Math.abs(v-want[i])<0.03));
+ assert.equal(readFileSync(join(folder,'sky/panorama.jpg'))[0],0xff);
+ const base=JSON.parse(readFileSync(join(folder,'builder/base.json'),'utf8'));
+ assert.ok(base.atmosphere.sky.zenith[2]>base.atmosphere.sky.zenith[0],'sky colours estimated from the image');
+ const bad=join(dir,'bad.exr');writeFileSync(bad,Buffer.from([0x76,0x2f,0x31,0x01,2,0,0,0,1,2,3]));
+ await assert.rejects(applySky(folder,{image:bad,license:'CC0-1.0',author:'Me',source:'x'}),code('sky.invalid'));
+});
+
+test('presets: tileable floors, thumbnails cached, the CLI lists them and reports hints',async t=>{
+ for(const f of FLOOR_PRESETS) {
+  const img=f.texture(256),row=y=>Array.from({length:256},(_,x)=>img.data[(y*256+x)*4+1]);
+  const diff=(a,b)=>a.reduce((s,v,i)=>s+Math.abs(v-b[i]),0)/a.length;
+  // Opposite edges meet: the last row continues into the first about as smoothly as neighbours do.
+  assert.ok(diff(row(255),row(0))<=diff(row(127),row(128))*2.5+6,`${f.id} tiles`);
+ }
+ const thumbs=mkdtempSync(join(tmpdir(),'hyprune-thumbs-'));t.after(()=>rmSync(thumbs,{recursive:true,force:true}));
+ const skies=listSkies(thumbs),floors=listFloors(thumbs);
+ assert.deepEqual(skies.map(s=>s.id),['clear-day','sunset','overcast','night']);
+ assert.deepEqual(floors.map(f=>f.id),['grid','grass','sand','paving','concrete']);
+ for(const c of [...skies,...floors]) assert.equal(readFileSync(c.thumbnail)[1],0x50,c.id);
+ const dir=root(t),env={...process.env,HYPRUNE_PROJECTS_DIR:dir,XDG_CACHE_HOME:thumbs};
+ const cli=(...args)=>spawnSync(process.execPath,[CLI,'builder',...args,'--json'],{env,encoding:'utf8'});
+ const last=r=>JSON.parse(r.stdout.trim().split('\n').at(-1));
+ assert.equal(last(cli('skies')).result.skies[1].id,'sunset');
+ assert.ok(last(cli('floors')).result.floors[0].thumbnail.startsWith(thumbs));
+ const made=last(cli('create','Garden','--sky','sunset','--floor','grass','--tile','5','--facing','left','--git-name','Ada','--git-email','ada@example.com'));
+ assert.equal(made.result.status.floor.tile,5);assert.equal(made.result.status.sky.preset,'sunset');
+ assert.equal(last(cli('create','Garden','--if-exists','error')).error.data.projectId,'garden');
+ const nope=last(cli('floor','garden','--preset','lava'));
+ assert.equal(nope.error.code,'floor.invalid');assert.match(nope.error.hint,/Floors: grid/);
+ assert.equal(last(cli('spawn','garden','--at','1,0,1','--yaw','45')).result.yaw,45);
+ assert.equal(last(cli('sky','garden','--preset','overcast','--dry-run')).result.dryRun,true);
+ assert.equal(readProject(join(dir,'garden')).sky.preset,'sunset');
 });
