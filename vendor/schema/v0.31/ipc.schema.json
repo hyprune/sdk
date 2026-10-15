@@ -1934,6 +1934,25 @@
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 64
+                },
+                "hint": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256,
+                  "description": "How to fix it, in one short sentence (RFC-0016 operation rules)."
+                },
+                "field": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "The parameter the error is about."
+                },
+                "id": {
+                  "$ref": "#/$defs/objectId",
+                  "description": "The placement a key names (rule key.taken)."
+                },
+                "key": {
+                  "$ref": "#/$defs/objectKey"
                 }
               },
               "required": [
