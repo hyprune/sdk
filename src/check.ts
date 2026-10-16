@@ -473,7 +473,7 @@ export async function checkProject(folder: string, o: {cache?: boolean; cell?: n
     }
    }
    if (hiders.size) {problems.push(`${[...hiders].slice(0, 3).join(', ')} ${hiders.size === 1 ? 'hides' : 'hide'} part of it from the standing spot`); hints.push('move what is in the way');}
-   if (fl.ok && !reachable) {problems.push("its standing spot can't be reached from the spawn"); hints.push('connect it with floor, a ramp or stairs (steps up to 0.35 m)');}
+   if (fl.ok && !reachable && main >= 0) {problems.push("its standing spot can't be reached from the spawn"); hints.push('connect it with floor, a ramp or stairs (steps up to 0.35 m)');}
   }
   boxes.push({s, obb});
   const done = !problems.length;

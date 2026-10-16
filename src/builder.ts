@@ -671,7 +671,7 @@ export function release(folder: string, o: ReleaseOptions = {}): Promise<Release
   stage('check');
   const checked = await checkProject(folder);
   const open = checked.items.filter(i => i.blocks && !i.done);
-  if (open.length && !o.skipCheck) fail('release.check', `${open.length} checklist item${open.length === 1 ? ' is' : 's are'} open: ${open.map(i => i.label).join('; ')}`,
+  if (open.length && !o.skipCheck) fail('release.check', `${open.length} checklist item${open.length === 1 ? ' is' : 's are'} open: ${open.map(i => i.label).join('; ')}.`,
    'Fix them (builder check lists where), or release anyway with --skip-check', {items: open});
   const tags = versionTags(folder), latest = tags[0]?.version, base = readJson(join(folder, BASE));
   const version = o.version ?? (latest ? nextPatch(latest) : base.version);
