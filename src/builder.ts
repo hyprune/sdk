@@ -6,7 +6,7 @@
 // folder in editor mode (builder/base.json plus the placements it writes to
 // builder/project.json) and never runs git; this module is the project helper.
 import {execFileSync,spawnSync} from 'node:child_process';
-import {copyFileSync,existsSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,renameSync,rmSync,statSync,writeFileSync} from 'node:fs';
+import {copyFileSync,existsSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,renameSync,rmSync,rmdirSync,statSync,writeFileSync} from 'node:fs';
 import {homedir,tmpdir} from 'node:os';
 import {basename,dirname,join,resolve} from 'node:path';
 import {validateManifest} from './validation.js';
@@ -636,7 +636,7 @@ export function prunePrimitives(folder: string): string[] {
  return removed;
 }
 export interface Saved {commit: string; message: string; pending: Pending; homes: Made['homes']; warnings: string[]}
-export function save(folder: string, message = ''): Promise<Saved> {
+export function save(folder: string, message = '', o: {prefix?: string} = {}): Promise<Saved> {
  return locked(folder, async () => {
   const pruned = prunePrimitives(folder);
   const made = await make(folder), warnings = [...made.warnings, ...await validateFolder(folder)];
@@ -649,9 +649,47 @@ export function save(folder: string, message = ''): Promise<Saved> {
   const savedProject = gitTry(folder, ['show', `HEAD:${PROJECT}`]);
   const before = savedProject.status === 0 ? JSON.parse(savedProject.stdout) as Project : null;
   const summary = changeSummary(before, readProject(folder));
-  const text = message.trim() || `Save ${at()}${summary ? ' · ' + summary : ''}`;
+  const text = (o.prefix ?? '') + (message.trim() || `Save ${at()}${summary ? ' · ' + summary : ''}`);
   git(folder, ['commit', '-q', '-F', '-'], {input: text + '\n'});
   return {commit: git(folder, ['rev-parse', 'HEAD']).trim(), message: text, pending: changes, homes: made.homes, warnings};
+ });
+}
+
+// ---- discard and history (RFC-0014 Saves, versions and releases; the undo of RFC-0016) ----
+export interface DiscardResult {restored: string[]; removed: string[]; dryRun?: true}
+/** Puts the folder (or the given paths in it) back to the last save: changed files restored, new ones removed. */
+export function discard(folder: string, o: {paths?: string[]; dryRun?: boolean} = {}): Promise<DiscardResult> {
+ return locked(folder, async () => {
+  const skip = (f: string) => f.startsWith('builder/cache/') || (!!o.paths?.length && !o.paths.some(p => f === p || f.startsWith(p.replace(/\/$/, '') + '/')));
+  const entries = git(folder, ['status', '--porcelain=v1', '-z', '--untracked-files=all']).split('\0').filter(Boolean);
+  const restored: string[] = [], removed: string[] = [];
+  for (let i = 0; i < entries.length; i++) {
+   const code = entries[i].slice(0, 2), path = entries[i].slice(3);
+   if (code[0] === 'R' || code[0] === 'C') i++; // the rename's source follows
+   if (skip(path)) continue;
+   if (code === '??') removed.push(path); else restored.push(path);
+  }
+  if (o.dryRun) return {restored, removed, dryRun: true as const};
+  for (let i = 0; i < restored.length; i += 200) git(folder, ['restore', '--source=HEAD', '--staged', '--worktree', '--', ...restored.slice(i, i + 200)]);
+  for (const path of removed) {
+   rmSync(join(folder, path), {force: true});
+   // Empty directories left behind go too (never the folder itself).
+   for (let dir = dirname(path); dir && dir !== '.'; dir = dirname(dir)) {
+    try {if (readdirSync(join(folder, dir)).length) break; rmdirSync(join(folder, dir));} catch {break;}
+   }
+  }
+  return {restored, removed};
+ });
+}
+export interface HistoryEntry {commit: string; message: string; at: string; author: string; assistant: boolean; version: string | null}
+/** The saves, newest first (at most `limit`), with the version tagged on each. */
+export function history(folder: string, limit = 50): HistoryEntry[] {
+ const tags = new Map(versionTags(folder).map(t => [t.commit, t.version]));
+ const out = gitTry(folder, ['log', `-n${Math.max(1, Math.min(500, limit))}`, '--format=%H%x1f%s%x1f%aI%x1f%an']);
+ if (out.status !== 0) return [];
+ return out.stdout.split('\n').filter(Boolean).map(line => {
+  const [commit, message, at, author] = line.split('\x1f');
+  return {commit, message, at, author, assistant: message.startsWith('Assistant: '), version: tags.get(commit) ?? null};
  });
 }
 

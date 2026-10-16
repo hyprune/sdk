@@ -4,7 +4,7 @@ import {parseArgs} from 'node:util';
 import {readFileSync} from 'node:fs';
 import {folderPlace,primitiveHelp,primitiveMain} from './primitive-cli.js';
 import {checkProject,type CheckItem} from './check.js';
-import {applyFloor,applySky,applySpawn,createProject,listFloors,listProjects,listSkies,listStarters,make,projectFolder,release,save,setRemote,status,thumbnailsDir,
+import {applyFloor,applySky,applySpawn,createProject,discard,history,listFloors,listProjects,listSkies,listStarters,make,projectFolder,release,save,setRemote,status,thumbnailsDir,
  BuilderError,type FloorChoice,type SkyChoice,type SpawnChoice,type Status} from './builder.js';
 
 export const builderHelp=`hyprune builder create NAME [--starter open-plain] [SKY] [FLOOR] [SPAWN] [--if-exists suffix|error] [--dry-run]
@@ -19,6 +19,8 @@ hyprune builder make PROJECT [--json]
 hyprune builder check PROJECT [--fresh] [--json]
     the checklist: spawn, screen approaches, walkable area, budgets, licences, official publishing
 hyprune builder save PROJECT [-m MESSAGE] [--json]
+hyprune builder discard PROJECT [PATH ...] [--dry-run] [--json]   (back to the last save; core reloads the folder)
+hyprune builder history PROJECT [--limit N] [--json]
 hyprune builder release PROJECT [VERSION] [--notes TEXT | --notes-file FILE] [--id ID] [--skip-check] [--json]
 hyprune builder sky PROJECT (IMAGE --license SPDX --author A --source S | --preset ID) [--dry-run] [--json]
     IMAGE: an equirectangular PNG, JPEG, OpenEXR or Radiance HDR (tone mapped)
@@ -51,7 +53,7 @@ export async function builderMain(argv:string[]):Promise<void> {
   'git-name':{type:'string'},'git-email':{type:'string'},starter:{type:'string'},preset:{type:'string'},'dry-run':{type:'boolean'},
   sky:{type:'string'},'sky-image':{type:'string'},'sky-license':{type:'string'},'sky-author':{type:'string'},'sky-source':{type:'string'},
   floor:{type:'string'},'floor-image':{type:'string'},'floor-license':{type:'string'},'floor-author':{type:'string'},'floor-source':{type:'string'},
-  tile:{type:'string'},spawn:{type:'string'},at:{type:'string'},yaw:{type:'string'},facing:{type:'string'},'if-exists':{type:'string'},thumbnails:{type:'string'},fresh:{type:'boolean'},'skip-check':{type:'boolean'}}});
+  tile:{type:'string'},spawn:{type:'string'},at:{type:'string'},yaw:{type:'string'},facing:{type:'string'},'if-exists':{type:'string'},thumbnails:{type:'string'},fresh:{type:'boolean'},'skip-check':{type:'boolean'},limit:{type:'string'}}});
  const verb=argv[1];
  if(v.help || !verb){console.log(builderHelp);return;}
  const line=(value:unknown):void=>{process.stdout.write(JSON.stringify(value)+'\n');};
@@ -106,6 +108,14 @@ export async function builderMain(argv:string[]):Promise<void> {
     const mark=(i:CheckItem)=>i.done?(i.level==='warning'?'!':'✓'):i.blocks?'✗':'!';
     return done(r,[`${r.ready?'ready to release':'not ready: blocking items are open'} (walkable ${r.walk.mainArea} m², ${r.walk.ms} ms)`,
      ...r.items.map(i=>`${mark(i)} ${i.label}: ${i.message}${i.hint && !i.done?`\n    ${i.hint}`:''}`)].join('\n'));
+   }
+   case 'discard': {
+    const folder=projectFolder(need(0,'a project')),r=await discard(folder,{paths:p.slice(1),dryRun});
+    return done({...r,status:status(folder)},`${dryRun?'would restore':'restored'} ${r.restored.length} and ${dryRun?'remove':'removed'} ${r.removed.length} file(s)`);
+   }
+   case 'history': {
+    const r=history(projectFolder(need(0,'a project')),v.limit?Number(v.limit):50);
+    return done({history:r},r.map(h=>`${h.commit.slice(0,12)} ${h.at} ${h.version?`v${h.version} `:''}${h.message}`).join('\n') || 'no saves');
    }
    case 'save': {
     const folder=projectFolder(need(0,'a project')),r=await save(folder,v.message ?? '');

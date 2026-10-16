@@ -5,7 +5,7 @@ import {FrameDecoder,encodeFrame} from './codec.js';
 import {StateStore,type Snapshot} from './state.js';
 import {socketPath} from './paths.js';
 import {validateWire,type Protocol} from './validation.js';
-import type {Ipc11_Notification, Ipc12_Notification, Ipc32_Notification, Ipc31_Notification, Ipc30_Notification, Ipc29_Notification, Ipc28_Notification, Ipc27_Notification, Ipc26_Notification, Ipc25_Notification, Ipc24_Notification, Ipc23_Notification, Ipc22_Notification, Ipc21_Notification, Ipc20_Notification, Ipc19_Notification, Ipc18_Notification, Ipc17_Notification, Ipc16_Notification, Ipc15_Notification, Ipc14_Notification, Ipc13_Notification, ProtocolMethods,Ipc_Notification,Ipc02_Notification,Ipc03_Notification,Ipc04_Notification,Ipc05_Notification,Ipc06_Notification,Ipc07_Notification,Ipc08_Notification,Ipc09_Notification,Ipc10_Notification} from './generated.js';
+import type {Ipc11_Notification, Ipc12_Notification, Ipc33_Notification, Ipc32_Notification, Ipc31_Notification, Ipc30_Notification, Ipc29_Notification, Ipc28_Notification, Ipc27_Notification, Ipc26_Notification, Ipc25_Notification, Ipc24_Notification, Ipc23_Notification, Ipc22_Notification, Ipc21_Notification, Ipc20_Notification, Ipc19_Notification, Ipc18_Notification, Ipc17_Notification, Ipc16_Notification, Ipc15_Notification, Ipc14_Notification, Ipc13_Notification, ProtocolMethods,Ipc_Notification,Ipc02_Notification,Ipc03_Notification,Ipc04_Notification,Ipc05_Notification,Ipc06_Notification,Ipc07_Notification,Ipc08_Notification,Ipc09_Notification,Ipc10_Notification} from './generated.js';
 export class RpcError extends Error { constructor(public code:number,message:string,public data?:{retryable:boolean;rule?:string;id?:string;key?:string;hint?:string}) { super(message); } }
 export interface ClientOptions<P extends Protocol=Protocol> {
   socket?:string; protocol?:P; client?:{id:string;name:string};
@@ -13,8 +13,16 @@ export interface ClientOptions<P extends Protocol=Protocol> {
   /** Called for EVERY connection. Supervisor must return a fresh one-use token. */
   tokenProvider?:()=>Promise<string|undefined>|string|undefined;
   reconnect?:boolean; callTimeoutMs?:number;
+  /**
+   * IPC 0.33 (RFC-0016): pair with the user's approval instead of a supervisor token. The
+   * connection sends session.pair first and waits (up to 130 s) for the user's answer in
+   * Hyprune; the token it gets binds the assistant profile.
+   */
+  pair?:{agent:{name:string;version?:string}};
+  /** Called when a pairing request is waiting for the user (to say so in the assistant's UI). */
+  onPairing?:()=>void;
 }
-export type Notification<P extends Protocol='0.2'>=P extends '0.1'?Ipc_Notification:P extends '0.32'?Ipc32_Notification:P extends '0.31'?Ipc31_Notification:P extends '0.30'?Ipc30_Notification:P extends '0.29'?Ipc29_Notification:P extends '0.28'?Ipc28_Notification:P extends '0.27'?Ipc27_Notification:P extends '0.26'?Ipc26_Notification:P extends '0.25'?Ipc25_Notification:P extends '0.24'?Ipc24_Notification:P extends '0.23'?Ipc23_Notification:P extends '0.22'?Ipc22_Notification:P extends '0.21'?Ipc21_Notification:P extends '0.20'?Ipc20_Notification:P extends '0.19'?Ipc19_Notification:P extends '0.18'?Ipc18_Notification:P extends '0.17'?Ipc17_Notification:P extends '0.16'?Ipc16_Notification:P extends '0.15'?Ipc15_Notification:P extends '0.14'?Ipc14_Notification:P extends '0.13'?Ipc13_Notification:P extends '0.12'?Ipc12_Notification:P extends '0.11'?Ipc11_Notification:P extends '0.10'?Ipc10_Notification:P extends '0.9'?Ipc09_Notification:P extends '0.8'?Ipc08_Notification:P extends '0.7'?Ipc07_Notification:P extends '0.6'?Ipc06_Notification:P extends '0.5'?Ipc05_Notification:P extends '0.4'?Ipc04_Notification:P extends '0.3'?Ipc03_Notification:Ipc02_Notification;
+export type Notification<P extends Protocol='0.2'>=P extends '0.1'?Ipc_Notification:P extends '0.33'?Ipc33_Notification:P extends '0.32'?Ipc32_Notification:P extends '0.31'?Ipc31_Notification:P extends '0.30'?Ipc30_Notification:P extends '0.29'?Ipc29_Notification:P extends '0.28'?Ipc28_Notification:P extends '0.27'?Ipc27_Notification:P extends '0.26'?Ipc26_Notification:P extends '0.25'?Ipc25_Notification:P extends '0.24'?Ipc24_Notification:P extends '0.23'?Ipc23_Notification:P extends '0.22'?Ipc22_Notification:P extends '0.21'?Ipc21_Notification:P extends '0.20'?Ipc20_Notification:P extends '0.19'?Ipc19_Notification:P extends '0.18'?Ipc18_Notification:P extends '0.17'?Ipc17_Notification:P extends '0.16'?Ipc16_Notification:P extends '0.15'?Ipc15_Notification:P extends '0.14'?Ipc14_Notification:P extends '0.13'?Ipc13_Notification:P extends '0.12'?Ipc12_Notification:P extends '0.11'?Ipc11_Notification:P extends '0.10'?Ipc10_Notification:P extends '0.9'?Ipc09_Notification:P extends '0.8'?Ipc08_Notification:P extends '0.7'?Ipc07_Notification:P extends '0.6'?Ipc06_Notification:P extends '0.5'?Ipc05_Notification:P extends '0.4'?Ipc04_Notification:P extends '0.3'?Ipc03_Notification:Ipc02_Notification;
 type EventMap<P extends Protocol>={ [N in Notification<P> as N['method']]:N['params'] } & {
   state:Snapshot<P>; notification:Notification<P>; ready:ProtocolMethods[P]['session.hello']['result'];
   fault:Error; disconnect:undefined; reconnecting:number;
@@ -56,9 +64,16 @@ export class HypruneClient<P extends Protocol='0.2'> extends EventEmitter {
     const deadline=setInterval(()=>{ try { decoder.checkDeadline(); } catch(e) { this.emit('fault',e); socket.destroy(); } },1000); deadline.unref(); socket.once('close',()=>clearInterval(deadline));
     await new Promise<void>((resolve,reject)=>{ socket.once('connect',resolve); socket.once('error',reject); socket.once('close',()=>reject(new Error('Connection closed before connect'))); });
     try {
+      let helloToken=token;
+      if(this.options.pair && !helloToken) {
+        this.options.onPairing?.();
+        const paired=await this.request('session.pair',{protocols:[this.protocol],client:this.options.client || {id:'com.hyprune.mcp',name:'Hyprune MCP server'},
+         agent:this.options.pair.agent,profile:'assistant'},undefined,130_000);
+        helloToken=paired.token;
+      }
       // Held from the response frame on: core may write an event right behind it in the same
       // read, and receive() only accepts events the hello advertised.
-      await this.request('session.hello',{protocols:[this.protocol],client:this.options.client || {id:'com.hyprune.sdk',name:'Hyprune SDK'},capabilities:this.options.capabilities || [],...(token?{token}:{})},v=>{this.hello=v;});
+      await this.request('session.hello',{protocols:[this.protocol],client:this.options.client || {id:'com.hyprune.sdk',name:'Hyprune SDK'},capabilities:this.options.capabilities || [],...(helloToken?{token:helloToken}:{})},v=>{this.hello=v;});
       if(this.hello?.protocol!==this.protocol) throw new Error('Protocol mismatch');
       if(this.subscribed) await this.subscribe();
       this.attempts=0; clearTimeout(this.retry);
@@ -75,15 +90,15 @@ export class HypruneClient<P extends Protocol='0.2'> extends EventEmitter {
   call<M extends MethodsFor<P>>(method:M,params:CallFor<P,M> extends {params:infer T}?T:never):Promise<CallFor<P,M> extends {result:infer T}?T:never> {
     return this.request(method,params);
   }
-  private request(method:string,params:unknown,apply?:(v:any)=>void):Promise<any> {
+  private request(method:string,params:unknown,apply?:(v:any)=>void,timeoutMs?:number):Promise<any> {
     const socket=this.socket;
     if(!socket || socket.destroyed) return Promise.reject(new Error('Not connected'));
-    if(method!=='session.hello' && !this.hello?.methods.includes(method as never)) return Promise.reject(new RpcError(-32601,'Method not advertised: '+method));
+    if(method!=='session.hello' && method!=='session.pair' && !this.hello?.methods.includes(method as never)) return Promise.reject(new RpcError(-32601,'Method not advertised: '+method));
     if(this.pending.size>=64) return Promise.reject(new Error('64 outstanding calls exceeded'));
     const id=this.prefix+':'+(++this.counter), message={jsonrpc:'2.0',id,method,params};
     try { validateWire(message,this.protocol); } catch(e) { return Promise.reject(e); }
     return new Promise((resolve,reject)=>{
-      const timer=setTimeout(()=>{ socket.destroy(); reject(new Error('Call deadline; result is uncertain, inspect state before retrying')); },this.options.callTimeoutMs || 30_000);
+      const timer=setTimeout(()=>{ socket.destroy(); reject(new Error('Call deadline; result is uncertain, inspect state before retrying')); },timeoutMs || this.options.callTimeoutMs || 30_000);
       this.pending.set(id,{method,resolve,reject,timer,apply});
       try {
         const frame=encodeFrame(message);
