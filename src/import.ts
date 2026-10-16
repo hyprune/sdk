@@ -8,12 +8,14 @@
 // warnings, never refusals (object format 0.11). The heavy dependencies load only here.
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
-import {lstatSync,readFileSync,readdirSync,statSync} from 'node:fs';
+import {lstatSync,mkdtempSync,readFileSync,readdirSync,rmSync,statSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 import {basename,dirname,extname,join,relative} from 'node:path';
 import {register} from 'node:module';
 import type {Document,Node as GltfNode,Primitive,Texture} from '@gltf-transform/core';
 import {decodeImage,encodePng,fitInside} from './pixels.js';
 
+export const ARCHIVE_FORMATS = ['zip'] as const;
 export const IMPORT_FORMATS = {gltf: 'gltf', glb: 'glb', obj: 'obj', fbx: 'fbx', dae: 'dae', '3ds': '3ds', ply: 'ply', stl: 'stl'} as const;
 export type ImportFormat = keyof typeof IMPORT_FORMATS;
 export const UNITS = {m: 1, cm: 0.01, mm: 0.001, in: 0.0254, ft: 0.3048} as const;
@@ -31,6 +33,10 @@ export interface ImportOptions {
  maxTriangles?: number; maxTexture?: 256 | 512 | 1024 | 2048 | 4096 | 8192; collision?: 'convex' | 'box' | 'none';
  ktx2?: 'auto' | 'all' | 'off'; lighting?: 'lit' | 'unlit';
  license?: string; author?: string; source?: string;
+ /** In a .zip: the model to import (a path inside the archive). */
+ entry?: string;
+ /** Re-fitting an existing entry (object adjust): this turn replaces up and yaw (a 3x3, column-major). */
+ rotation?: number[];
  progress?: (stage: string, message?: string) => void;
 }
 export interface Measure {triangles: number; maxTexture: number; gpuBytes: number; collisionTriangles: number | null; extent: [number, number, number]}
@@ -203,7 +209,46 @@ export function userName(): string {
    cwd: process.env.HOME || '/'}).trim().slice(0, 256);
  } catch {return '';}
 }
-export async function inspectImport(file: string): Promise<Inspection> {
+// ---- archives: a .zip is unpacked to a private directory and its model imported from there ----
+export interface ArchiveInfo {
+ name: string; bytes: number; sha256: string; files: number; entry: string;
+ /** Every importable model in the archive (the import takes `entry`). */
+ models: string[];
+ /** Licence or readme files found in the archive, as suggestions (never applied by themselves). */
+ licenseFiles: Array<{path: string; text: string}>;
+}
+const MODEL_RANK: Record<ImportFormat, number> = {glb: 0, gltf: 1, fbx: 2, obj: 3, dae: 4, '3ds': 5, ply: 6, stl: 7};
+/** Unpacks a .zip, picks its model (the only one, the glTF/GLB, or `entry`) and runs `work` on it; the directory is removed after. */
+export async function withArchive<T>(file: string, entry: string | undefined, work: (model: string, info: ArchiveInfo | null) => Promise<T>): Promise<T> {
+ if (extname(file).toLowerCase() !== '.zip') return work(file, null);
+ const {zipEntries, extractZip} = await import('./zip.js');
+ const {bytes, sha256} = sourceFile(file);
+ const all = zipEntries(file).filter(e => !e.name.split('/').some(p => p.startsWith('.') || p === '__MACOSX'));
+ const models = all.map(e => e.name).filter(n => extname(n).slice(1).toLowerCase() in IMPORT_FORMATS)
+  .sort((a, b) => MODEL_RANK[extname(a).slice(1).toLowerCase() as ImportFormat] - MODEL_RANK[extname(b).slice(1).toLowerCase() as ImportFormat] || a.split('/').length - b.split('/').length || (a < b ? -1 : 1));
+ if (!models.length) throw errorWith(`${basename(file)} holds no model (glTF, GLB, OBJ, FBX, DAE, 3DS, PLY or STL)`, 'import.empty');
+ let chosen = models[0];
+ if (entry !== undefined) {
+  chosen = models.find(m => m === entry) ?? '';
+  if (!chosen) throw Object.assign(errorWith(`${basename(file)} has no model ${entry}`, 'import.entry'), {models});
+ } else if (models.filter(m => MODEL_RANK[extname(m).slice(1).toLowerCase() as ImportFormat] === MODEL_RANK[extname(chosen).slice(1).toLowerCase() as ImportFormat]).length > 1)
+  throw Object.assign(errorWith(`${basename(file)} holds ${models.length} models: choose one (--entry)`, 'import.entry'), {models});
+ const dir = mkdtempSync(join(tmpdir(), 'hyprune-zip-'));
+ try {
+  extractZip(file, dir, all);
+  const licenseFiles = all.filter(e => /^(licen[cs]e|copying|readme|credits|attribution)(\.[a-z]+)?$/i.test(basename(e.name)) && e.size <= 1048576)
+   .slice(0, 4).map(e => ({path: e.name, text: readFileSync(join(dir, ...e.name.split('/')), 'utf8').slice(0, 2048)}));
+  return await work(join(dir, ...chosen.split('/')), {name: basename(file), bytes: bytes.length, sha256, files: all.length, entry: chosen, models, licenseFiles});
+ } finally {rmSync(dir, {recursive: true, force: true});}
+}
+
+export async function inspectImport(file: string, entry?: string): Promise<Inspection & {archive?: ArchiveInfo}> {
+ return withArchive(file, entry, async (model, archive) => {
+  const r = await inspectModel(model);
+  return archive ? {...r, file, sourceName: archive.name, bytes: archive.bytes, sha256: archive.sha256, name: nameFromFile(file), id: importSlug(nameFromFile(file)), archive} : r;
+ });
+}
+async function inspectModel(file: string): Promise<Inspection> {
  const L = await libs(), {doc, format, backend, bytes, sha256} = await load(L, file);
  const textures = await textureSizes(L, doc), warnings: string[] = [];
  const root = doc.getRoot(), tris = triangles(doc), extent = extentOf(L, doc), unitsGuess = guessUnits(extent);
@@ -231,6 +276,8 @@ function mat4(rotation: Mat3, scale: number, t: number[] = [0, 0, 0]): [number, 
 const mul3 = (a: Mat3, b: Mat3): Mat3 => [0, 1, 2].flatMap(c => [0, 1, 2].map(r => a[r] * b[c * 3] + a[3 + r] * b[c * 3 + 1] + a[6 + r] * b[c * 3 + 2]));
 // Z-up to Y-up: a turn of -90 degrees about X (+Z becomes +Y, +Y becomes -Z). Columns.
 const Z_UP: Mat3 = [1, 0, 0, 0, 0, -1, 0, 1, 0];
+/** The import's turn: Z up to Y up, then the yaw about +Y. */
+export const fitRotation = (up: 'y' | 'z', yaw: number): Mat3 => mul3(yawMatrix(yaw), up === 'z' ? Z_UP : [1, 0, 0, 0, 1, 0, 0, 0, 1]);
 const yawMatrix = (deg: number): Mat3 => {const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); return [c, 0, -s, 0, 1, 0, s, 0, c];};
 
 /** Asset-space triangles of the drawn scene (node transforms applied) with each one's material index. */
@@ -413,11 +460,24 @@ export async function renderThumbnail(tris: number[][][], colors: V3[], emissive
 // ---- the import ----
 /** Build the object (in memory): the GLB, object.json, import.json, the thumbnail and the measures. */
 export async function buildImport(file: string, options: ImportOptions = {}, version = '0.0.0'): Promise<ImportBuild> {
+ return withArchive(file, options.entry, async (model, archive) => {
+  const build = await buildModel(model, archive ? {...options, name: options.name || nameFromFile(file)} : options, version);
+  if (!archive) return build;
+  const record = build.record as any;
+  record.source = {...record.source, name: `${archive.name}!/${archive.entry}`.slice(0, 256), bytes: archive.bytes, sha256: archive.sha256};
+  record.steps = [`unpacked ${archive.name} (${archive.files} files)`, ...record.steps].slice(0, 32);
+  build.steps.unshift(`unpacked ${archive.name} (${archive.files} files)`);
+  return build;
+ });
+}
+async function buildModel(file: string, options: ImportOptions, version: string): Promise<ImportBuild> {
  const say = options.progress || (() => {});
  const L = await libs(), steps: string[] = [], warnings: string[] = [];
  say('read');
  const {doc, format, backend, bytes, sha256} = await load(L, file);
  const root = doc.getRoot(), {fn, ext} = L;
+ // Quantised input (a re-fit of an earlier import, or a quantised export): back to floats first.
+ if (root.listExtensionsUsed().some(e => e.extensionName === 'KHR_mesh_quantization')) await doc.transform(fn.dequantize());
  const before0 = await textureSizes(L, doc);
  const rawExtent = extentOf(L, doc);
  const before: Measure = {triangles: triangles(doc), maxTexture: Math.max(0, ...before0.map(t => Math.max(t.width, t.height))),
@@ -454,12 +514,8 @@ export async function buildImport(file: string, options: ImportOptions = {}, ver
   if ((users.get(n.getMesh()) || 0) > 1) n.setMesh(n.getMesh()!.clone());
   fn.clearNodeTransform(n);
  }
- const rotation = mul3(yawMatrix(yaw), up === 'z' ? Z_UP : [1, 0, 0, 0, 1, 0, 0, 0, 1]);
+ const rotation = options.rotation ?? fitRotation(up, yaw);
  for (const mesh of root.listMeshes()) fn.transformMesh(mesh, mat4(rotation, scale));
- // Pivot: base centre (floor), back centre (wall), top centre (ceiling), bounds centre (any).
- const b = fn.getBounds(scene), c = [0, 1, 2].map(i => (b.min[i] + b.max[i]) / 2);
- const pivot = surface === 'floor' ? [c[0], b.min[1], c[2]] : surface === 'wall' ? [c[0], c[1], b.min[2]] : surface === 'ceiling' ? [c[0], b.max[1], c[2]] : c;
- for (const mesh of root.listMeshes()) fn.transformMesh(mesh, mat4([1, 0, 0, 0, 1, 0, 0, 0, 1], 1, pivot.map(v => -v)));
  steps.push(`units ${units} (x${scale}), ${up === 'z' ? 'Z-up turned to Y-up' : 'Y up'}${yaw ? `, turned ${yaw} degrees` : ''}, pivot at the ${surface === 'floor' ? 'base' : surface === 'wall' ? 'back' : surface === 'ceiling' ? 'top' : 'centre'}`);
  await doc.transform(fn.join({keepNamed: false}), fn.weld(), fn.prune({keepLeaves: false}));
 
@@ -478,6 +534,10 @@ export async function buildImport(file: string, options: ImportOptions = {}, ver
   if (tris > target) warnings.push(`kept ${tris} triangles, above the ${target} target (more would change its shape)`);
  }
 
+ // Pivot (after decimation, which may move the extremes): base centre (floor), back centre (wall), top centre (ceiling), bounds centre (any).
+ const b = fn.getBounds(scene), c = [0, 1, 2].map(i => (b.min[i] + b.max[i]) / 2);
+ const pivot = surface === 'floor' ? [c[0], b.min[1], c[2]] : surface === 'wall' ? [c[0], c[1], b.min[2]] : surface === 'ceiling' ? [c[0], b.max[1], c[2]] : c;
+ for (const mesh of root.listMeshes()) fn.transformMesh(mesh, mat4([1, 0, 0, 0, 1, 0, 0, 0, 1], 1, pivot.map(v => -v)));
  // Textures: shrink to the target side; KTX2 (Basis) for colour textures over 1024 px (auto) or all.
  say('textures');
  const maxSide = options.maxTexture ?? IMPORT_DEFAULTS.maxTexture;
@@ -560,7 +620,8 @@ export async function buildImport(file: string, options: ImportOptions = {}, ver
   doc.createNode('proxy').setMesh(mesh); // in the document, outside the scene: never drawn
  }
  await doc.transform(fn.unpartition()); // one buffer: a GLB
- for (const t of root.listTextures()) if (!t.getURI()) t.setURI(t.getName() || 'texture');
+ const EXT: Record<string, string> = {'image/png': 'png', 'image/jpeg': 'jpg', 'image/ktx2': 'ktx2', 'image/webp': 'webp'};
+ for (const t of root.listTextures()) if (!t.getURI()) t.setURI(`${importSlug(t.getName() || 'texture')}.${EXT[t.getMimeType()] ?? 'bin'}`);
  for (const buf of root.listBuffers()) buf.setURI('');
 
  const bounds = fn.getBounds(scene);

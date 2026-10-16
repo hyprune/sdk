@@ -13,6 +13,8 @@ import {inventory,readAsset,gltfDocument} from './world.js';
 import {objectDir} from './paths.js';
 import {parseJson} from './codec.js';
 import type {HypruneClient} from './client.js';
+import {EditError,adjustObject,repairObject,resolveEntry,restoreBackup,simplifyObject} from './object-edit.js';
+import {projectFolder} from './builder.js';
 import {buildImport,inspectImport,CATEGORIES,type ImportOptions,type Measure} from './import.js';
 import type {Ipc22_CatalogEntry,Ipc22_LibraryRecord,LibraryReleases09_Document} from './generated.js';
 
@@ -20,9 +22,15 @@ import type {Ipc22_CatalogEntry,Ipc22_LibraryRecord,LibraryReleases09_Document} 
 export const OBJECTS_SINCE='0.22';
 export const objectHelp=`hyprune object primitive|material|materials …  (see hyprune builder --help: the same in your own folders)
 hyprune object add <dir | file.glb> [--name N --license SPDX --author A --surface floor|wall|ceiling|any] [--replace]
-hyprune object import <file> [--inspect] [--name N --id ID --category C --tags a,b --surface floor|wall|ceiling|any]
+hyprune object import <file | archive.zip> [--entry PATH] [--inspect] [--name N --id ID --category C --tags a,b --surface floor|wall|ceiling|any]
   [--units auto|m|cm|mm|in|ft | --scale X] [--up y|z] [--yaw 0|90|180|270] [--max-triangles N] [--max-texture PX]
   [--collision convex|box|none] [--ktx2 auto|all|off] [--lighting lit|unlit] [--license SPDX --author A --source S] [--replace] [--json]
+hyprune object adjust REF [--units m|cm|mm|in|ft | --scale X] [--up y|z] [--yaw 0|90|180|270] [--surface floor|wall|ceiling|any] [--project P] [--dry-run] [--json]
+hyprune object simplify REF [--max-triangles N] [--max-texture PX] [--collision convex|box|none] [--project P] [--dry-run] [--json]
+hyprune object repair REF [--project P] [--dry-run] [--json]
+hyprune object restore BACKUP-ID [--json]
+  REF is user/<id>, or world/<id> with --project (a world folder, its slug or local.<slug>). adjust
+  takes absolute values (as at import); each keeps a backup in $XDG_STATE_HOME/hyprune/backups.
 hyprune object list [--json]
 hyprune library install <archive.tar.zst | id@version> [--releases releases.json] [--archive file.tar.zst]
 hyprune library list [--json]
@@ -32,7 +40,8 @@ object add checks an object directory (or wraps a bare .glb in a minimal object.
 the flags) and copies it atomically into $HYPRUNE_OBJECT_DIR, else
 $XDG_DATA_HOME/hyprune/objects/<id>/. library install id@version reads the record from a
 libraries/releases.json and needs the archive next to it or as --archive.
-object import converts a glTF/GLB (or OBJ, FBX, DAE, 3DS, PLY, STL through Assimp) into an object
+object import converts a glTF/GLB (or OBJ, FBX, DAE, 3DS, PLY, STL through Assimp; or one of them in a .zip
+with its textures, --entry choosing among several) into an object
 directory without Blender: units, up axis, facing and pivot; meshoptimizer decimation to
 --max-triangles (default 50000); textures shrunk to --max-texture (2048) and, over 1024 px,
 KTX2; a convex or box collision proxy; a CPU thumbnail; import.json with the provenance.
@@ -171,7 +180,7 @@ export function importOptions(v:Record<string,any>):ImportCliOptions {
   surface:pick('surface',['floor','wall','ceiling','any'] as const),units:pick('units',['auto','m','cm','mm','in','ft'] as const),scale:number('scale',1e-6,1000),
   up:pick('up',['y','z'] as const),yaw:yaw as ImportOptions['yaw'],maxTriangles:number('max-triangles',100,2000000),maxTexture:maxTexture as ImportOptions['maxTexture'],
   collision:pick('collision',['convex','box','none'] as const),ktx2:pick('ktx2',['auto','all','off'] as const),lighting:pick('lighting',['lit','unlit'] as const),
-  license:v.license,author:v.author,source:v.source,replace:!!v.replace};
+  license:v.license,author:v.author,source:v.source,replace:!!v.replace,entry:v.entry};
 }
 
 /** SHA-256 of a file, streamed. */
@@ -242,7 +251,7 @@ export async function objectMain(argv:string[]):Promise<void> {
   name:{type:'string'},license:{type:'string'},author:{type:'string'},surface:{type:'string'},replace:{type:'boolean'},
   releases:{type:'string'},archive:{type:'string'},inspect:{type:'boolean'},id:{type:'string'},category:{type:'string'},tags:{type:'string'},
   description:{type:'string'},units:{type:'string'},scale:{type:'string'},up:{type:'string'},yaw:{type:'string'},'max-triangles':{type:'string'},
-  'max-texture':{type:'string'},collision:{type:'string'},ktx2:{type:'string'},lighting:{type:'string'},source:{type:'string'}}});
+  'max-texture':{type:'string'},collision:{type:'string'},ktx2:{type:'string'},lighting:{type:'string'},source:{type:'string'},entry:{type:'string'},project:{type:'string'},'dry-run':{type:'boolean'}}});
  if(v.help){console.log(objectHelp);return;}
  const out=(value:unknown,text:string)=>console.log(v.json?JSON.stringify(value,null,2):text);
  if(group==='object' && verb==='add') {
@@ -256,7 +265,7 @@ export async function objectMain(argv:string[]):Promise<void> {
   // --json: JSON lines on stdout ({event: stage|done|error}) for the Director's Import job.
   const line=(value:unknown):void=>{process.stdout.write(JSON.stringify(value)+'\n');};
   try {
-   if(v.inspect) {const r=await inspectImport(resolve(p[0]));return v.json?line({event:'done',result:r}):console.log(JSON.stringify(r,null,2));}
+   if(v.inspect) {const r=await inspectImport(resolve(p[0]),v.entry);return v.json?line({event:'done',result:r}):console.log(JSON.stringify(r,null,2));}
    const options=importOptions(v);
    options.progress=(stage,message)=>v.json?line({event:'stage',stage,...(message?{message}:{})}):console.error(`${stage}${message?': '+message:''}`);
    const r=await importObject(p[0],options);
@@ -265,7 +274,31 @@ export async function objectMain(argv:string[]):Promise<void> {
    return console.log(`${r.replaced?'replaced':'imported'} ${r.ref} (${r.path}): ${r.after.triangles} triangles, ${r.steps.join('; ')}`);
   } catch(e:any) {
    if(!v.json) throw e;
-   line({event:'error',error:{message:String(e.message).split('\n')[0],rule:e.rule || 'import.failed'}});
+   line({event:'error',error:{message:String(e.message).split('\n')[0],rule:e.rule || 'import.failed',...(e.models?{models:e.models}:{})}});
+   process.exitCode=1;return;
+  }
+ }
+ if(group==='object' && ['adjust','simplify','repair','restore'].includes(verb)) {
+  const line=(value:unknown):void=>{process.stdout.write(JSON.stringify(value)+'\n');};
+  try {
+   if(!p[0]) throw new EditError('object.unknown',`object ${verb} needs ${verb==='restore'?'a backup id':'an object ref (user/<id> or world/<id>)'}`);
+   let r:any,text:string;
+   if(verb==='restore') {r=await restoreBackup(p[0]);text=`restored ${r.ref} from ${p[0]}`;}
+   else {
+    const entry=resolveEntry(p[0],v.project?projectFolder(v.project):undefined),dryRun=!!v['dry-run'],o=importOptions(v);
+    if(verb==='repair') {r=await repairObject(entry,{dryRun});text=`${dryRun?'would repair':'repaired'} ${r.ref}: ${r.fixed.join('; ')}`;}
+    else {
+     r=verb==='adjust'?await adjustObject(entry,{units:o.units==='auto'?undefined:o.units,scale:o.scale,up:o.up,yaw:o.yaw,surface:o.surface},{dryRun})
+      :await simplifyObject(entry,{maxTriangles:o.maxTriangles,maxTexture:o.maxTexture,collision:o.collision,dryRun});
+     text=`${dryRun?'would change':'changed'} ${r.ref}: ${r.steps[0]}${r.backup?` (backup ${r.backup})`:''}`;
+    }
+   }
+   if(v.json) return line({event:'done',result:r});
+   for(const w of r.warnings ?? []) console.error('warning: '+w);
+   return console.log(text);
+  } catch(e:any) {
+   if(!v.json){if(e?.hint) e.message+=`\n  ${e.hint}`;throw e;}
+   line({event:'error',error:{message:String(e.message).split('\n')[0],code:e.code || e.rule || 'object.failed',...(e.hint?{hint:e.hint}:{})}});
    process.exitCode=1;return;
   }
  }
