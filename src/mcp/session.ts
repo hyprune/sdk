@@ -36,6 +36,9 @@ export class Session {
  agent = {name: 'an MCP client', version: undefined as string | undefined};
  folder: string | null = null;
  journal: JournalEntry[] = [];
+ /** The journal's length at the last save (or discard), and whether the folder was saved when the first later change came. */
+ savedLength = 0;
+ cleanAfterSave = false;
  changes = 0;
  paused = false;
  private client: HypruneClient<any> | null = null;
@@ -132,7 +135,10 @@ export class Session {
  }
 
  // ---- journal and the HUD's Assistant chip ----
+ /** Set by the tool runner before each call: whether the folder had no unsaved changes then. */
+ cleanBeforeCall = false;
  async record(entry: Omit<JournalEntry, 'at'>): Promise<void> {
+  if (this.journal.length <= this.savedLength) {this.savedLength = this.journal.length; this.cleanAfterSave = this.cleanBeforeCall;}
   this.journal.push({...entry, at: new Date().toISOString()});
   if (this.journal.length > 256) this.journal.shift();
   this.changes++;

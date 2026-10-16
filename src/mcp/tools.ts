@@ -441,14 +441,14 @@ export const TOOLS: Tool[] = [
   inputSchema: obj({project: PROJECT, fresh: bool('Check again even if nothing changed')}),
   run: async (a, s) => {const r = await checkProject(s.folderOf(a.project), {cache: !a.fresh}); return {ready: r.ready, items: r.items, homes: r.homes, walk: r.walk};}},
  {name: 'save', description: 'Save the folder: a local commit (labelled as the assistant\'s) that History and Revert can undo in Hyprune. Never publishes.', inputSchema: obj({message: str('What changed'), project: PROJECT}),
-  run: async (a, s) => {await s.checkPaused(); const r = await save(s.folderOf(a.project), String(a.message ?? ''), {prefix: 'Assistant: '}); await s.report(`saved: ${r.message}`); return {commit: r.commit, message: r.message, warnings: r.warnings};}},
+  run: async (a, s) => {await s.checkPaused(); const r = await save(s.folderOf(a.project), String(a.message ?? ''), {prefix: 'Assistant: '}); s.savedLength = s.journal.length; s.cleanAfterSave = true; await s.report(`saved: ${r.message}`); return {commit: r.commit, message: r.message, warnings: r.warnings};}},
  {name: 'discard', description: 'Put the folder back to its last save (all unsaved changes, or only some paths). Hyprune reloads the folder. Clears this session\'s undo list.', inputSchema: obj({paths: {type: 'array', items: {type: 'string'}}, project: PROJECT, dryRun: DRY}),
   run: async (a, s) => {
    const folder = s.folderOf(a.project);
    if (!a.dryRun) await s.checkPaused();
    const r = await discard(folder, {paths: a.paths, dryRun: !!a.dryRun});
    if (a.dryRun) return r;
-   s.journal = [];
+   s.journal = []; s.savedLength = 0; s.cleanAfterSave = true;
    return {...r, reloaded: await reloadIfOpen(s, folder)};
   }},
  {name: 'history', description: 'The saves of the folder, newest first, with versions and which ones an assistant made.', inputSchema: obj({limit: num('Default 20'), project: PROJECT}),
@@ -462,9 +462,17 @@ export const TOOLS: Tool[] = [
     await e.undo();
     undone.push(e.action);
    }
+   // Back to the last save in a folder that was saved then: the inverses restored every placement,
+   // material and setting; Discard puts back what they can't (a re-placed placement's id and order).
+   let normalized = false;
+   if (undone.length && s.journal.length <= s.savedLength && s.cleanAfterSave && s.folder) {
+    const d = await discard(s.folder);
+    if (d.restored.length || d.removed.length) await reloadIfOpen(s, s.folder);
+    normalized = true;
+   }
    s.changes++;
    await s.report(undone.length ? `undid ${undone[0]}` : undefined);
-   return {undone, skipped, left: s.journal.length};
+   return {undone, skipped, left: s.journal.length, ...(normalized ? {backToLastSave: true} : {})};
   }},
 ];
 function overviewBounds(s: Session, folder: string): {min: V3; max: V3} | undefined {
@@ -497,9 +505,14 @@ async function setBehaviours(a: Args, s: Session, change: (list: any[]) => any[]
  return {placement: a.placement, behaviours: after};
 }
 
+/** Whether the folder had no unsaved changes (checked before a session's first change after a save). */
+export function folderClean(s: Session): boolean {
+ try {return s.journal.length <= s.savedLength && !!s.folder && status(s.folder).pending.total === 0;} catch {return false;}
+}
 /** Runs a tool: its result as JSON text (and an image for look), or its error as a tool error. */
 export async function runTool(name: string, args: Args, s: Session): Promise<McpToolResult> {
  const tool = TOOLS.find(t => t.name === name)!;
+ s.cleanBeforeCall = folderClean(s);
  try {
   const r: any = await tool.run(args, s);
   if (r && Buffer.isBuffer(r.image)) {
