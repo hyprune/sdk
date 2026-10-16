@@ -41,6 +41,8 @@ export class Session {
  private client: HypruneClient<any> | null = null;
  private connecting: Promise<HypruneClient<any> | null> | null = null;
  private offlineReason = 'Hyprune is not running';
+ private ended = false;
+ private closing = false;
  constructor(readonly o: {offline?: boolean; log?: (line: string) => void} = {}) {}
  log(line: string): void {(this.o.log ?? (l => process.stderr.write(`hyprune mcp: ${l}\n`)))(line);}
 
@@ -49,7 +51,7 @@ export class Session {
  /** The paired client, or null when Hyprune isn't running (the reason in offlineReason). */
  core(): Promise<HypruneClient<any> | null> {
   if (this.client && this.client.hello) return Promise.resolve(this.client);
-  if (this.o.offline) return Promise.resolve(null);
+  if (this.o.offline || this.ended) return Promise.resolve(null);
   if (this.connecting) return this.connecting;
   const socket = findSocket();
   if (!socket) {this.offlineReason = 'Hyprune is not running (no control socket)'; return Promise.resolve(null);}
@@ -57,7 +59,14 @@ export class Session {
    pair: {agent: {name: this.agent.name, ...(this.agent.version ? {version: this.agent.version} : {})}}, reconnect: false, capabilities: [],
    onPairing: () => this.log('waiting for the user to allow this assistant in Hyprune')});
   client.on('fault', e => this.log(`connection: ${e.message}`));
-  client.on('disconnect', () => {if (this.client === client) this.client = null;});
+  // Hyprune closing the connection (the user pressed Disconnect, or Hyprune stopped) ends the
+  // session's in-world access: never re-pair behind the user's back (a remembered approval would).
+  client.on('disconnect', () => {
+   if (this.client !== client || this.closing) return;
+   this.client = null; this.ended = true;
+   this.offlineReason = 'Hyprune disconnected this assistant';
+   this.log(this.offlineReason);
+  });
   this.connecting = client.connect().then(async () => {
    await client.subscribe();
    this.client = client;
@@ -76,7 +85,8 @@ export class Session {
  /** The paired client or an assistant.offline tool error. */
  async online(): Promise<HypruneClient<any>> {
   const c = await this.core();
-  if (!c) throw new ToolError('assistant.offline', `${this.offlineReason}: in-world tools need Hyprune`, 'World-folder tools (create, sky, floor, materials, save, look) still work', undefined, true);
+  if (!c) throw new ToolError('assistant.offline', `${this.offlineReason}: in-world tools need Hyprune`,
+   this.ended ? 'Restart the assistant\'s Hyprune connection to pair again; world-folder tools still work' : 'World-folder tools (create, sky, floor, materials, save, look) still work', undefined, !this.ended);
   return c;
  }
  state(): any {return (this.client?.snapshot as any)?.state ?? null;}
@@ -142,5 +152,5 @@ export class Session {
   await this.report();
   if (this.paused) throw new ToolError('assistant.paused', 'The user paused the assistant', 'Wait until they resume it in Hyprune', undefined, true);
  }
- close(): void {this.client?.close();}
+ close(): void {this.closing = true; this.client?.close();}
 }
