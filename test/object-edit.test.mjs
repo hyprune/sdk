@@ -127,4 +127,6 @@ test('simplify and repair: fewer triangles with numbers; bounds and unknown trai
  assert.equal(cli('adjust','world/barrel','--scale','2').error.code,'object.unknown','world/ needs --project');
  const ok=cli('adjust','user/barrel','--scale','2','--dry-run');
  assert.equal(ok.event,'done');assert.equal(ok.result.dryRun,true);
+ const fit=cli('fit','user/barrel');
+ assert.equal(fit.result.adjustable,true);assert.equal(fit.result.fit.surface,'floor');assert.equal(fit.result.imported,true);
 });

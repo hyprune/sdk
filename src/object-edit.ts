@@ -137,6 +137,16 @@ async function refit(e: Entry, o: ImportOptions & {thumbnail?: 'keep' | 'new'; d
  return result;
 }
 
+export interface Described {ref: string; fit: Fit; imported: boolean; adjustable: boolean; reason: string | null; triangles: number | null; maxTexture: number | null; extent: number[] | null}
+/** How an entry is fitted now (for the Director's Model section) and whether it can be re-fitted. */
+export function describeEntry(e: Entry): Described {
+ const manifest = readJson(join(e.dir, 'object.json')), {fit, record} = currentFit(e.dir, manifest);
+ let reason: string | null = null;
+ try {refittable(e, manifest);} catch (x: any) {reason = x.message;}
+ const after = record?.measured?.after;
+ return {ref: e.ref, fit, imported: !!record, adjustable: !reason, reason, triangles: after?.triangles ?? null, maxTexture: after?.maxTexture ?? null, extent: after?.extent ?? null};
+}
+
 export interface AdjustChange {units?: Units; scale?: number; up?: 'y' | 'z'; yaw?: 0 | 90 | 180 | 270; surface?: Surface}
 /** Re-fits an import with absolute values: the units (or a scale), the up axis, the turn and the surface it sits on. */
 export async function adjustObject(e: Entry, change: AdjustChange, o: {dryRun?: boolean} = {}): Promise<EditResult> {

@@ -13,7 +13,7 @@ import {inventory,readAsset,gltfDocument} from './world.js';
 import {objectDir} from './paths.js';
 import {parseJson} from './codec.js';
 import type {HypruneClient} from './client.js';
-import {EditError,adjustObject,repairObject,resolveEntry,restoreBackup,simplifyObject} from './object-edit.js';
+import {EditError,adjustObject,describeEntry,repairObject,resolveEntry,restoreBackup,simplifyObject} from './object-edit.js';
 import {projectFolder} from './builder.js';
 import {buildImport,inspectImport,CATEGORIES,type ImportOptions,type Measure} from './import.js';
 import type {Ipc22_CatalogEntry,Ipc22_LibraryRecord,LibraryReleases09_Document} from './generated.js';
@@ -29,6 +29,7 @@ hyprune object adjust REF [--units m|cm|mm|in|ft | --scale X] [--up y|z] [--yaw 
 hyprune object simplify REF [--max-triangles N] [--max-texture PX] [--collision convex|box|none] [--project P] [--dry-run] [--json]
 hyprune object repair REF [--project P] [--dry-run] [--json]
 hyprune object restore BACKUP-ID [--json]
+hyprune object fit REF [--project P] [--json]   (how it is fitted now, and whether adjust and simplify apply)
   REF is user/<id>, or world/<id> with --project (a world folder, its slug or local.<slug>). adjust
   takes absolute values (as at import); each keeps a backup in $XDG_STATE_HOME/hyprune/backups.
 hyprune object list [--json]
@@ -278,7 +279,7 @@ export async function objectMain(argv:string[]):Promise<void> {
    process.exitCode=1;return;
   }
  }
- if(group==='object' && ['adjust','simplify','repair','restore'].includes(verb)) {
+ if(group==='object' && ['adjust','simplify','repair','restore','fit'].includes(verb)) {
   const line=(value:unknown):void=>{process.stdout.write(JSON.stringify(value)+'\n');};
   try {
    if(!p[0]) throw new EditError('object.unknown',`object ${verb} needs ${verb==='restore'?'a backup id':'an object ref (user/<id> or world/<id>)'}`);
@@ -286,7 +287,8 @@ export async function objectMain(argv:string[]):Promise<void> {
    if(verb==='restore') {r=await restoreBackup(p[0]);text=`restored ${r.ref} from ${p[0]}`;}
    else {
     const entry=resolveEntry(p[0],v.project?projectFolder(v.project):undefined),dryRun=!!v['dry-run'],o=importOptions(v);
-    if(verb==='repair') {r=await repairObject(entry,{dryRun});text=`${dryRun?'would repair':'repaired'} ${r.ref}: ${r.fixed.join('; ')}`;}
+    if(verb==='fit') {r=describeEntry(entry);text=`${r.ref}: ${r.fit.units} (x${r.fit.scale}), ${r.fit.up} up, turned ${r.fit.yaw}°, on the ${r.fit.surface}${r.reason?` (${r.reason})`:''}`;}
+    else if(verb==='repair') {r=await repairObject(entry,{dryRun});text=`${dryRun?'would repair':'repaired'} ${r.ref}: ${r.fixed.join('; ')}`;}
     else {
      r=verb==='adjust'?await adjustObject(entry,{units:o.units==='auto'?undefined:o.units,scale:o.scale,up:o.up,yaw:o.yaw,surface:o.surface},{dryRun})
       :await simplifyObject(entry,{maxTriangles:o.maxTriangles,maxTexture:o.maxTexture,collision:o.collision,dryRun});
