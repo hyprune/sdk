@@ -385,10 +385,10 @@ export const TOOLS: Tool[] = [
   }},
  {name: 'source_list', description: 'The data sources Hyprune reads (sources.json), without secret values. A placement reads the source whose id is its placement id unless a behaviour names another.', inputSchema: obj({}),
   run: async () => ({sources: listSources().map(sourceSummary)})},
- {name: 'source_set_http', description: 'Make or change an HTTP data source (no confirmation needed: it only fetches). `for` names the placement whose behaviours read it (the source id becomes that placement\'s id). map turns the JSON reply into values: {"value": "$.path.to.number", "display": "$.path"}; values are 0 to 100 unless the behaviour says otherwise.',
+ {name: 'source_set_http', description: 'Make or change an HTTP data source (no confirmation needed: it only fetches). `for` names the placement whose behaviours read it (the source id becomes that placement\'s id). map turns the JSON reply into values: {"value": {"path": "$.queue.depth", "min": 0, "max": 50}, "display": "{raw:.0f} queued"} (value is scaled from min..max to 0..100, what behaviours read; display is a text template). The source helper checks the definition; a refused one is not kept.',
   inputSchema: obj({for: str('The placement key that reads it'), id: str('Or an explicit source id'), url: str('https:// (or http:// on this machine or the local network)'), method: {enum: ['GET', 'POST', 'PUT', 'PATCH']},
    headers: {type: 'object', additionalProperties: {oneOf: [{type: 'string'}, obj({secret: str('A secret\'s name (set by the user in Hyprune)'), prefix: str('Like "Bearer "')}, ['secret'])]}},
-   map: {type: 'object', description: 'Value names to JSON paths'}, intervalS: num('Seconds between fetches'), output: {enum: ['json', 'number', 'text', 'lines']}, dryRun: DRY}, ['url']),
+   map: {type: 'object', description: '{"value": {"path": "$.a.b", "min": 0, "max": 100}, "display": "{raw:.0f} %", "label": "text"}'}, intervalS: num('Seconds between fetches'), output: {enum: ['json', 'number', 'text', 'lines']}, dryRun: DRY}, ['url']),
   run: async (a, s) => {
    let id = a.id;
    if (a.for) {const {folder} = await s.loadedFolder(); id = findPlacement(s, folder, a.for).id;}

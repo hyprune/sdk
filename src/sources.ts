@@ -91,11 +91,21 @@ export async function putSource(entry: SourceEntry, o: {path?: string; dryRun?: 
  const changed = JSON.stringify(next) !== before;
  if (o.dryRun) return {entry: next, created, changed, path, dryRun: true};
  if (changed) {
+  const before = existsSync(path) ? readFileSync(path, 'utf8') : null;
   if (old) config.sources[config.sources.indexOf(old)] = next; else config.sources.push(next);
   writeAtomic(path, config);
+  if (o.reload !== false) {
+   // The helper checks the rest (the map, intervals, secrets): a refused reload puts the file back.
+   try {return {entry: next, created, changed, path, reload: await helper('reload')};}
+   catch (e: any) {
+    if (/not running/.test(e.message)) return {entry: next, created, changed, path, reload: {ok: false, error: e.message}};
+    if (before === null) writeAtomic(path, {sources: config.sources.filter(x => x !== next)}); else writeAtomic(path, JSON.parse(before));
+    await helper('reload').catch(() => undefined);
+    return fail('source.invalid', e.message.replace(/^config not reloaded[^:]*: /, ''), 'map: {"value": {"path": "$.a.b", "min": 0, "max": 100}, "display": "{raw:.0f} %"}');
+   }
+  }
  }
- const reload = changed && o.reload !== false ? await helper('reload').catch(e => ({ok: false, error: e.message})) : undefined;
- return {entry: next, created, changed, path, ...(reload ? {reload} : {})};
+ return {entry: next, created, changed, path};
 }
 export async function removeSource(id: string, o: {path?: string; dryRun?: boolean} = {}): Promise<{removed: boolean; previous: SourceEntry | null}> {
  const path = o.path ?? sourcesPath(), config = readSources(path), old = config.sources.find(s => s && s.id === id) ?? null;
