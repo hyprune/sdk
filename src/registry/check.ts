@@ -7,7 +7,7 @@ import {tmpdir} from 'node:os';
 import {execFileSync} from 'node:child_process';
 import {RegistryError} from './errors.js';
 import {fetchBytes,download,sha256,FETCH_LIMITS,type FetchContext} from './fetch.js';
-import {parseRecord,forSchema,type IndexDocument,type IndexEntry,type IndexVersion,type ReleaseRecord} from './index.js';
+import {parseRecord,forSchema,INSTALLABLE_TYPES,type IndexDocument,type IndexEntry,type IndexVersion,type ReleaseRecord} from './index.js';
 import {extractArchive,limitsFor} from './archive.js';
 import {readManifest,libraryRefs} from './sources.js';
 import {tagVersion,isPrerelease} from './semver.js';
@@ -57,6 +57,7 @@ export function checkSchema(entry:unknown,o:Pick<CheckOptions,'fileName'|'otherC
  const r=result(1,'entry schema'),v=validateRegistry('registry-entry',forSchema(entry,o.env));
  for(const e of v.errors) err(r,e);
  const id=(entry as any)?.id;
+ if(v.valid && !INSTALLABLE_TYPES.includes((entry as any).type)) err(r,`type ${(entry as any).type} is reserved: the registry lists worlds and libraries until an extension host exists (RFC-0007)`);
  if(o.fileName && basename(o.fileName)!==`${id}.json`) err(r,`the file must be named ${id}.json, not ${basename(o.fileName)}`);
  for(const other of o.otherChanges ?? []) err(r,`the change also touches ${other}; one entry per pull request`);
  return r;

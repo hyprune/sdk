@@ -6,8 +6,11 @@ import {validateRegistry,worldFormats,objectFormats} from '../validation.js';
 import {compareSemver,isPrerelease} from './semver.js';
 import type {Index01_Document,Index01_Entry,Index01_VersionEntry,ReleaseRecord01_Document} from '../generated.js';
 
-export type IndexDocument=Index01_Document;
-export type IndexEntry=Index01_Entry;
+// Entries of reserved types (extension, RFC-0007: no host yet) validate but are dropped on parse.
+export type IndexEntry=Index01_Entry & {type:'world'|'library'};
+export type IndexDocument=Omit<Index01_Document,'entries'> & {entries:IndexEntry[]};
+/** Entry types this SDK lists and installs; other valid types are reserved and skipped. */
+export const INSTALLABLE_TYPES:readonly string[]=['world','library'];
 export type IndexVersion=Index01_VersionEntry;
 export type ReleaseRecord=ReleaseRecord01_Document;
 type Env=Record<string,string|undefined>;
@@ -22,7 +25,7 @@ export function forSchema(value:unknown,env:Env=process.env):unknown {
 /**
  * Parse and validate an index: at most 16 MiB, UTF-8 JSON without duplicate keys, a
  * supported indexVersion, the 0.1 schema and semantic rules, and a serial not lower than
- * the last one accepted from the source.
+ * the last one accepted from the source. Entries of reserved types are skipped.
  */
 export function parseIndex(bytes:Buffer,{what='index',lastSerial,env=process.env}:{what?:string;lastSerial?:number|null;env?:Env}={}):IndexDocument {
  if(bytes.length>FETCH_LIMITS.index) fail('source.invalid',`${what}: ${bytes.length} bytes, more than 16 MiB`);
@@ -32,7 +35,7 @@ export function parseIndex(bytes:Buffer,{what='index',lastSerial,env=process.env
  const result=validateRegistry('registry-index',forSchema(value,env));
  if(!result.valid) fail('source.invalid',`${what}: ${result.errors.slice(0,3).join('; ')}${result.errors.length>3?` (+${result.errors.length-3} more)`:''}`);
  if(lastSerial!=null && value.serial<lastSerial) fail('source.invalid',`${what}: serial ${value.serial} is lower than the last accepted ${lastSerial} (rollback refused; the cached index is kept)`);
- return value as IndexDocument;
+ return {...value,entries:value.entries.filter((e:any)=>INSTALLABLE_TYPES.includes(e.type))} as IndexDocument;
 }
 /** Validate a release record (1 MiB cap, schema and semantic rules). */
 export function parseRecord(bytes:Buffer,{what='release record',env=process.env}:{what?:string;env?:Env}={}):ReleaseRecord {

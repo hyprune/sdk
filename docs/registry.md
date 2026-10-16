@@ -47,7 +47,9 @@ A source is fetched and validated when it is added; one that fails is not added.
 are 1-48 printable characters; the default is the index `name`, else `owner/repo`, else
 the host. The display is always `Official`, `Community registry` or `Custom: <label>`.
 A refresh refuses an index whose `serial` is lower than the cached one and keeps the
-cache (`error` in `source list`); `successor` is shown, never followed.
+cache (`error` in `source list`); `successor` is shown, never followed. Entries of the
+reserved type `extension` (RFC-0007 process extensions, no host yet) keep the index valid
+and are skipped: never listed, counted or installed.
 
 ## Content lock
 
@@ -163,6 +165,6 @@ entry; `--summary`, `--description`, `--tags`). `hyprune registry check <entry.j
 runs the registry checks 1-14 (`--existing`, `--removed DIR` of tombstones, `--indexes
 official.json,community.json`, `--author LOGIN`, `--official`); the repository-naming
 recommendation (`<owner>/hyprune-<kind>-<name>`, topics `hyprune` and `hyprune-<kind>`;
-monorepos exempt) is a warning only. The check functions (`checkEntry`, `checkSchema`,
+monorepos exempt) is a warning only. Check 1 refuses the reserved type `extension`. The check functions (`checkEntry`, `checkSchema`,
 `checkOwnership`, …) take an injectable `GithubClient`; `test/fake-github.mjs` is a
 local stand-in for tests.

@@ -39,6 +39,11 @@ test('index parsing: schema, limits, duplicate keys, versions, serial rollback',
  assert.throws(()=>parseIndex(bytes(index({entries:[entry({versions:[version('1.0.0',{tag:'v1.0.1'})]})]}))),/tag must name version/);
  assert.throws(()=>parseIndex(bytes(index({entries:[entry({versions:[version('1.0.0',{bytes:300*1048576})]})]}))),/library archive limit/);
  assert.throws(()=>parseIndex(bytes(index({entries:Array.from({length:20001},(_,i)=>({id:`org.example.e${i}`,type:'library',name:'E',creator:'e',versions:[version('1.0.0',{url:'https://e.org/x'})]}))}))),/more than 20000/);
+ // extension is reserved (RFC-0007, no host yet): the index stays valid and its entries are skipped.
+ const ext=parseIndex(bytes(index({entries:[entry(),entry({id:'org.example.weather',type:'extension',name:'Weather'})]})));
+ assert.deepEqual(ext.entries.map(e=>e.id),['org.example.tiny']);
+ assert.match(registry.checkSchema(entry({id:'org.example.weather',type:'extension',name:'Weather'})).errors.join('\n'),/type extension is reserved/);
+ assert.equal(registry.checkSchema(entry()).ok,true);
  // Rollback protection: a lower serial than the last accepted is refused; equal or higher is fine.
  assert.throws(()=>parseIndex(bytes(index({serial:4})),{lastSerial:5}),/rollback refused/);
  assert.equal(parseIndex(bytes(index()),{lastSerial:5}).serial,5);

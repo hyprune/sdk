@@ -1104,8 +1104,9 @@ export function tagVersion(tag) {
 }
 const spdxValid = text => { try { parseSpdx(text); return true; } catch { return false; } };
 // Semantic rules of one index entry (shared by kinds registry-index and registry-entry).
+// Reserved types (extension) have no archive limits yet; clients skip their entries.
 function registryEntryRules(entry, label, fail) {
-  const limits = registryLimits[entry.type];
+  const limits = registryLimits[entry.type] ?? { bytes: Infinity, expandedBytes: Infinity, files: Infinity };
   const tags = new Set(), versions = new Set();
   entry.versions.forEach((v, i) => {
     const at = `${label}versions/${i} (${v.tag})`;
