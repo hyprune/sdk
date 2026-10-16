@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.29/ipc.schema.json",
-  "title": "Hyprune IPC 0.29 (draft): feel (input version 3, frame pacing, debug recording)",
+  "title": "Hyprune IPC 0.29: feel (input version 3, frame pacing, debug recording)",
   "$defs": {
     "state": {
       "type": "object",

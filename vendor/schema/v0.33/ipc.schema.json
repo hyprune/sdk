@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.33/ipc.schema.json",
-  "title": "Hyprune IPC 0.33 (draft): AI-assisted creation (RFC-0016): pairing, the assistant profile, connections and previews",
+  "title": "Hyprune IPC 0.33: AI-assisted creation (RFC-0016): pairing, the assistant profile, connections and previews",
   "$defs": {
     "state": {
       "type": "object",

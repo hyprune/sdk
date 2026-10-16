@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.32/ipc.schema.json",
-  "title": "Hyprune IPC 0.32 (draft): content, sources and registry (RFC-0015)",
+  "title": "Hyprune IPC 0.32: content, sources and registry (RFC-0015)",
   "$defs": {
     "state": {
       "type": "object",

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.31/ipc.schema.json",
-  "title": "Hyprune IPC 0.31 (draft): primitives and materials in the builder (placement keys, dry runs, asset swaps)",
+  "title": "Hyprune IPC 0.31: primitives and materials in the builder (placement keys, dry runs, asset swaps)",
   "$defs": {
     "state": {
       "type": "object",

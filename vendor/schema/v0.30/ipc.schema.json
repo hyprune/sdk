@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hyprune.com/schema/v0.30/ipc.schema.json",
-  "title": "Hyprune IPC 0.30 (draft): global settings presets and overrides",
+  "title": "Hyprune IPC 0.30: global settings presets and overrides",
   "$defs": {
     "state": {
       "type": "object",

@@ -1,7 +1,7 @@
 {
   "repository": "https://github.com/hyprune/schema",
-  "commit": "02cc21267b974eb807fc885e355a489c795d7d9f",
-  "version": "0.14.0",
+  "commit": "57e54389dd36c20c88ff94341d9b70c906ea0206",
+  "version": "0.15.0",
   "protocols": [
     "0.1",
     "0.2",
@@ -102,17 +102,17 @@
     "v0.11/import.schema.json": "660599989c48182cd22d1c4c6ddbb57c860ceb0e0f3d01a4ce495e90903a8152",
     "v0.11/world.schema.json": "40c6203b1baa203b43d84292b80e7d02b6f52377303f9d326d859a1cf5979497",
     "v0.11/common.schema.json": "07c528e1970923afe59ac176b379300ded249ca296a1149a4674e5342a9043c1",
-    "v0.11/project.schema.json": "a95b580ab15fcea7c51a1155677e48d70c601c2c47bbe76cee687587e14658eb",
+    "v0.11/project.schema.json": "063fac6da44f0165b8f2ef5efdff9bafce5c04fb393eb1fe3cdcea5b7a199429",
     "motion/v0.1/motion.schema.json": "f56bc4ad7605f05ac971d597fb1c0599d5fdd92602bc6bbd58bf8e55ad255724",
     "v0.28/ipc.schema.json": "cf240e4de27ecffdc2782357ce21a423e3bfa6a329c33fd0f7821407ffcfc308",
-    "v0.29/ipc.schema.json": "95ccfe29474dbd7105ff53f33a80d5b785ff71412810732e0a6d300ce33d674a",
-    "v0.30/ipc.schema.json": "d1e9e67422f6258d3b39a0e28d59eb32e294282613561c22dfc0a1008009e44b",
+    "v0.29/ipc.schema.json": "d1136133eb6d4eed23d9e826d93d6056e7c8704a9ad6545ae2743587be4ca37a",
+    "v0.30/ipc.schema.json": "dc9f7efdd927448e1de7045a1e09c1c127031520fd630f8defc8a3a92ccdf6c8",
     "examples/input-v3.json": "f206faba5d542cc2d6fb5b5c74f89e44fc9cd5c012c846557e8ec2996d93a3c3",
-    "v0.31/ipc.schema.json": "4ff42e57af1ccc098e1649ebac7eecab0ed1204f359740b823ffcbfed9df03ec",
+    "v0.31/ipc.schema.json": "79acf804e8f6754c36f9fe2bf8ad194ec0a781bd0920ef4268d13ad8241545ab",
     "v0.11/material.schema.json": "123f057a80edfe4aa3ee2550e09a09137c333c664661dafb190d11ba21b049a4",
     "v0.11/primitive.schema.json": "db59026b857c86de7a4bbc47a6e0f99a83f7b9589d223492557e743f793c40d0",
-    "v0.32/ipc.schema.json": "6d230f136cf04c98f94fdb201df74b3252bc1b0ad8687888f0dbda6a46dac1bd",
+    "v0.32/ipc.schema.json": "63c57b10050db9430ef386a11672e9b24fc42e237ae95da7f8f71849332fb649",
     "registry/v0.1/content-lock.schema.json": "71bfb29850b2b9b9d11e02f9f40ed8deb82d2b667980048a3413023dbb5d63b6",
-    "v0.33/ipc.schema.json": "c69f72eaf4f400f64d5df3d905994ddb4f48cb84e846d76d46149af6648bdcf9"
+    "v0.33/ipc.schema.json": "f02bd0dc85bdda860a105d221c80ae82203cb56428711e9d1aebb59b6e6641d5"
   }
 }
