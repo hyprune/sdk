@@ -10,6 +10,8 @@ import {RegistryError} from './registry/errors.js';
 import {listSources,addSource,refreshSource,labelSource,enableSource,removeSource,findSource,readCachedIndex,CUSTOM_NOTICE,type Context} from './registry/sources.js';
 import {install,update,rollback,setPin,remove,type JobOptions,type JobEvent,type Plan} from './registry/install.js';
 import {sourceList,browse,contentList} from './registry/list.js';
+import {contentLock} from './registry/lock.js';
+import {writeFileSync} from 'node:fs';
 import {packRelease,packLibrary} from './registry/pack.js';
 import {entryFromDirectory,entryFromGithub} from './registry/entry.js';
 import {checkEntry,type Tombstone} from './registry/check.js';
@@ -32,6 +34,7 @@ hyprune library pack <dir> [--output file.tar.zst]
 hyprune install|update|rollback|pin|unpin|remove …  (type taken from the entry)
 hyprune browse [TEXT] [--type world|library] [--source ID] [--refresh] [--json]
 hyprune installed [--json]   (= hyprune content list)
+hyprune content lock [--output FILE]   (installed content at exact releases, for the Nix modules)
 hyprune source add <url | github:owner/repo[/name]> [--label TEXT] [--id SLUG] [--sha256 HEX]
 hyprune source list [--json] | refresh [ID…] | label <id> <text> | enable <id> | disable <id> | remove <id>
 hyprune registry entry <dir | github:owner/repo[/name]@tag> [--existing entry.json] [--summary T] [--description T] [--tags a,b]
@@ -230,7 +233,15 @@ export async function registryMain(argv:string[]):Promise<void> {
   if(group==='sources') group='source';
   if(group==='installed') {group='content';verb='list';}
   if(group==='source') return await sourceCommand(verb,rest,v);
-  if(group==='content') {if(verb!=='list') usage('content list [--json]');return listCommand(v,typeArg(v));}
+  if(group==='content' && verb==='lock') {
+   const {lock,skipped}=contentLock(ctxOf());
+   for(const s of skipped) console.error(`skipped ${s.type} ${s.id}: ${s.reason}`);
+   const text=JSON.stringify(lock,null,2)+'\n';
+   if(v.output) {writeFileSync(v.output,text);if(!v.json) console.error(`wrote ${lock.packages.length} packages to ${v.output}`);}
+   else process.stdout.write(text);
+   return;
+  }
+  if(group==='content') {if(verb!=='list') usage('content list|lock [--json]');return listCommand(v,typeArg(v));}
   if(group==='browse') {
    if(v.refresh) for(const s of listSources(ctxOf()).filter(s=>s.enabled)) await refreshSource(s,ctxOf());
    const doc=browse({text:[verb,...rest].filter(Boolean).join(' ') || undefined,type:typeArg(v),source:v.source},ctxOf());

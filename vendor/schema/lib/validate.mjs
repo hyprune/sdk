@@ -1009,7 +1009,7 @@ export function validate(kind, value, method, version, options = {}) {
 const registryRoot = new URL('../registry/', import.meta.url);
 export const registryVersions = existsSync(registryRoot)
   ? readdirSync(registryRoot).filter(d => /^v0\.\d+$/.test(d)).map(d => d.slice(1)).sort(byVersion) : [];
-const registrySchemas = { 'registry-index': 'index', 'registry-entry': 'index', 'release-record': 'release-record', sources: 'sources' };
+const registrySchemas = { 'registry-index': 'index', 'registry-entry': 'index', 'release-record': 'release-record', sources: 'sources', 'content-lock': 'content-lock' };
 for (const v of registryVersions) for (const name of new Set(Object.values(registrySchemas)))
   if (existsSync(new URL(`v${v}/${name}.schema.json`, registryRoot))) ajv.addSchema(JSON.parse(readFileSync(new URL(`v${v}/${name}.schema.json`, registryRoot))));
 // Motion packs (RFC-0010 amendment "Shared clip library"), motion.json, versioned on their own
@@ -1143,10 +1143,22 @@ function sourcesRules(doc, fail) {
     }
   });
 }
+function contentLockRules(doc, fail) {
+  const seen = new Set();
+  doc.packages.forEach((p, i) => {
+    const at = `packages/${i} (${p.id})`, key = `${p.type}:${p.id}`;
+    if (seen.has(key)) fail(`${at}: one ${p.type} ${p.id} per lock`); seen.add(key);
+    if (!parseSemver(p.version)) fail(`${at}: version ${p.version} is not SemVer`);
+    if (p.tag !== null && p.tag !== undefined) { const named = tagVersion(p.tag); if (!named || named.version !== p.version) fail(`${at}: tag must name version ${p.version}`); }
+    if (p.license && !spdxValid(p.license)) fail(`${at}: license: invalid SPDX expression`);
+    const sri = 'sha256-' + Buffer.from(p.sha256, 'hex').toString('base64');
+    if (p.nixHash !== sri) fail(`${at}: nixHash must be ${sri} (the SRI form of sha256)`);
+  });
+}
 /**
  * Validate a registry document (RFC-0015). Kinds: `registry-index` (an index document),
  * `registry-entry` (one entry, e.g. a registry entry file, which may carry `$schema`),
- * `release-record` and `sources`. Adds the rules a schema can't express: unique ids,
+ * `release-record`, `sources` and `content-lock`. Adds the rules a schema can't express: unique ids,
  * versions unique and newest first by SemVer, the tag naming the version, SPDX
  * expressions, per-type archive limits.
  * @param version registry format (default: the newest registry/v0.N)
@@ -1172,5 +1184,6 @@ export function validateRegistry(kind, value, version = registryVersions.at(-1))
   }
   if (kind === 'release-record') releaseRecordRules(value, fail);
   if (kind === 'sources') sourcesRules(value, fail);
+  if (kind === 'content-lock') contentLockRules(value, fail);
   return { valid: errors.length === 0, errors };
 }

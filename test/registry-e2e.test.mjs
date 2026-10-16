@@ -203,6 +203,16 @@ test('index source: labels, requirements, world update and rollback, hash and id
  r=ok(await c.run('world','add','org.example.harbour','--yes','--json','--no-session'));
  assert.equal(done(r.lines).tag,'harbour-v1.0.0');
  assert.ok(existsSync(join(c.worlds,'org.example.harbour','world.json')));assert.ok(existsSync(join(c.libraries,'org.example.street@1.1.0')));
+ // content lock: both at their exact releases with the SRI form of each hash (schema-valid).
+ r=ok(await c.run('content','lock'));
+ const lock=JSON.parse(r.out);
+ assert.equal(lock.lockVersion,'0.1');
+ assert.deepEqual(lock.packages.map(p=>[p.type,p.id,p.tag,p.sourceId]),[['library','org.example.street','street-v1.1.0','franks-worlds'],['world','org.example.harbour','harbour-v1.0.0','franks-worlds']]);
+ for(const p of lock.packages) assert.equal(p.nixHash,'sha256-'+Buffer.from(p.sha256,'hex').toString('base64'));
+ assert.equal(lock.packages[0].sourceLabel,"Custom: Frank's worlds");
+ const lockFile=join(c.root,'hyprune-content.lock.json');
+ ok(await c.run('content','lock','--output',lockFile));
+ assert.deepEqual(JSON.parse(await readFile(lockFile,'utf8')).packages,lock.packages);
  // A library version an installed world requires can't be removed without --force.
  r=await c.run('library','remove','org.example.street@1.1.0','--json','--no-session');
  assert.equal(r.code,3);assert.equal(error(r.lines).rule,'requirement.missing');assert.match(error(r.lines).message,/org\.example\.harbour/);

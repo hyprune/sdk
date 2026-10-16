@@ -8,6 +8,7 @@ export * from './github.js';
 export * from './archive.js';
 export * from './sources.js';
 export * from './content.js';
+export * from './lock.js';
 export * from './session.js';
 export * from './install.js';
 export * from './list.js';

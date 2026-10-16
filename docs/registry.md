@@ -49,6 +49,15 @@ the host. The display is always `Official`, `Community registry` or `Custom: <la
 A refresh refuses an index whose `serial` is lower than the cached one and keeps the
 cache (`error` in `source list`); `successor` is shown, never followed.
 
+## Content lock
+
+`hyprune content lock [--output FILE]` writes the user's installed content at exact releases
+(`registry/v0.1/content-lock.schema.json`): per package the id, type, version, tag, archive URL,
+`sha256`, its SRI form `nixHash` (for Nix's `fetchurl`), the source id and label, and the
+licence. Installs without an archive URL (found on disk, offline archives) are skipped and
+named on stderr. The meta repository's `programs.hyprune.content.lock` option installs a lock
+as read-only system content.
+
 ## Install pipeline
 
 1. **Resolve**: an id in the enabled sources (official, community, custom in order; several
