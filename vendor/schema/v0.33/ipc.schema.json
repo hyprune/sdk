@@ -20617,6 +20617,20 @@
       "properties": {
         "ref": {
           "$ref": "#/$defs/objectRef"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            }
+          ],
+          "description": "IPC 0.33: the name it goes by (null: the character's own); kept with the choice."
         }
       },
       "required": [
@@ -25061,6 +25075,32 @@
       ],
       "additionalProperties": false
     },
+    "releaseDraft": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 64,
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "projectId"
+      ],
+      "additionalProperties": false
+    },
     "connectionLive": {
       "type": "object",
       "properties": {
@@ -25105,6 +25145,17 @@
         },
         "remembered": {
           "type": "boolean"
+        },
+        "releaseDraft": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/releaseDraft"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A release the assistant prepared for the user to press (RFC-0016 release_prepare)."
         }
       },
       "required": [
@@ -25116,7 +25167,8 @@
         "changes",
         "action",
         "paused",
-        "remembered"
+        "remembered",
+        "releaseDraft"
       ],
       "additionalProperties": false
     },
@@ -25622,6 +25674,17 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 128
+        },
+        "releaseDraft": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/releaseDraft"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Fill in the Builder page's Release form (null clears it); the user releases."
         }
       },
       "required": [
