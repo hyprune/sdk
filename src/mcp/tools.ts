@@ -506,6 +506,7 @@ export const TOOLS: Tool[] = [
    await s.checkPaused();
    const before = s.state()?.companion ?? null;
    await s.call('companion.set', {ref: a.ref, ...(a.name !== undefined ? {name: a.name} : {})});
+   await waitInstance(s, () => s.state()?.companion?.ref === a.ref && (a.name === undefined || s.state()?.companion?.name === a.name));
    await s.record({action: `chose ${a.name ?? a.ref} as the companion`, tool: 'companion_choose', undo: async () => {
     if (!before?.ref) await s.call('companion.clear', {});
     else await s.call('companion.set', {ref: before.ref, name: before.name ?? null});
@@ -518,6 +519,7 @@ export const TOOLS: Tool[] = [
    const c = s.state()?.companion;
    if (!c?.ref) throw new ToolError('companion.none', 'There is no companion', 'companion_choose picks one');
    await s.call('companion.set', {ref: c.ref, name: a.name});
+   await waitInstance(s, () => s.state()?.companion?.name === (a.name ?? s.state()?.companion?.name));
    await s.record({action: `named the companion ${a.name ?? '(its own name)'}`, tool: 'companion_name', undo: async () => {await s.call('companion.set', {ref: c.ref, name: c.name ?? null});}});
    return {name: a.name};
   }},
