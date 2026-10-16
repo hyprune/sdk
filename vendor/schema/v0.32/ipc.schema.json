@@ -22628,9 +22628,8 @@
         },
         "url": {
           "type": "string",
-          "minLength": 9,
-          "maxLength": 2048,
-          "pattern": "^https://"
+          "minLength": 1,
+          "maxLength": 2048
         },
         "repo": {
           "type": "string",
@@ -22693,9 +22692,8 @@
         },
         "successor": {
           "type": "string",
-          "minLength": 9,
-          "maxLength": 2048,
-          "pattern": "^https://"
+          "minLength": 1,
+          "maxLength": 2048
         }
       },
       "required": [
