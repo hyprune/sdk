@@ -20,7 +20,7 @@ export const TOTALS = Object.freeze({placements: 512, assets: 256, triangles: 2_
 /** The per-object recommendations (object format 0.11): over them is a warning, never a refusal. */
 export const RECOMMENDED = Object.freeze({triangles: 50_000, maxTexture: 2048});
 /** Bumped when the checks change, so cached results of an older SDK are recomputed. */
-const CHECK_VERSION = 'check-1';
+const CHECK_VERSION = 'check-2';
 const WORKSPACE_BASE = 20, OFFICIAL = new Set(['CC0-1.0', 'CC-BY-4.0']);
 
 export type CheckLevel = 'done' | 'open' | 'warning';
