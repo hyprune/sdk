@@ -395,7 +395,7 @@ export const TOOLS: Tool[] = [
    if (!id) throw new ToolError('source.invalid', 'Give for (a placement key) or an id');
    if (!a.dryRun) await s.checkPaused();
    const previous = listSources().find(e => e.id === id) ?? null;
-   const entry: SourceEntry = {id, kind: 'http', url: a.url, ...(a.method ? {method: a.method} : {}), ...(a.headers ? {headers: a.headers} : {}), ...(a.map ? {map: a.map} : {}),
+   const entry: SourceEntry = {id, kind: 'http', url: a.url, argv: null as any, confirm: null as any, ...(a.method ? {method: a.method} : {}), ...(a.headers ? {headers: a.headers} : {}), ...(a.map ? {map: a.map} : {}),
     ...(a.intervalS ? {intervalS: a.intervalS} : {}), ...(a.output ? {output: a.output} : {})};
    const r = await putSource(entry, {dryRun: !!a.dryRun});
    if (!a.dryRun && r.changed) await s.record({action: `set the data source of ${a.for ?? id}`, tool: 'source_set_http', undo: async () => {
@@ -473,6 +473,137 @@ export const TOOLS: Tool[] = [
    s.changes++;
    await s.report(undone.length ? `undid ${undone[0]}` : undefined);
    return {undone, skipped, left: s.journal.length, ...(normalized ? {backToLastSave: true} : {})};
+  }},
+ // ---- E2: command proposals, companions, quests, registry, make_world, release_prepare, asset_fetch ----
+ {name: 'source_propose_command', description: 'Propose a command data source (a program whose output a placement follows, like CPU load). It is written as pending: Hyprune never runs it until the user allows it in Objects → Data sources, where they see the exact command. Tell the user to look there.',
+  inputSchema: obj({for: str('The placement key that reads it'), id: str('Or an explicit source id'), argv: {type: 'array', items: {type: 'string'}, minItems: 1, maxItems: 64, description: 'The program and its arguments, never a shell line'},
+   intervalS: num('Seconds between runs'), timeoutS: num('Seconds before a run is stopped'), output: {enum: ['json', 'number', 'text', 'lines']}, map: {type: 'object', description: 'As for source_set_http'}, dryRun: DRY}, ['argv']),
+  run: async (a, s) => {
+   let id = a.id;
+   if (a.for) {const {folder} = await s.loadedFolder(); id = findPlacement(s, folder, a.for).id;}
+   if (!id) throw new ToolError('source.invalid', 'Give for (a placement key) or an id');
+   if (!a.dryRun) await s.checkPaused();
+   const previous = listSources().find(e => e.id === id) ?? null;
+   const entry: SourceEntry = {id, kind: 'command', argv: a.argv, confirm: 'pending', url: null, method: null, headers: null, body: null,
+    ...(a.intervalS ? {intervalS: a.intervalS} : {}), ...(a.timeoutS ? {timeoutS: a.timeoutS} : {}), ...(a.output ? {output: a.output} : {}), ...(a.map ? {map: a.map} : {})} as any;
+   const r = await putSource(entry, {dryRun: !!a.dryRun});
+   if (!a.dryRun && r.changed) await s.record({action: `proposed a command for ${a.for ?? id}: allow it in Objects → Data sources`, tool: 'source_propose_command', undo: async () => {
+    if (!previous) {await removeSource(id); return;}
+    const clear = Object.fromEntries(Object.keys(r.entry).filter(k => !(k in previous)).map(k => [k, null]));
+    await putSource({...clear, ...previous} as SourceEntry);
+   }});
+   return {...r, entry: sourceSummary(r.entry), pending: true, note: 'It runs only after the user allows it in Hyprune (Objects → Data sources).'};
+  }},
+ {name: 'companion_list', description: 'The characters that can be the user\'s companion (installed libraries and the user\'s imports), and the current companion with its name, mode and what it is doing.', inputSchema: obj({}),
+  run: async (_a, s) => {
+   const r = await s.call('objects.catalog', {});
+   const characters = (r.entries ?? []).filter((e: any) => e.companion?.capable).map((e: any) => ({ref: e.ref, name: e.name}));
+   const c = s.state()?.companion ?? null;
+   return {characters, companion: c ? {ref: c.ref, name: c.name, state: c.state, mode: c.mode, pace: c.pace, activity: c.activity} : null};
+  }},
+ {name: 'companion_choose', description: 'Choose the user\'s companion (a ref from companion_list), optionally with a name it goes by (1 to 32 characters).', inputSchema: obj({ref: str('A companion-capable character'), name: str('The name it goes by')}, ['ref']),
+  run: async (a, s) => {
+   await s.checkPaused();
+   const before = s.state()?.companion ?? null;
+   await s.call('companion.set', {ref: a.ref, ...(a.name !== undefined ? {name: a.name} : {})});
+   await s.record({action: `chose ${a.name ?? a.ref} as the companion`, tool: 'companion_choose', undo: async () => {
+    if (!before?.ref) await s.call('companion.clear', {});
+    else await s.call('companion.set', {ref: before.ref, name: before.name ?? null});
+   }});
+   return {companion: s.state()?.companion ?? null};
+  }},
+ {name: 'companion_name', description: 'Give the current companion a name (1 to 32 characters), or null for its own.', inputSchema: obj({name: {type: ['string', 'null'], description: 'The name'}}, ['name']),
+  run: async (a, s) => {
+   await s.checkPaused();
+   const c = s.state()?.companion;
+   if (!c?.ref) throw new ToolError('companion.none', 'There is no companion', 'companion_choose picks one');
+   await s.call('companion.set', {ref: c.ref, name: a.name});
+   await s.record({action: `named the companion ${a.name ?? '(its own name)'}`, tool: 'companion_name', undo: async () => {await s.call('companion.set', {ref: c.ref, name: c.name ?? null});}});
+   return {name: a.name};
+  }},
+ {name: 'companion_mode', description: 'The companion follows the player or stays where it is; its pace (walk or run) while following; its styles.', inputSchema: obj({mode: {enum: ['follow', 'stay']}, pace: {enum: ['walk', 'run']}, style: {type: ['object', 'null']}}, ['mode']),
+  run: async (a, s) => {
+   await s.checkPaused();
+   const c = s.state()?.companion;
+   if (!c?.ref) throw new ToolError('companion.none', 'There is no companion', 'companion_choose picks one');
+   await s.call('companion.mode', {mode: a.mode, ...(a.pace ? {pace: a.pace} : {}), ...(a.style !== undefined ? {style: a.style} : {})});
+   await s.record({action: `set the companion to ${a.mode}`, tool: 'companion_mode', undo: async () => {
+    await s.call('companion.mode', {mode: c.mode === 'stay' ? 'stay' : 'follow', pace: c.pace, ...(a.style !== undefined ? {style: c.style} : {})});
+   }});
+   return {mode: a.mode, pace: a.pace ?? c.pace};
+  }},
+ {name: 'quest_list', description: 'The user\'s quests (personal ones the user or an assistant made, and world quests) with their states.', inputSchema: obj({states: {type: 'array', items: {enum: ['available', 'active', 'completed', 'failed', 'abandoned']}}}),
+  run: async (a, s) => s.call('quests.list', a.states ? {states: a.states} : {})},
+ {name: 'quest_create', description: 'Make a personal quest (RFC-0012): a title, objectives the user ticks or that follow live data, and optionally a focus session. Example: {"title": "Tidy the inbox", "objectives": [{"id": "zero", "text": "Inbox at zero", "kind": "manual"}]}.',
+  inputSchema: obj({quest: {type: 'object', description: 'A personal quest input (title, summary?, objectives[], focus?)'}, track: bool('Track it in the HUD')}, ['quest']),
+  run: async (a, s) => {
+   await s.checkPaused();
+   const r = await s.call('quests.create', {quest: a.quest});
+   if (a.track) await s.call('quests.track', {questRef: r.questRef});
+   await s.record({action: `made the quest ${a.quest?.title ?? ''}`, tool: 'quest_create', undo: async () => {await s.call('quests.delete', {questRef: r.questRef});}});
+   return {questRef: r.questRef};
+  }},
+ {name: 'quest_update', description: 'Replace a personal quest\'s definition (its progress is kept where objectives keep their ids).', inputSchema: obj({questRef: {type: 'object'}, quest: {type: 'object'}}, ['questRef', 'quest']),
+  run: async (a, s) => {
+   await s.checkPaused();
+   await s.call('quests.update', {questRef: a.questRef, quest: a.quest});
+   await s.record({action: `changed the quest ${a.quest?.title ?? ''}`, tool: 'quest_update', undo: null});
+   return {questRef: a.questRef};
+  }},
+ {name: 'quest_delete', description: 'Delete a personal quest.', inputSchema: obj({questRef: {type: 'object'}}, ['questRef']),
+  run: async (a, s) => {
+   await s.checkPaused();
+   await s.call('quests.delete', {questRef: a.questRef});
+   await s.record({action: 'deleted a quest', tool: 'quest_delete', undo: null});
+   return {deleted: true};
+  }},
+ {name: 'registry_search', description: 'Search the official and community registries (as last refreshed) for worlds and object libraries: ids, names, summaries, licences, versions and whether they are installed.',
+  inputSchema: obj({query: str('Words in names, ids, summaries and tags'), type: {enum: ['world', 'library']}, limit: num('Default 20')}),
+  run: async a => {
+   const {browse} = await import('../registry/list.js');
+   const r = browse({text: a.query, type: a.type});
+   const entries = r.entries.filter((e: any) => e.tier === 'official' || e.tier === 'community').slice(0, Math.max(1, Math.min(100, a.limit ?? 20)))
+    .map((e: any) => ({id: e.id, type: e.type, name: e.name, summary: e.summary, source: e.display, tier: e.tier, license: e.latest?.license ?? null, version: e.latest?.version ?? null,
+     installed: e.installed?.tag ?? null, tags: e.tags}));
+   return {entries, note: entries.length ? undefined : 'Nothing matched in the cached indexes; the user can refresh sources in Director → Library.'};
+  }},
+ {name: 'registry_install', description: 'Install a world or an object library from the official or community registry (data only: packages never run code). Adding other sources stays the user\'s.',
+  inputSchema: obj({id: str('The package id from registry_search'), type: {enum: ['world', 'library']}, version: str('A version (default the newest)')}, ['id', 'type']),
+  run: async (a, s) => {
+   await s.checkPaused();
+   const {browse} = await import('../registry/list.js');
+   const {install} = await import('../registry/install.js');
+   const found = browse({text: a.id, type: a.type}).entries.find((e: any) => e.id === a.id && (e.tier === 'official' || e.tier === 'community'));
+   if (!found) throw new ToolError('registry.unknown', `${a.id} is not in the official or community registry`, 'registry_search lists what can be installed');
+   const r = await install(a.version ? `${a.id}@${a.version}` : a.id, {type: a.type, from: found.sourceId, yes: true, session: null});
+   await s.record({action: `installed ${found.name}`, tool: 'registry_install', undo: null});
+   return r;
+  }},
+ {name: 'make_world', description: 'Make the folder\'s world.json now (as Save does first): homes from the screens, spawns on their floors, window zones, provenance; with the checklist. Writes files, saves nothing.', inputSchema: obj({project: PROJECT}),
+  run: async (a, s) => {
+   const folder = s.folderOf(a.project);
+   await s.checkPaused();
+   const {make} = await import('../builder.js');
+   const m = await make(folder);
+   const c = await checkProject(folder);
+   return {homes: m.homes, warnings: m.warnings, ready: c.ready, open: c.items.filter(i => i.blocks && !i.done).map(i => ({id: i.id, message: i.message}))};
+  }},
+ {name: 'release_prepare', description: 'Fill in the Builder page\'s Release form (a version and notes) for the user to check and press. You never release yourself.', inputSchema: obj({version: str('Like 0.2.0'), notes: str('What is new'), project: PROJECT}),
+  run: async (a, s) => {
+   const folder = s.folderOf(a.project), st = status(folder);
+   await s.online();
+   const c = await checkProject(folder);
+   const draft = {projectId: st.projectId, ...(a.version ? {version: String(a.version)} : {}), ...(a.notes ? {notes: String(a.notes).slice(0, 2000)} : {})};
+   await s.call('assistant.report', {changes: s.changes, action: `prepared a release of ${st.name}${a.version ? ` (v${a.version})` : ''}`, releaseDraft: draft});
+   return {prepared: draft, unsaved: st.pending.total, checklistReady: c.ready,
+    note: st.pending.total ? 'The folder has unsaved changes: the user saves before releasing.' : 'The user releases from Director → Builder.'};
+  }},
+ {name: 'asset_fetch', description: 'Download a CC0 texture, model or sky (HDRI) from an allowlisted library (Poly Haven, ambientCG, Kenney) into Hyprune\'s cache, with its licence, author and source recorded for import, material_set or world_set_sky. Any other URL is refused.',
+  inputSchema: obj({url: str('A direct download link on an allowlisted host'), author: str('The author named on the asset\'s page (default the library)'), name: str('A short name')}, ['url']),
+  run: async (a, s) => {
+   await s.checkPaused();
+   const {fetchAsset} = await import('../assets.js');
+   return fetchAsset(String(a.url), {author: a.author, name: a.name});
   }},
 ];
 function overviewBounds(s: Session, folder: string): {min: V3; max: V3} | undefined {

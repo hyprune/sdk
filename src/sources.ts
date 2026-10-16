@@ -18,7 +18,7 @@ const SLUG = /^[a-z][a-z0-9-]*$/, SECRET = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH'], OUTPUTS = ['json', 'number', 'text', 'lines'];
 
 export interface SourceEntry {
- id: string; kind?: 'command' | 'http'; argv?: string[]; url?: string; method?: string; headers?: Record<string, string | {secret: string; prefix?: string}>;
+ id: string; kind?: 'command' | 'http'; argv?: string[] | null; url?: string | null; method?: string; headers?: Record<string, string | {secret: string; prefix?: string}>;
  body?: unknown; output?: string; intervalS?: number; timeoutS?: number; map?: Record<string, unknown>; confirm?: 'pending'; [key: string]: unknown;
 }
 

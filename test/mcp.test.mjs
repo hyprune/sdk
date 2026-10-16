@@ -36,7 +36,7 @@ test('MCP offline: lifecycle, tools, a world built in the folder, look, checklis
  const tools=(await rpc('tools/list')).result.tools.map(x=>x.name);
  for(const n of ['world_create','world_describe','world_set_sky','place','edit','remove','material_set','source_set_http','behaviour_set','look','checklist','save','discard','history','undo'])
   assert.ok(tools.includes(n),n);
- assert.ok(!tools.some(n=>/surface|input|camera|window|release|publish/.test(n)),'end-user operations only');
+ assert.ok(!tools.some(n=>/surface|input|camera|window|publish|^release$/.test(n)),'end-user operations only (release_prepare only fills the form)');
  assert.equal((await rpc('tools/call',{name:'nope',arguments:{}})).error.code,-32602);
  // A world, created and saved once.
  const created=json(await call('world_create',{name:'Rooftop Test',sky:'sunset',floor:'paving',open:false}));
@@ -96,4 +96,50 @@ test('hyprune mcp --install-skill copies the skill',t=>{
  assert.ok(existsSync(join(dir,'hyprune-world-builder','SKILL.md')));
  assert.match(readFileSync(join(dir,'hyprune-world-builder','SKILL.md'),'utf8'),/^---\nname: hyprune-world-builder/);
  assert.ok(existsSync(join(dir,'hyprune-world-builder','examples','rooftop-garden.md')));
+});
+
+test('MCP E2 offline: command proposals wait (pending, never tested), HTTP clears them; asset_fetch only from the allowlist; make_world; in-world tools need Hyprune',async t=>{
+ const root=mkdtempSync(join(tmpdir(),'hyprune-mcp2-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const cfg=join(root,'gitconfig');writeFileSync(cfg,'[user]\n name = Test Assistant\n email = assistant@example.com\n');
+ const http=await import('node:http');
+ const png=readFileSync(new URL('./fixtures/import/barrel/staves.png',import.meta.url));
+ const srv=http.createServer((req,res)=>{
+  if(req.url==='/tex.png'){res.writeHead(200,{'Content-Type':'image/png','Content-Length':png.length});res.end(png);}
+  else if(req.url==='/away'){res.writeHead(302,{Location:'http://evil.invalid/x.png'});res.end();}
+  else {res.writeHead(404);res.end();}
+ });
+ await new Promise(r=>srv.listen(0,'127.0.0.1',r));t.after(()=>srv.close());
+ const host=`127.0.0.1:${srv.address().port}`;
+ const env={HYPRUNE_PROJECTS_DIR:join(root,'projects'),GIT_CONFIG_GLOBAL:cfg,GIT_CONFIG_NOSYSTEM:'1',XDG_RUNTIME_DIR:join(root,'run'),HYPRLAND_INSTANCE_SIGNATURE:'none',
+  HYPRUNE_SOCKET:join(root,'none.sock'),HYPRUNE_SOURCES_CONFIG:join(root,'sources.json'),HYPRUNE_SOURCES_SOCKET:join(root,'none-sources.sock'),
+  HYPRUNE_ASSET_HOSTS:`${host}=Test library`,XDG_CACHE_HOME:join(root,'cache')};
+ const {rpc,call}=server(t,env);
+ await rpc('initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'Test Client'}});
+ const tools=(await rpc('tools/list')).result.tools.map(x=>x.name);
+ for(const n of ['source_propose_command','companion_list','companion_choose','companion_name','companion_mode','quest_list','quest_create','registry_search','registry_install','make_world','release_prepare','asset_fetch'])
+  assert.ok(tools.includes(n),n);
+ // A proposal is written pending; the helper's test is refused; an HTTP definition replaces it without confirmation.
+ const p=json(await call('source_propose_command',{id:'cpu-load',argv:['hyprune-system-gauges','cpu'],intervalS:5}));
+ assert.equal(p.pending,true);
+ const written=JSON.parse(readFileSync(join(root,'sources.json'),'utf8')).sources[0];
+ assert.deepEqual([written.id,written.confirm,written.argv],['cpu-load','pending',['hyprune-system-gauges','cpu']]);
+ const test=await call('source_test',{id:'cpu-load'});
+ assert.equal(test.isError,true);assert.match(json(test).error.message,/after you allow it/);
+ await call('source_set_http',{id:'cpu-load',url:'https://example.org/cpu',map:{value:{path:'$.cpu'}}});
+ const http2=JSON.parse(readFileSync(join(root,'sources.json'),'utf8')).sources[0];
+ assert.equal(http2.kind,'http');assert.ok(!('confirm' in http2) && !('argv' in http2));
+ // asset_fetch: the allowlist, redirects checked, provenance recorded.
+ const got=json(await call('asset_fetch',{url:`http://${host}/tex.png`,name:'staves'}));
+ assert.equal(got.license,'CC0-1.0');assert.equal(got.author,'Test library');assert.equal(got.source,`http://${host}/tex.png`);
+ assert.deepEqual(readFileSync(got.path),png);
+ assert.equal(json(await call('asset_fetch',{url:'https://example.com/x.png'})).error.code,'asset.host');
+ assert.equal(json(await call('asset_fetch',{url:`http://${host}/away`})).error.code,'asset.host','a redirect off the allowlist');
+ // make_world on a folder; in-world tools offline.
+ await call('world_create',{name:'Make Test',open:false});
+ const made=json(await call('make_world'));
+ assert.deepEqual(made.homes,[]);assert.equal(typeof made.ready,'boolean');
+ for(const [name,args] of [['companion_list',{}],['quest_list',{}],['release_prepare',{version:'0.2.0'}]])
+  assert.equal(json(await call(name,args)).error.code,'assistant.offline',name);
+ const reg=json(await call('registry_search',{query:'garden'}));
+ assert.deepEqual(reg.entries,[]);assert.match(reg.note,/refresh/);
 });
