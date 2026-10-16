@@ -43,7 +43,8 @@
     "LICENSE",
     "docs",
     "scenarios",
-    "examples"
+    "examples",
+    "skills"
   ],
   "publishConfig": {
     "access": "public"

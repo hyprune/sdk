@@ -14,13 +14,15 @@ import {objectMain,objectHelp} from './object-cli.js';
 import {npcMain,npcHelp} from './npc-cli.js';
 import {registryMain,registryHelp,isRegistryCommand} from './registry-cli.js';
 import {builderMain,builderHelp} from './builder-cli.js';
-const help=`hyprune world validate <dir>\nhyprune world pack <dir> [--output file.tar.zst]\n${registryHelp}\nhyprune object check <dir> [--measured measured.json]\nhyprune library check <dir>\nhyprune motion check <dir>\n${objectHelp}\n${builderHelp}\n${npcHelp}\nhyprune ext new <screen-type|widget|movement-mode|integration> [dir] [--id org.example.id]\nhyprune ipc call <method> [JSON params] [--socket path] [--protocol 0.3|0.2|0.1]\nhyprune ipc subscribe [--socket path] [--count N]\nhyprune doctor [--socket path]\n${questHelp}\n\nAuthentication: supervisor supplies HYPRUNE_TOKEN_FD (>=3), HYPRUNE_CLIENT_ID, HYPRUNE_SOCKET.\nNo tokens on the command line. Use hyprune-mock --launch for developer grants.`;
+import {mcpMain,mcpHelp} from './mcp/server.js';
+const help=`hyprune world validate <dir>\nhyprune world pack <dir> [--output file.tar.zst]\n${registryHelp}\nhyprune object check <dir> [--measured measured.json]\nhyprune library check <dir>\nhyprune motion check <dir>\n${objectHelp}\n${builderHelp}\n${mcpHelp}\n${npcHelp}\nhyprune ext new <screen-type|widget|movement-mode|integration> [dir] [--id org.example.id]\nhyprune ipc call <method> [JSON params] [--socket path] [--protocol 0.3|0.2|0.1]\nhyprune ipc subscribe [--socket path] [--count N]\nhyprune doctor [--socket path]\n${questHelp}\n\nAuthentication: supervisor supplies HYPRUNE_TOKEN_FD (>=3), HYPRUNE_CLIENT_ID, HYPRUNE_SOCKET.\nNo tokens on the command line. Use hyprune-mock --launch for developer grants.`;
 export async function main(argv=process.argv.slice(2)):Promise<void> {
  if(argv[0]==='quest' || argv[0]==='focus') return questMain(argv);
  if(isRegistryCommand(argv)) return registryMain(argv);
  if(argv[0]==='object' && ['add','list','import','adjust','simplify','repair','restore','fit','primitive','material','materials'].includes(argv[1])) return objectMain(argv);
  if(argv[0]==='npc' || argv[0]==='path') return npcMain(argv);
  if(argv[0]==='builder') return builderMain(argv);
+ if(argv[0]==='mcp') return mcpMain(argv);
  const {values:v,positionals:p}=parseArgs({args:argv,allowPositionals:true,options:{help:{type:'boolean',short:'h'},socket:{type:'string'},protocol:{type:'string'},output:{type:'string'},measured:{type:'string'},id:{type:'string'},count:{type:'string'},capabilities:{type:'string'}}});
  if(v.help || !p.length) {console.log(help);return;}
  if(v.protocol) process.env.HYPRUNE_PROTOCOL=v.protocol;
