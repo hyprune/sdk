@@ -55,7 +55,7 @@ const round4 = (v: number) => Math.round(v * 1e4) / 1e4 + 0;
 
 // ---- loading ----
 let hooked = false;
-async function libs() {
+export async function libs() {
  // glTF-Transform's functions import ndarray-pixels, whose Node build loads sharp (native):
  // resolve it to the pure-JavaScript replacement first (pixels-hooks.ts).
  if (!hooked) {register(new URL('./pixels-hooks.js', import.meta.url)); hooked = true;}
@@ -68,7 +68,7 @@ async function libs() {
   .registerDependencies({'meshopt.decoder': mo.MeshoptDecoder, 'meshopt.encoder': mo.MeshoptEncoder});
  return {core, ext, fn, mo, io};
 }
-type Libs = Awaited<ReturnType<typeof libs>>;
+export type Libs = Awaited<ReturnType<typeof libs>>;
 
 export function importFormat(file: string): ImportFormat {
  const e = extname(file).slice(1).toLowerCase();
@@ -168,17 +168,17 @@ function drawnNodes(doc: Document): GltfNode[] {
  scene?.traverse(n => {if (n.getMesh()) out.push(n);});
  return out;
 }
-function triangles(doc: Document): number {
+export function triangles(doc: Document): number {
  return drawnNodes(doc).reduce((s, n) => s + n.getMesh()!.listPrimitives().reduce((t, p) => t + primTriangles(p), 0), 0);
 }
-async function textureSizes(L: Libs, doc: Document) {
+export async function textureSizes(L: Libs, doc: Document) {
  return doc.getRoot().listTextures().map(t => {
   const size = t.getImage() ? L.core.ImageUtils.getSize(t.getImage()!, t.getMimeType()) : null;
   return {name: t.getName() || t.getURI() || 'texture', width: size?.[0] ?? 0, height: size?.[1] ?? 0, mimeType: t.getMimeType()};
  });
 }
 // The SDK's GPU estimate (PNG/JPEG 4 B/px, KTX2 1 B/px, x4/3 mips, plus vertex and index data).
-function gpuEstimate(doc: Document, textures: Array<{width: number; height: number; mimeType: string}>): number {
+export function gpuEstimate(doc: Document, textures: Array<{width: number; height: number; mimeType: string}>): number {
  let bytes = 0;
  for (const a of doc.getRoot().listAccessors()) bytes += a.getByteLength();
  for (const t of textures) bytes += Math.ceil(t.width * t.height * (t.mimeType === 'image/ktx2' ? 1 : 4) * 4 / 3);
@@ -234,7 +234,7 @@ const Z_UP: Mat3 = [1, 0, 0, 0, 0, -1, 0, 1, 0];
 const yawMatrix = (deg: number): Mat3 => {const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); return [c, 0, -s, 0, 1, 0, s, 0, c];};
 
 /** Asset-space triangles of the drawn scene (node transforms applied) with each one's material index. */
-function sceneTriangles(L: Libs, doc: Document) {
+export function sceneTriangles(L: Libs, doc: Document) {
  const tris: number[][][] = [], mats: number[] = [], uvs: Array<number[][] | null> = [], materials = doc.getRoot().listMaterials();
  for (const n of drawnNodes(doc)) {
   const m = n.getWorldMatrix();

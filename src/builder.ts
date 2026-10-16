@@ -18,6 +18,7 @@ import {decodeHdr,hdrKind,hdrSun,toneMap} from './hdr.js';
 import {packRelease} from './registry/pack.js';
 import {primitiveOf} from './primitives.js';
 import {userName} from './import.js';
+import {checkProject,type CheckResult} from './check.js';
 
 /** The starter new folders are made from (Open Plain); flat-land@0.1 folders keep loading. */
 export const STARTER = 'open-plain@0.2', LEGACY_STARTER = 'flat-land@0.1';
@@ -30,7 +31,7 @@ const LOCAL_TIMEOUT = 60_000, NETWORK_TIMEOUT = 30 * 60_000;
 
 export type BuilderCode = 'git.missing' | 'git.identity' | 'git.failed' | 'project.unknown' | 'project.invalid' | 'project.exists' | 'save.nothing' | 'make.invalid'
  | 'release.unsaved' | 'release.version' | 'release.id' | 'remote.invalid' | 'remote.auth' | 'remote.rejected' | 'sky.invalid' | 'floor.invalid'
- | 'spawn.invalid' | 'starter.unknown' | 'builder.busy';
+ | 'spawn.invalid' | 'starter.unknown' | 'builder.busy' | 'release.check';
 /** A builder failure: a stable code, one plain sentence, and how to fix it when there is a way (RFC-0016 rule 5). */
 export class BuilderError extends Error {
  constructor(public code: BuilderCode, message: string, public hint?: string, public data?: Record<string, unknown>) {super(message);}
@@ -447,6 +448,9 @@ export interface Made {manifest: Record<string, any>; homes: Array<{slot: string
 /** Writes world.json, ATTRIBUTION.md and LICENSE from builder/base.json and the project's placements. */
 export async function make(folder: string): Promise<Made> {
  const base = readJson(join(folder, BASE)), project = readProject(folder), warnings: string[] = [];
+ // The checklist's standbacks: the floor in front of each screen (a platform's top, not only the land).
+ let checked: CheckResult | null = null;
+ try {checked = await checkProject(folder);} catch (e: any) {warnings.push(`checklist skipped: ${String(e?.message ?? e).split('\n')[0]}`);}
  const m = structuredClone(base);
  const assets = [...new Set(project.placements.map(p => p.ref.slice('world/'.length)))];
  const objects = new Map<string, any>();
@@ -484,8 +488,20 @@ export async function make(folder: string): Promise<Made> {
   const f = flat > 0.3 ? [normal[0] / flat, normal[2] / flat] : [0, 1], d = Math.max(2.5, 0.87 * size[0]), yaw = Math.atan2(f[0], f[1]);
   m.anchors = [...(m.anchors ?? []), {id, pose: {position: centre, rotation: q}, size, screenType: SCREEN_TYPE,
    mount: {type: a.mountType, role: 'mounted-workspace', interaction: 'focus-in'}}];
-  m.areas = [...(m.areas ?? []), {id, workspaceSlot: slot, primaryAnchor: id, toolAnchors: [], dataAnchors: [], theme: String(objects.get(p.ref.slice('world/'.length))?.name ?? 'Screen').slice(0, 256), spawnId: spawn}];
-  m.spawns = [...m.spawns, {id: spawn, pose: {position: [r4(centre[0] + f[0] * d), 0, r4(centre[2] + f[1] * d)], rotation: [0, r4(Math.sin(yaw / 2)), 0, r4(Math.cos(yaw / 2))]}}];
+  const home = checked?.homes.find(h => h.placement === p.id), floorY = home?.standback ? home.standback[1] : 0;
+  // Windows pulled from the home go to a zone beyond the standback (RFC-0005), when that floor is walkable.
+  const zones: string[] = [];
+  if (home?.standback && home.reachable) {
+   const side = [-f[1], f[0]], half = size[0] / 2, near = d + 0.5, far = d + 2.5, xs: number[] = [], zs: number[] = [];
+   for (const along of [near, far]) for (const across of [-half, half]) {xs.push(centre[0] + f[0] * along + side[0] * across); zs.push(centre[2] + f[1] * along + side[1] * across);}
+   const zone = `zone-${slot}`;
+   m.placementZones = [...(m.placementZones ?? []), {id: zone, bounds: {min: [r4(Math.min(...xs)), r4(floorY + 0.5), r4(Math.min(...zs))], max: [r4(Math.max(...xs)), r4(floorY + 2.5), r4(Math.max(...zs))]},
+    windowSizes: [[1.6, 0.9], [3.2, 1.8]], clearance: 0.15}];
+   zones.push(zone);
+  } else if (home && !home.standback) warnings.push(`${p.id}: no floor in front of the screen; its home spawn is on the land`);
+  m.areas = [...(m.areas ?? []), {id, workspaceSlot: slot, primaryAnchor: id, toolAnchors: [], dataAnchors: [], theme: String(objects.get(p.ref.slice('world/'.length))?.name ?? 'Screen').slice(0, 256), spawnId: spawn,
+   ...(zones.length ? {freePlacementZones: zones} : {})}];
+  m.spawns = [...m.spawns, {id: spawn, pose: {position: [r4(centre[0] + f[0] * d), r4(floorY), r4(centre[2] + f[1] * d)], rotation: [0, r4(Math.sin(yaw / 2)), 0, r4(Math.cos(yaw / 2))]}}];
   homes.push({slot, workspace: p.workspace, placement: p.id});
  }
  // Provenance: the folder's own files, the sky, each copied object (its own attribution).
@@ -640,15 +656,23 @@ export function save(folder: string, message = ''): Promise<Saved> {
 }
 
 // ---- release ----
-export interface ReleaseOptions {version?: string; notes?: string; id?: string; output?: string; onStage?: (stage: 'version' | 'build' | 'push' | 'release') => void}
+export interface ReleaseOptions {version?: string; notes?: string; id?: string; output?: string; skipCheck?: boolean; onStage?: (stage: 'check' | 'version' | 'build' | 'push' | 'release') => void}
 export interface Released {
  version: string; tag: string; commit: string; worldId: string; pushed: boolean; release: string | null;
  assets: string[]; warnings: string[];
+ /** The official-publishing check (RFC-0014): reported, never blocking. */
+ publishing: {officialEligible: boolean; notOfficial: Array<{path: string; license: string; missing: string[]}>};
 }
 export function release(folder: string, o: ReleaseOptions = {}): Promise<Released> {
  return locked(folder, async () => {
   const stage = o.onStage ?? (() => {});
   if (pending(folder).total) fail('release.unsaved', 'Save first: Release makes a version from the saved state');
+  // The checklist: blocking items stop a release (the made world would strand the player); --skip-check overrides.
+  stage('check');
+  const checked = await checkProject(folder);
+  const open = checked.items.filter(i => i.blocks && !i.done);
+  if (open.length && !o.skipCheck) fail('release.check', `${open.length} checklist item${open.length === 1 ? ' is' : 's are'} open: ${open.map(i => i.label).join('; ')}`,
+   'Fix them (builder check lists where), or release anyway with --skip-check', {items: open});
   const tags = versionTags(folder), latest = tags[0]?.version, base = readJson(join(folder, BASE));
   const version = o.version ?? (latest ? nextPatch(latest) : base.version);
   if (!SEMVER.test(version)) fail('release.version', `${version} is not a version (SemVer, no build metadata, like 0.2.0)`);
@@ -673,7 +697,9 @@ export function release(folder: string, o: ReleaseOptions = {}): Promise<Release
   const tag = `v${version}`;
   git(folder, ['tag', '-a', tag, '-F', '-'], {input: (o.notes?.trim() || `Release ${tag}`) + '\n'});
   const commit = git(folder, ['rev-parse', 'HEAD']).trim();
-  const result: Released = {version, tag, commit, worldId, pushed: false, release: null, assets: [], warnings};
+  if (open.length) warnings.push(`released with ${open.length} open checklist item(s): ${open.map(i => i.label).join('; ')}`);
+  const result: Released = {version, tag, commit, worldId, pushed: false, release: null, assets: [], warnings,
+   publishing: {officialEligible: checked.publishing.officialEligible, notOfficial: checked.publishing.parts.filter(p => !p.official).map(p => ({path: p.path, license: p.license, missing: p.missing}))}};
   if (!remote) return result;
   // Build from the tag, not the working tree (git archive honours export-ignore).
   stage('build');

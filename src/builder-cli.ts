@@ -3,6 +3,7 @@
 import {parseArgs} from 'node:util';
 import {readFileSync} from 'node:fs';
 import {folderPlace,primitiveHelp,primitiveMain} from './primitive-cli.js';
+import {checkProject,type CheckItem} from './check.js';
 import {applyFloor,applySky,applySpawn,createProject,listFloors,listProjects,listSkies,listStarters,make,projectFolder,release,save,setRemote,status,thumbnailsDir,
  BuilderError,type FloorChoice,type SkyChoice,type SpawnChoice,type Status} from './builder.js';
 
@@ -15,8 +16,10 @@ hyprune builder starters|skies|floors [--thumbnails DIR] [--json]
 hyprune builder list [--json]
 hyprune builder status PROJECT [--json]
 hyprune builder make PROJECT [--json]
+hyprune builder check PROJECT [--fresh] [--json]
+    the checklist: spawn, screen approaches, walkable area, budgets, licences, official publishing
 hyprune builder save PROJECT [-m MESSAGE] [--json]
-hyprune builder release PROJECT [VERSION] [--notes TEXT | --notes-file FILE] [--id ID] [--json]
+hyprune builder release PROJECT [VERSION] [--notes TEXT | --notes-file FILE] [--id ID] [--skip-check] [--json]
 hyprune builder sky PROJECT (IMAGE --license SPDX --author A --source S | --preset ID) [--dry-run] [--json]
     IMAGE: an equirectangular PNG, JPEG, OpenEXR or Radiance HDR (tone mapped)
 hyprune builder floor PROJECT (IMAGE --license SPDX --author A --source S | --preset ID | --tile METRES) [--tile METRES] [--dry-run] [--json]
@@ -48,7 +51,7 @@ export async function builderMain(argv:string[]):Promise<void> {
   'git-name':{type:'string'},'git-email':{type:'string'},starter:{type:'string'},preset:{type:'string'},'dry-run':{type:'boolean'},
   sky:{type:'string'},'sky-image':{type:'string'},'sky-license':{type:'string'},'sky-author':{type:'string'},'sky-source':{type:'string'},
   floor:{type:'string'},'floor-image':{type:'string'},'floor-license':{type:'string'},'floor-author':{type:'string'},'floor-source':{type:'string'},
-  tile:{type:'string'},spawn:{type:'string'},at:{type:'string'},yaw:{type:'string'},facing:{type:'string'},'if-exists':{type:'string'},thumbnails:{type:'string'}}});
+  tile:{type:'string'},spawn:{type:'string'},at:{type:'string'},yaw:{type:'string'},facing:{type:'string'},'if-exists':{type:'string'},thumbnails:{type:'string'},fresh:{type:'boolean'},'skip-check':{type:'boolean'}}});
  const verb=argv[1];
  if(v.help || !verb){console.log(builderHelp);return;}
  const line=(value:unknown):void=>{process.stdout.write(JSON.stringify(value)+'\n');};
@@ -98,6 +101,12 @@ export async function builderMain(argv:string[]):Promise<void> {
    case 'list': {const r=listProjects();return done({projects:r},r.map(statusText).join('\n') || 'no world folders yet');}
    case 'status': {const r=status(projectFolder(need(0,'a project')));return done(r,statusText(r));}
    case 'make': {const r=await make(projectFolder(need(0,'a project')));return done({homes:r.homes,warnings:r.warnings},`made world.json: ${r.manifest.objects?.length ?? 0} objects, ${r.homes.length} homes`);}
+   case 'check': {
+    const r=await checkProject(projectFolder(need(0,'a project')),{cache:!v.fresh});
+    const mark=(i:CheckItem)=>i.done?(i.level==='warning'?'!':'✓'):i.blocks?'✗':'!';
+    return done(r,[`${r.ready?'ready to release':'not ready: blocking items are open'} (walkable ${r.walk.mainArea} m², ${r.walk.ms} ms)`,
+     ...r.items.map(i=>`${mark(i)} ${i.label}: ${i.message}${i.hint && !i.done?`\n    ${i.hint}`:''}`)].join('\n'));
+   }
    case 'save': {
     const folder=projectFolder(need(0,'a project')),r=await save(folder,v.message ?? '');
     if(!v.json) for(const w of r.warnings) console.error('warning: '+w);
@@ -106,7 +115,7 @@ export async function builderMain(argv:string[]):Promise<void> {
    case 'release': {
     const folder=projectFolder(need(0,'a project'));
     const notes=v['notes-file']?readFileSync(v['notes-file'],'utf8'):v.notes;
-    const r=await release(folder,{version:p[1],notes,id:v.id,onStage:stage=>v.json?line({event:'stage',stage}):console.error(stage)});
+    const r=await release(folder,{version:p[1],notes,id:v.id,skipCheck:!!v['skip-check'],onStage:stage=>v.json?line({event:'stage',stage}):console.error(stage)});
     if(!v.json) for(const w of r.warnings) console.error('warning: '+w);
     return done({...r,status:status(folder)},`released ${r.tag} (${r.commit.slice(0,12)})${r.pushed?', pushed':''}${r.release?`: ${r.release}`:''}`);
    }

@@ -104,7 +104,7 @@ test('save: Make world (objects, screens as homes, provenance) and one commit pe
  const anchor=world.anchors.find(a=>a.id==='screen-01');
  assert.deepEqual(anchor.pose.position,[0.06,1.5,-4],'the anchor offset turned with the screen');
  assert.deepEqual([anchor.size,anchor.screenType,anchor.mount],[[3.2,1.8],'com.hyprune.window',{type:'hanging-wall',role:'mounted-workspace',interaction:'focus-in'}]);
- assert.deepEqual(world.areas,[{id:'screen-01',workspaceSlot:'01',primaryAnchor:'screen-01',toolAnchors:[],dataAnchors:[],theme:'Wall screen 16:9',spawnId:'home-01'}]);
+ assert.deepEqual(world.areas,[{id:'screen-01',workspaceSlot:'01',primaryAnchor:'screen-01',toolAnchors:[],dataAnchors:[],theme:'Wall screen 16:9',spawnId:'home-01',freePlacementZones:['zone-01']}],'with the window zone beyond the standback');
  const home=world.spawns.find(s=>s.id==='home-01');
  assert.deepEqual(home.pose.position,[2.844,0,-4],'2.5 m or 0.87 x width in front of the screen, on the land');
  // Facing -X, towards the screen: -Z turned +90 degrees about +Y.
@@ -159,7 +159,7 @@ test('release: a tag without a remote; push and RFC-0015 assets built from the t
  gitIn(folder,'remote','set-url','--push','origin',bare);
  const stages=[];
  const r=await release(folder,{id:'org.example.tidepool',onStage:s=>stages.push(s)});
- assert.deepEqual(stages,['version','build','push']);
+ assert.deepEqual(stages,['check','version','build','push']);
  assert.deepEqual([r.version,r.worldId,r.pushed,r.release],['0.1.1','org.example.tidepool',true,null]);
  assert.ok(r.warnings.some(w=>/not GitHub/.test(w)));
  assert.equal(gitIn(folder,'log','-1','--format=%s'),'Release v0.1.1');
@@ -221,7 +221,7 @@ test('CLI: JSON lines for the Director',async t=>{
  const list=lines(cli('list')).at(-1).result.projects;
  assert.deepEqual(list.map(p=>[p.projectId,p.worldId,p.name,p.version]),[['market-square','local.market-square','Market Square','0.1.0']]);
  const rel=lines(cli('release','market-square','--notes','hello'));
- assert.deepEqual(rel.map(l=>l.event),['stage','done']);
+ assert.deepEqual(rel.map(l=>l.event),['stage','stage','done'],'check, then version');
  assert.equal(rel.at(-1).result.status.lastVersion.tag,'v0.1.0');
  const bad=cli('status','local.nowhere');
  assert.equal(bad.status,1);assert.equal(lines(bad)[0].error.code,'project.unknown');
